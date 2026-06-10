@@ -1,6 +1,8 @@
 import opensmile
 import miniaudio
 import numpy as np
+import wave
+import contextlib
 from os import path
 
 
@@ -52,7 +54,6 @@ class AudioFeatureExtractor:
 
     def convertMp3ToPcm(self, mp3_path):
         # 1. Decode MP3 to raw PCM using miniaudio
-        print(mp3_path)
         audio_file = miniaudio.decode_file(mp3_path)
         sampling_rate = audio_file.sample_rate
         num_channels = audio_file.nchannels
@@ -75,9 +76,15 @@ class AudioFeatureExtractor:
         df = None
         if (path.endswith('.wav')):
             df = self.smile.process_file(path)
+            with contextlib.closing(wave.open(path, 'r')) as f:
+                frames = f.getnframes()
+                sampling_rate = f.getframerate()
+                audio_length = frames / float(sampling_rate)
         elif (path.endswith('.mp3')):
             pcm_data, sampling_rate = self.convertMp3ToPcm(path)
             df = self.smile.process_signal(pcm_data, sampling_rate)
+            audio_length = len(pcm_data) / float(sampling_rate)
+
 
         timepoints_raw = [t for t in df.index.get_level_values('start').total_seconds()]
         pitch = [27.5 * (2 ** (semitone/12)) for semitone in df['F0semitoneFrom27.5Hz_sma3nz']]
@@ -102,7 +109,10 @@ class AudioFeatureExtractor:
             "A3_ratio": [],
 
             "slope_0_500": [],
-            "slope_500_1500": []
+            "slope_500_1500": [],
+
+            "sample_rate": sampling_rate,
+            "length_seconds": audio_length
         }
 
         for i in range(0, len(timepoints_raw)):
@@ -127,63 +137,3 @@ if __name__ == "__main__":
     afe = AudioFeatureExtractor()
 
     aa = afe.analyze(p)
-    print(aa["F1_ratio"])
-    print(aa["A3_ratio"])
-
-#
-# # 1. Initialize the openSMILE extractor using the eGeMAPS v02 standard set
-# # We select 'LowLevelDescriptors' to get values frame-by-frame (every 10-20ms)
-#
-# # 2. Process your audio file (must be a .wav file)
-# # This returns a multi-indexed Pandas DataFrame
-#
-# p = path.join("C:\\", "Users", "Fabian", "Sync", "transitionering", "vis2", "bbb.wav")
-#
-# df = smile.process_file(str(p))
-#
-# # 3. Filter out the specific features related to Vocal Weight / Spectral Tilt
-# # selected_features = [
-# #     "F0semitoneFrom27.5Hz_sma3nz", # pitch (?)
-# #
-# #     # Formant frequencyies
-# #     "F1frequency_sma3nz",
-# #     "F2frequency_sma3nz",
-# #     "F3frequency_sma3nz"
-# # ]
-#
-# pitch = [27.5 * (2 ** (semitone/12)) for semitone in df['F0semitoneFrom27.5Hz_sma3nz']]
-# F1 = [f for f in df['F1frequency_sma3nz']]
-# F2 = [f for f in df['F2frequency_sma3nz']]
-# F3 = [f for f in df['F3frequency_sma3nz']]
-#
-#
-# print(pitch)
-# print(F1)
-# print(F2)
-# print(F3)
-#
-# # # selected_features = [
-# # #     "logRelF0-H1-H2_sma3nz",     # H1-H2 (Harmonic difference)
-# # #     "alphaRatio_sma3",          # Ratio of lower vs higher frequency energy
-# # #     "hammarbergIndex_sma3",     # Spectral tilt measure
-# # #     "slope0-500_sma3",          # Slope of the spectrum between 0-500 Hz
-# # #     "jitterLocal_sma3nz"        # Micro-instability in stamen frequencies
-# # # ]
-# # #
-# # # 4. Display the results
-# # filtered_df = df[selected_features]
-# # print(filtered_df.head())
-# #
-# # print(filtered_df.get(
-# #     'F3frequency_sma3nz'
-# # ))
-# #
-# # with open("features.txt", "w") as features:
-# #     for f in df.head():
-# #         features.write(str(f) + "\n")
-# #
-# # print(semitoneToHz(13.1529399))
-# # print(semitoneToHz(13.1529399))
-# # print(semitoneToHz(13.609562))
-# # print(semitoneToHz(14.963234))
-# # print(semitoneToHz(15.920908))
