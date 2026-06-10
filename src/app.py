@@ -3,6 +3,7 @@ from PyQt6 import QtWidgets, QtCore
 import pyqtgraph as pg
 import time
 import miniaudio
+import os
 
 from AnnotationMarker import AnnotationMarker
 # Ensure this module is in the same directory or in your Python path
@@ -164,15 +165,19 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def browse_file(self):
         file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "Select Audio File",
+            "Select Audio or Annotation File",
             "",
-            "Audio Files (*.wav *.mp3);;All Files (*)"
+            "Supported Files (*.wav *.mp3 *.txt);;Audio Files (*.wav *.mp3);;Annotations (*.txt);;All Files (*)"
         )
 
         if file_name:
-            self.file_path_display.setText(file_name)
-            self.file_path = file_name
-            self.selectAnalysisFile(file_name)
+            if file_name.lower().endswith('.txt'):
+                self.load_annotations_file(file_name)
+            else:
+                self.file_path_display.setText(file_name)
+                self.file_path = file_name
+                self.clear_annotations()  # Clear old annotations before loading a new raw audio file
+                self.selectAnalysisFile(file_name)
 
     def selectAnalysisFile(self, file_name):
         # 1. Setup and show the loading dialog
@@ -206,9 +211,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         urls = event.mimeData().urls()
         if urls:
             file_path = urls[0].toLocalFile()
-            if file_path.lower().endswith(('.wav', '.mp3')):
+
+            if file_path.lower().endswith('.txt'):
+                self.load_annotations_file(file_path)
+            elif file_path.lower().endswith(('.wav', '.mp3')):
                 self.file_path_display.setText(file_path)
                 self.file_path = file_path
+                self.clear_annotations()
                 self.selectAnalysisFile(file_path)
             else:
                 self.file_path_display.setText("Error: Unsupported file format.")
@@ -238,7 +247,111 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             # Pass any other keys (like arrows, etc.) back to the standard Qt handler
             super().keyPressEvent(event)
 
+    def clear_annotations(self):
+        """Removes all current annotations from the plots and memory."""
+        for ann in self.annotations:
+            marker = ann.get('marker')
+            plot_name = ann.get('plot')
+            if marker:
+                if plot_name == "Pitch":
+                    self.pitch_plot.removeItem(marker)
+                elif plot_name == "Formants":
+                    self.formants_plot.removeItem(marker)
+                elif plot_name == "Weight":
+                    self.weight_plot.removeItem(marker)
 
+        self.annotations.clear()
+
+    def load_annotations_file(self, txt_file_path):
+        """Parses an annotation file, loads the linked audio, and redraws markers."""
+        try:
+            with open(txt_file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            if not lines:
+                raise ValueError("The annotation file is empty.")
+
+            # 1. Parse the source audio file
+            source_line = lines[0].strip()
+            if not source_line.startswith("Source: "):
+                raise ValueError("Invalid format: Missing 'Source:' on the first line.")
+
+            original_audio_path = source_line[len("Source: "):].strip()
+
+            # --- [NEW] Fallback Path Logic ---
+            # Extract just the filename (e.g., 'audio.wav') from the original path
+            audio_filename = os.path.basename(original_audio_path)
+            # Create a fallback path assuming the audio is in the same folder as the .txt file
+            fallback_audio_path = os.path.join(os.path.dirname(txt_file_path), audio_filename)
+
+            # Check both locations
+            if os.path.exists(original_audio_path):
+                active_audio_path = original_audio_path
+            elif os.path.exists(fallback_audio_path):
+                active_audio_path = fallback_audio_path
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Missing Audio",
+                    f"The linked audio file could not be found at either location:\n\n"
+                    f"Original: {original_audio_path}\n"
+                    f"Fallback: {fallback_audio_path}\n\n"
+                    f"Please restore the audio file or load it manually."
+                )
+                return
+
+            # 2. Clear old data and load the audio file using the found path
+            self.clear_annotations()
+            self.file_path_display.setText(active_audio_path)
+            self.file_path = active_audio_path
+            self.selectAnalysisFile(active_audio_path)
+
+            # 3. Parse annotations (skip headers: lines 0, 1, and 2)
+            for line in lines[3:]:
+                # Strip trailing newlines but keep tabs
+                line = line.strip('\n')
+                if not line:
+                    continue
+
+                # Split by tab since save_annotations joined them with \t
+                parts = line.split('\t')
+
+                # Check if we have at least Time, Feature, Y, and Text
+                if len(parts) >= 4:
+                    try:
+                        time_val = float(parts[0])
+                        plot_name = parts[1]
+                        y_val = float(parts[2])
+                        text_val = parts[3]
+                    except ValueError:
+                        print(f"Skipping malformed data row: {line}")
+                        continue
+
+                    # Determine which plot widget to draw on
+                    plot_widget = None
+                    if plot_name == "Pitch":
+                        plot_widget = self.pitch_plot
+                    elif plot_name == "Formants":
+                        plot_widget = self.formants_plot
+                    elif plot_name == "Weight":
+                        plot_widget = self.weight_plot
+
+                    # Recreate the marker and save it to memory
+                    if plot_widget:
+                        marker = AnnotationMarker(time_val, y_val, text_val, plot_name, plot_widget, self)
+                        plot_widget.addItem(marker)
+
+                        self.annotations.append({
+                            "time": time_val,
+                            "y": y_val,
+                            "text": text_val,
+                            "plot": plot_name,
+                            "marker": marker
+                        })
+
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Load Error",
+                                           f"An error occurred while loading annotations:\n{str(e)}")
     # --- UI Control Methods ---
 
     def handle_record_stop(self):
@@ -464,18 +577,24 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playhead_formants.setValue(self.current_playback_time)
         self.playhead_weight.setValue(self.current_playback_time)
 
-
     def save_annotations(self):
         """Saves the self.annotations list of AnnotationMarker objects to a text file."""
         if not hasattr(self, 'annotations') or not self.annotations:
             QtWidgets.QMessageBox.warning(self, "No Annotations", "There are no annotations to save yet.")
             return
 
-        # Open a save file dialog
+        # --- [NEW] Determine Default Save Path ---
+        default_save_path = ""
+        if hasattr(self, 'file_path') and self.file_path:
+            # os.path.splitext splits "folder/file.wav" into ("folder/file", ".wav")
+            base_path, _ = os.path.splitext(self.file_path)
+            default_save_path = f"{base_path}.txt"
+
+        # Open a save file dialog, using the default_save_path
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Save Annotations",
-            "",
+            default_save_path,  # Now points to the same folder and base filename
             "Text Files (*.txt);;All Files (*)"
         )
 
@@ -492,7 +611,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                     for annotation in self.annotations:
                         try:
-                            # Extract attributes directly from your AnnotationMarker class
+                            # Extract attributes
                             time_val = annotation.get('time', 0.0)
                             y_val = annotation.get('y', 0.0)
                             text_val = annotation.get('text', '')
@@ -508,8 +627,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                             f.write(f"{formatted_time}\t{plot_name}\t{formatted_y}\t{text_val}\n")
 
                         except (ValueError, TypeError, AttributeError) as item_error:
-                            # Skip this specific marker if it's somehow malformed,
-                            # but continue processing the rest.
                             print(f"Skipping malformed annotation marker: {item_error}")
 
                 print(f"Successfully saved annotations to: {save_path}")
