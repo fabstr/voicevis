@@ -129,8 +129,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playback_btn.setMinimumHeight(50)
         self.playback_btn.clicked.connect(self.handle_playback)
 
+        # [NEW] Add the Save button
+        self.save_btn = QtWidgets.QPushButton("Save Annotations")
+        self.save_btn.setMinimumHeight(50)
+        self.save_btn.clicked.connect(self.save_annotations)
+
         bottom_buttons_layout.addWidget(self.record_stop_btn, stretch=1)
-        bottom_buttons_layout.addWidget(self.playback_btn, stretch=2)
+        bottom_buttons_layout.addWidget(self.playback_btn, stretch=1)
+        bottom_buttons_layout.addWidget(self.save_btn, stretch=1)
 
         layout.addLayout(bottom_buttons_layout)
 
@@ -457,6 +463,59 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playhead_pitch.setValue(self.current_playback_time)
         self.playhead_formants.setValue(self.current_playback_time)
         self.playhead_weight.setValue(self.current_playback_time)
+
+
+    def save_annotations(self):
+        """Saves the self.annotations list of AnnotationMarker objects to a text file."""
+        if not hasattr(self, 'annotations') or not self.annotations:
+            QtWidgets.QMessageBox.warning(self, "No Annotations", "There are no annotations to save yet.")
+            return
+
+        # Open a save file dialog
+        save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Annotations",
+            "",
+            "Text Files (*.txt);;All Files (*)"
+        )
+
+        if save_path:
+            try:
+                with open(save_path, 'w', encoding='utf-8') as f:
+                    # Write header
+                    source_file = getattr(self, 'file_path', 'No file loaded')
+                    f.write(f"Source: {source_file}\n")
+                    f.write("-" * 80 + "\n")
+
+                    # Column headers
+                    f.write("Time\tFeature\tY-Value\tText\n")
+
+                    for annotation in self.annotations:
+                        try:
+                            # Extract attributes directly from your AnnotationMarker class
+                            time_val = annotation.get('time', 0.0)
+                            y_val = annotation.get('y', 0.0)
+                            text_val = annotation.get('text', '')
+                            plot_name = annotation.get('plot', '')
+
+                            # Format time to 2 decimals
+                            formatted_time = f"{float(time_val):.2f}"
+
+                            # Format y to 4 figures (using .4g for 4 significant figures)
+                            formatted_y = f"{float(y_val):.4g}"
+
+                            # Write to file separated by tabs
+                            f.write(f"{formatted_time}\t{plot_name}\t{formatted_y}\t{text_val}\n")
+
+                        except (ValueError, TypeError, AttributeError) as item_error:
+                            # Skip this specific marker if it's somehow malformed,
+                            # but continue processing the rest.
+                            print(f"Skipping malformed annotation marker: {item_error}")
+
+                print(f"Successfully saved annotations to: {save_path}")
+
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{str(e)}")
 
 
 if __name__ == '__main__':
