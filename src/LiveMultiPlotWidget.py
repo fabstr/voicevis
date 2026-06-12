@@ -258,6 +258,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     self.audio_device.stop()
             else:
                 if self.file_path:
+                    self.playback_btn.setIcon(self.pause_icon)
                     self.seek_and_play()
 
             event.accept()  # Tell Qt we handled this key press
