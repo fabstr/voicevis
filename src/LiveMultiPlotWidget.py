@@ -631,7 +631,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         for plot_name, plot in self.plots.items():
             for curve_name, curve in plot['curves'].items():
                 data = self.analysis_results[curve['analysisResult']]
-                self.plots[plot_name]['curves'][curve_name]['curve'].setData(x=self.analysis_results['timepoints'], y=data)
+                if "x" not in data or "y" not in data:
+                    print([plot_name, curve_name])
+                plot = self.plots[plot_name]
+                curve = plot['curves'][curve_name]['curve']
+                if len(data['x']) != len(data['y']):
+                    print("Mismatch in length for x and y values for " + plot_name + "." + curve_name)
+                else:
+                    curve.setData(x=data['x'], y=data['y'])
 
         self.update_playhead()
 

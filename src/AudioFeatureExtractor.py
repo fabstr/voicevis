@@ -3,9 +3,9 @@ import miniaudio
 import numpy as np
 import wave
 import contextlib
-from os import path
 
-from qtpy.uic import loadUi
+
+from PlotsSpec import outliers_m
 
 
 class AudioFeatureExtractor:
@@ -98,21 +98,19 @@ class AudioFeatureExtractor:
         loudness = [s for s in df['Loudness_sma3']]
 
         result = {
-            "timepoints": [],
+            "pitch": {"x": [], "y": []},
 
-            "pitch": [],
+            "F1": {"x": [], "y": []},
+            "F2": {"x": [], "y": []},
+            "F3": {"x": [], "y": []},
 
-            "F1": [],
-            "F2": [],
-            "F3": [],
+            "F1_ratio": {"x": [], "y": []},
+            "F3_ratio": {"x": [], "y": []},
 
-            "F1_ratio": [],
-            "A3_ratio": [],
+            "slope_0_500": {"x": [], "y": []},
+            "slope_500_1500": {"x": [], "y": []},
 
-            "slope_0_500": [],
-            "slope_500_1500": [],
-
-            "loudness": [],
+            "loudness": {"x": [], "y": []},
 
             "sample_rate": sampling_rate,
             "length_seconds": audio_length
@@ -120,28 +118,52 @@ class AudioFeatureExtractor:
 
         for i in range(0, len(timepoints_raw)):
             if pitch[i] > 27.5:
-                result["timepoints"].append(timepoints_raw[i])
-                result["pitch"].append(pitch[i])
-                result["F1"].append(F1[i])
-                result["F2"].append(F2[i])
-                result["F3"].append(F3[i])
-                result["slope_0_500"].append(slope_0_500[i])
-                result["slope_500_1500"].append(slope_500_1500[i])
-                result["loudness"].append(loudness[i])
-                #result["F1_ratio"].append(F1_ratio[i])
-                #result["A3_ratio"].append(A3_ratio[i])
+                result["pitch"]["x"].append(timepoints_raw[i])
+                result["pitch"]["y"].append(pitch[i])
 
-        result["F1_ratio"] = np.divide(result["F2"], result["F1"])
-        result["A3_ratio"] = np.negative(reject_outliers(result["F1_ratio"]))
 
-        # result["F1_ratio"] = np.divide(result["F2"], result["F1"])
-        # result["A3_ratio"] = np.negative(np.divide(result["F3"], result["F1"]))
+                result["F1"]["x"].append(timepoints_raw[i])
+                result["F1"]["y"].append(F1[i])
+                result["F2"]["x"].append(timepoints_raw[i])
+                result["F2"]["y"].append(F2[i])
+                result["F3"]["x"].append(timepoints_raw[i])
+                result["F3"]["y"].append(F3[i])
+
+
+                result["slope_0_500"]["x"].append(timepoints_raw[i])
+                result["slope_0_500"]["y"].append(slope_500_1500[i])
+
+                result["slope_500_1500"]["x"].append(timepoints_raw[i])
+                result["slope_500_1500"]["y"].append(slope_500_1500[i])
+
+                result["loudness"]["x"].append(timepoints_raw[i])
+                result["loudness"]["y"].append(slope_500_1500[i])
+
+                result["F1_ratio"]["x"].append(timepoints_raw[i])
+                result["F1_ratio"]["y"].append(F2[i] / F1[i])
+
+                result["F3_ratio"]["x"].append(timepoints_raw[i])
+                result["F3_ratio"]["y"].append((F3[i] / F1[i]))
+
+        result["pitch"] = reject_outliers(result["pitch"])
+
+        result["F1_ratio"] = reject_outliers(result["F1_ratio"])
+
+        result["F3_ratio"] = reject_outliers(result["F3_ratio"])
+        result["F3_ratio"]["y"] = np.negative(result["F3_ratio"]["y"])
+
 
         return  result
 
 
-def reject_outliers(data, m=2.):
-    d = np.abs(data - np.median(data))
+def reject_outliers(pair, m=outliers_m):
+    d = np.abs(pair["y"] - np.median(pair["y"]))
     mdev = np.median(d)
     s = d / mdev if mdev else np.zeros(len(d))
-    return data[s < m]
+    filteredX = []
+    filteredY = []
+    for i in range(len(pair["x"])):
+        if s[i] < m:
+            filteredX.append(pair["x"][i])
+            filteredY.append(pair["y"][i])
+    return {"x": filteredX, "y": filteredY}

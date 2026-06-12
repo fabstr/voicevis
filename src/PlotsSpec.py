@@ -1,5 +1,7 @@
 defaultSize = 1
 
+outliers_m = 5.
+
 spec = {
     'Loudness': {
         'title': 'Loudness',
@@ -31,7 +33,7 @@ spec = {
         },
         'linkX': 'Loudness'
     },
-    'F1 ratio': {
+    'Formant ratios': {
         'title': 'Formant ratios',
         'stretch': 2,
         'mouse_enabled_x': True,
@@ -43,30 +45,15 @@ spec = {
                 'symbolBrush': 'y',
                 'analysisResult': 'F1_ratio'
             },
-            'a3_ratio': {
+            'f3_ratio': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
                 'symbolBrush': 'r',
-                'analysisResult': 'A3_ratio'
+                'analysisResult': 'F3_ratio'
             }
         },
         'linkX': 'Loudness'
     },
-    # 'A3 ratio': {
-    #     'title': 'Formant ratio (A3)',
-    #     'stretch': 2,
-    #     'mouse_enabled_x': True,
-    #     'mouse_enabled_y': True,
-    #     'curves': {
-    #         'a3_ratio': {
-    #             'symbol': 'o',
-    #             'symbolSize': defaultSize,
-    #             'symbolBrush': 'r',
-    #             'analysisResult': 'A3_ratio'
-    #         }
-    #     },
-    #     'linkX': 'Loudness'
-    # },
     'Formants': {
         'title': 'Formants (Hz)',
         'stretch': 2,
