@@ -52,6 +52,11 @@ class AudioFeatureExtractor:
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
         )
 
+    def analyzePCM(self, pcm_data, sampling_rate):
+        df = self.smile.process_signal(pcm_data, sampling_rate)
+        audio_length = len(pcm_data) / float(sampling_rate)
+        return self.extractFeatures(df, sampling_rate, audio_length)
+
     def convertMp3ToPcm(self, mp3_path):
         # 1. Decode MP3 to raw PCM using miniaudio
         audio_file = miniaudio.decode_file(mp3_path)
@@ -72,7 +77,7 @@ class AudioFeatureExtractor:
         signal = pcm_data.astype(np.float32) / 32768.0
         return signal, sampling_rate
 
-    def analyze(self, path):
+    def analyzeWaveFile(self, path):
         df = None
         if (path.endswith('.wav')):
             df = self.smile.process_file(path)
@@ -80,12 +85,14 @@ class AudioFeatureExtractor:
                 frames = f.getnframes()
                 sampling_rate = f.getframerate()
                 audio_length = frames / float(sampling_rate)
+                return self.extractFeatures(df, sampling_rate, audio_length)
         elif (path.endswith('.mp3')):
             pcm_data, sampling_rate = self.convertMp3ToPcm(path)
             df = self.smile.process_signal(pcm_data, sampling_rate)
             audio_length = len(pcm_data) / float(sampling_rate)
+            return self.extractFeatures(df, sampling_rate, audio_length)
 
-
+    def extractFeatures(self, df, sampling_rate, audio_length):
         timepoints_raw = [t for t in df.index.get_level_values('start').total_seconds()]
         pitch = [27.5 * (2 ** (semitone/12)) for semitone in df['F0semitoneFrom27.5Hz_sma3nz']]
         F1_ratio = [r for r in df["logRelF0-H1-H2_sma3nz"]]
@@ -136,4 +143,4 @@ if __name__ == "__main__":
     p = path.join("C:\\", "Users", "Fabian", "Sync", "transitionering", "vis2", "bbb.wav")
     afe = AudioFeatureExtractor()
 
-    aa = afe.analyze(p)
+    aa = afe.analyzeWaveFile(p)

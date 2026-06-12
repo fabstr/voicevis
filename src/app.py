@@ -1,35 +1,62 @@
 import sys
+import tempfile
+import wave
+
+import numpy as np
 from PyQt6 import QtWidgets, QtCore
+from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
+from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import pyqtgraph as pg
 import time
 import miniaudio
 import os
 
 from AnnotationMarker import AnnotationMarker
-# Ensure this module is in the same directory or in your Python path
 from AudioFeatureExtractor import AudioFeatureExtractor
 
 
 class LiveMultiPlotWidget(QtWidgets.QWidget):
 
-    analysis_results = {}
-    annotations = []
-
-    is_recording = False
-    is_playing = False
-    playback_start_time = 0.0
-
-    current_playback_time = 0
-
-    audio_device = None
-    audio_stream = None
-    file_path = None
-
     def __init__(self):
         super().__init__()
 
-        self.audioFeatureExtractor = AudioFeatureExtractor()
+        self.analysis_results = {}
+        self.annotations = []
 
+        self.is_recording = False
+        self.is_playing = False
+        self.playback_start_time = 0.0
+
+        self.current_playback_time = 0
+
+        self.audio_device = None
+        self.audio_stream = None
+        self.file_path = None
+        self.sampling_rate = 44100
+
+        self.audioFeatureExtractor = AudioFeatureExtractor()
+        self.setup_GUI()
+        self.setup_audio()
+
+
+    def setup_audio(self):
+        # 1. Define the audio format (Standard CD quality PCM)
+        self.audio_format = QAudioFormat()
+        self.audio_format.setSampleRate(self.sampling_rate)
+        self.audio_format.setChannelCount(1)  # Mono for voice
+        self.audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)  # 16-bit PCM
+
+        # 2. Get default audio input device (Microphone)
+        self.input_device = QMediaDevices.defaultAudioInput()
+
+        # 3. Create the QAudioSource
+        self.audio_source = QAudioSource(self.input_device, self.audio_format, self)
+
+        # 4. Set up a QByteArray and QBuffer to store the recorded data in RAM
+        self.audio_data = QByteArray()
+        self.audio_buffer = QBuffer(self.audio_data)
+
+    def setup_GUI(self):
         # Window Setup
         self.setWindowTitle("VoiceVis")
         self.resize(800, 800)
@@ -57,8 +84,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # Add this after setting up self.pitch_plot
         self.playhead_pitch = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
         self.pitch_plot.addItem(self.playhead_pitch)
-
-
 
         # Plot 2: Formants (F1, F2, F3)
         self.formants_plot = pg.PlotWidget(title="Formants (Hz)")
@@ -141,7 +166,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         layout.addLayout(bottom_buttons_layout)
 
-
         self.pitch_plot.scene().sigMouseClicked.connect(
             lambda event: self.on_mouse_clicked(event, self.pitch_plot, "Pitch")
         )
@@ -159,7 +183,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.timer.setInterval(30)  # ~33 FPS
         self.timer.timeout.connect(self.update_plots)
         # Note: Timer is no longer auto-started here. It is triggered by the Playback button.
-
     # --- File Handling Methods ---
 
     def browse_file(self):
@@ -191,7 +214,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         QtWidgets.QApplication.processEvents()
 
         try:
-            self.analysis_results = self.audioFeatureExtractor.analyze(file_name)
+            self.analysis_results = self.audioFeatureExtractor.analyzeWaveFile(file_name)
             self.current_playback_time = 0
             self.update_plots()
 
@@ -230,14 +253,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.is_playing = False
                 if self.audio_device and self.audio_device.running:
                     self.audio_device.stop()
-
-               # # Calculate and save exactly where we paused
-               # self.paused_time = time.time() - self.playback_start_time
-           # else:
-                # --- RESUME AUDIO ---
-                # Only attempt to play if a file has actually been loaded
-              #  if self.file_path:
-                  #  self.seek_and_play(self.paused_time)
             else:
                 if self.file_path:
                     self.seek_and_play()
@@ -358,13 +373,55 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.is_recording = not self.is_recording
 
         if self.is_recording:
+            # --- UI Updates ---
             self.record_stop_btn.setText("Stop Recording")
             self.record_stop_btn.setStyleSheet("background-color: #ffcccc;")
             print("Recording started...")
+
+            # --- Audio Recording Logic ---
+            self.audio_data.clear()  # Clear previous recording
+            self.audio_buffer.open(QIODevice.OpenModeFlag.WriteOnly)  # Open buffer for writing
+
+            # Start routing audio from the mic into the buffer
+            self.audio_source.start(self.audio_buffer)
+
         else:
+            # --- UI Updates ---
             self.record_stop_btn.setText("Record")
             self.record_stop_btn.setStyleSheet("")
             print("Recording stopped.")
+
+            # --- Audio Stop Logic ---
+            self.audio_source.stop()
+            self.audio_buffer.close()
+
+            # --- Extract the PCM Data ---
+            pcm_bytes = self.audio_data.data()
+            temp_wav_path = self.save_to_temp_wav(pcm_bytes, 44100)
+            self.analysis_results = self.audioFeatureExtractor.analyzeWaveFile(temp_wav_path)
+            self.file_path = temp_wav_path
+            self.current_playback_time = 0
+            self.update_plots()
+
+
+    def save_to_temp_wav(self, pcm_bytes, sample_rate):
+        # 1. Generate a path in the system's temporary directory
+        temp_dir = tempfile.gettempdir()
+        wav_filepath = os.path.join(temp_dir, "latest_recording.wav")
+
+        # 2. Open the file in binary write mode ('wb')
+        with wave.open(wav_filepath, 'wb') as wav_file:
+            # 3. Configure the WAV header parameters
+            wav_file.setnchannels(1)  # 1 channel (Mono)
+            wav_file.setsampwidth(2)  # 2 bytes per sample (16-bit)
+            wav_file.setframerate(sample_rate)  # e.g., 44100 Hz
+
+            # 4. Write the raw PCM data
+            wav_file.writeframes(pcm_bytes)
+
+        print(f"WAV file saved to: {wav_filepath}")
+        return wav_filepath
+
 
     def handle_playback(self):
         if self.is_recording:
