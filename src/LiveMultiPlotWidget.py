@@ -41,6 +41,46 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.sampling_rate = 44100
 
         self.audioFeatureExtractor = AudioFeatureExtractor()
+
+        self.plots = {
+            'pitch': {
+                'title': 'Pitch (Hz)',
+                'stretch': 1,
+                'mouse_enabled_x': True,
+                'mouse_enabled_y': False,
+                'curves': {
+                    'pitch': {
+                        'data': [],
+                        'symbol': 'o',
+                        'symbolSize': 6,
+                        'symbolBrush': 'c'
+                    }
+                }
+            },
+            'formant_ratio': {
+                'title': 'Formant ratio',
+                'stretch': 2,
+                'mouse_enabled_x': True,
+                'mouse_enabled_y': False,
+                'curves': {
+                    'f1_ratio': {
+                        'data': [],
+                        'symbol': 'o',
+                        'symbolSize': 6,
+                        'symbolBrush': 'y'
+                    },
+                    'a3_ratio': {
+                        'data': [],
+                        'symbol': 'o',
+                        'symbolSize': 6,
+                        'symbolBrush': 'r'
+                    }
+                }
+            },
+            'formants': {},
+            'weight': {}
+        }
+
         self.setup_GUI()
         self.setup_audio()
 
@@ -121,12 +161,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # --------------------------------------------------
         self.pitch_plot = pg.PlotWidget(title="Pitch (Hz)")
         self.pitch_plot.showGrid(x=True, y=True, alpha=0.3)
-        layout.addWidget(self.pitch_plot, stretch=2)
+        layout.addWidget(self.pitch_plot, stretch=1)
         self.pitch_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='c')
-        self.f1_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='y')
-        self.a3_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='r')
         self.playhead_pitch = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
         self.pitch_plot.addItem(self.playhead_pitch)
+        self.pitch_plot.setMouseEnabled(x=True, y=False)
+
+        self.formant_ratio_plot = pg.PlotWidget(title="Formant Ratio")
+        self.formant_ratio_plot.showGrid(x=True, y=True, alpha=0.3)
+        layout.addWidget(self.formant_ratio_plot, stretch=2)
+        self.f1_ratio_curve = self.formant_ratio_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='y')
+        self.a3_ratio_curve = self.formant_ratio_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='r')
+        self.playhead_formant_ratio = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
+        self.formant_ratio_plot.addItem(self.playhead_formant_ratio)
+        self.formant_ratio_plot.setMouseEnabled(x=False, y=True)
 
         self.formants_plot = pg.PlotWidget(title="Formants (Hz)")
         self.formants_plot.showGrid(x=True, y=True, alpha=0.3)
@@ -136,6 +184,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.f3_curve = self.formants_plot.plot([], pen=None, symbol='s', symbolSize=5, symbolBrush='y')
         self.playhead_formants = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
         self.formants_plot.addItem(self.playhead_formants)
+        self.formants_plot.setMouseEnabled(x=False, y=True)
 
         self.weight_plot = pg.PlotWidget(title="Weight")
         self.weight_plot.showGrid(x=True, y=True, alpha=0.3)
@@ -145,8 +194,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.weight_curve_500_1500 = self.weight_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='w')
         self.playhead_weight = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
         self.weight_plot.addItem(self.playhead_weight)
+        self.weight_plot.setMouseEnabled(x=False, y=True)
 
         self.formants_plot.setXLink(self.pitch_plot)
+        self.formant_ratio_plot.setXLink(self.pitch_plot)
         self.weight_plot.setXLink(self.pitch_plot)
         layout.addSpacing(10)
 
@@ -191,9 +242,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if file_name.lower().endswith('.txt'):
                 self.load_annotations_file(file_name)
             else:
+                self.clear_annotations()  # Clear old annotations before loading a new raw audio file
                 self.file_path_display.setText(file_name)
                 self.file_path = file_name
-                self.clear_annotations()  # Clear old annotations before loading a new raw audio file
                 self.selectAnalysisFile(file_name)
 
     def selectAnalysisFile(self, file_name):
@@ -655,6 +706,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playhead_pitch.setValue(self.current_playback_time)
         self.playhead_formants.setValue(self.current_playback_time)
         self.playhead_weight.setValue(self.current_playback_time)
+        self.playhead_formant_ratio.setValue(self.current_playback_time)
 
     def save_annotations(self):
         """Saves the self.annotations list of AnnotationMarker objects to a text file."""
