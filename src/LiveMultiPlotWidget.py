@@ -145,8 +145,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 'curves': {},
             }
             for curveName, curveSpec in plot_spec['curves'].items():
-                print(curveName)
-                print(curveSpec)
                 self.plots[plot_name]['curves'][curveName] = {
                     'curve':  self.plots[plot_name]['plot'].plot(
                         [],
@@ -164,7 +162,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.plots[plot_name]['plot'].setXLink(targetPlot)
 
             self.plots[plot_name]['plot'].scene().sigMouseClicked.connect(
-                lambda event: self.on_mouse_clicked(event, self.plots[plot_name]['plot'], "plot_name"))
+                lambda event: self.on_mouse_clicked(event, self.plots[plot_name]['plot'], plot_spec['title']))
 
         layout.addSpacing(10)
 
@@ -286,13 +284,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             plot_name = ann.get('plot')
             if marker:
                 self.plots[plot_name]['plot'].removeItem(marker)
-                # if plot_name == "Pitch":
-                #     self.pitch_plot.removeItem(marker)
-                # elif plot_name == "Formants":
-                #     self.formants_plot.removeItem(marker)
-                # elif plot_name == "Weight":
-                #     self.weight_plot.removeItem(marker)
-
         self.annotations.clear()
 
     def load_annotations_file(self, txt_file_path):

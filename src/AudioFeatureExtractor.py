@@ -5,6 +5,8 @@ import wave
 import contextlib
 from os import path
 
+from qtpy.uic import loadUi
+
 
 class AudioFeatureExtractor:
 
@@ -34,17 +36,6 @@ class AudioFeatureExtractor:
     #     F3frequency_sma3nz
     #     F3bandwidth_sma3nz
     #     F3amplitudeLogRelF0_sma3nz
-
-    features = [
-        "F0semitoneFrom27.5Hz_sma3nz",
-        "F1frequency_sma3nz",
-        "F2frequency_sma3nz",
-        "F3frequency_sma3nz",
-        "logRelF0-H1-H2_sma3nz",
-        "logRelF0-H1-A3_sma3nz",
-        "slope0-500_sma3",
-        "slope500-1500_sma3"
-    ]
 
     def __init__(self):
         self.smile = opensmile.Smile(
@@ -94,14 +85,17 @@ class AudioFeatureExtractor:
 
     def extractFeatures(self, df, sampling_rate, audio_length):
         timepoints_raw = [t for t in df.index.get_level_values('start').total_seconds()]
+
+
         pitch = [27.5 * (2 ** (semitone/12)) for semitone in df['F0semitoneFrom27.5Hz_sma3nz']]
-        F1_ratio = [r for r in df["logRelF0-H1-H2_sma3nz"]]
-        A3_ratio = [r for r in df["logRelF0-H1-A3_sma3nz"]]
+        # F1_ratio = [r for r in df["logRelF0-H1-H2_sma3nz"]]
+        # A3_ratio = [-r for r in df["logRelF0-H1-A3_sma3nz"]]
         F1 = [f for f in df['F1frequency_sma3nz']]
         F2 = [f for f in df['F2frequency_sma3nz']]
         F3 = [f for f in df['F3frequency_sma3nz']]
         slope_0_500 = [s for s in df['slope0-500_sma3']]
         slope_500_1500 = [s for s in df['slope500-1500_sma3']]
+        loudness = [s for s in df['Loudness_sma3']]
 
         result = {
             "timepoints": [],
@@ -118,6 +112,8 @@ class AudioFeatureExtractor:
             "slope_0_500": [],
             "slope_500_1500": [],
 
+            "loudness": [],
+
             "sample_rate": sampling_rate,
             "length_seconds": audio_length
         }
@@ -131,16 +127,21 @@ class AudioFeatureExtractor:
                 result["F3"].append(F3[i])
                 result["slope_0_500"].append(slope_0_500[i])
                 result["slope_500_1500"].append(slope_500_1500[i])
+                result["loudness"].append(loudness[i])
                 #result["F1_ratio"].append(F1_ratio[i])
                 #result["A3_ratio"].append(A3_ratio[i])
 
         result["F1_ratio"] = np.divide(result["F2"], result["F1"])
-        result["A3_ratio"] = np.divide(result["F3"], result["F1"])
+        result["A3_ratio"] = np.negative(reject_outliers(result["F1_ratio"]))
+
+        # result["F1_ratio"] = np.divide(result["F2"], result["F1"])
+        # result["A3_ratio"] = np.negative(np.divide(result["F3"], result["F1"]))
 
         return  result
 
-if __name__ == "__main__":
-    p = path.join("C:\\", "Users", "Fabian", "Sync", "transitionering", "vis2", "bbb.wav")
-    afe = AudioFeatureExtractor()
 
-    aa = afe.analyzeWaveFile(p)
+def reject_outliers(data, m=2.):
+    d = np.abs(data - np.median(data))
+    mdev = np.median(d)
+    s = d / mdev if mdev else np.zeros(len(d))
+    return data[s < m]
