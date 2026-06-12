@@ -14,6 +14,7 @@ import os
 import qtawesome as qta
 
 from AnalysisWorker import AnalysisWorker
+from AnnotationHelper import save_to_file, load_from_file
 from AnnotationMarker import AnnotationMarker
 from AudioFeatureExtractor import AudioFeatureExtractor
 from RealTimeAnalysisWorker import RealTimeAnalysisWorker
@@ -120,7 +121,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # --------------------------------------------------
         self.pitch_plot = pg.PlotWidget(title="Pitch (Hz)")
         self.pitch_plot.showGrid(x=True, y=True, alpha=0.3)
-        layout.addWidget(self.pitch_plot, stretch=3)
+        layout.addWidget(self.pitch_plot, stretch=2)
         self.pitch_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='c')
         self.f1_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='y')
         self.a3_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='r')
@@ -282,31 +283,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def load_annotations_file(self, txt_file_path):
         """Parses an annotation file, loads the linked audio, and redraws markers."""
         try:
-            with open(txt_file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
+            active_audio_path, annotations, original_audio_path, fallback_audio_path = load_from_file(txt_file_path)
 
-            if not lines:
-                raise ValueError("The annotation file is empty.")
-
-            # 1. Parse the source audio file
-            source_line = lines[0].strip()
-            if not source_line.startswith("Source: "):
-                raise ValueError("Invalid format: Missing 'Source:' on the first line.")
-
-            original_audio_path = source_line[len("Source: "):].strip()
-
-            # --- [NEW] Fallback Path Logic ---
-            # Extract just the filename (e.g., 'audio.wav') from the original path
-            audio_filename = os.path.basename(original_audio_path)
-            # Create a fallback path assuming the audio is in the same folder as the .txt file
-            fallback_audio_path = os.path.join(os.path.dirname(txt_file_path), audio_filename)
-
-            # Check both locations
-            if os.path.exists(original_audio_path):
-                active_audio_path = original_audio_path
-            elif os.path.exists(fallback_audio_path):
-                active_audio_path = fallback_audio_path
-            else:
+            if active_audio_path is None:
                 QtWidgets.QMessageBox.warning(
                     self,
                     "Missing Audio",
@@ -324,47 +303,22 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.selectAnalysisFile(active_audio_path)
 
             # 3. Parse annotations (skip headers: lines 0, 1, and 2)
-            for line in lines[3:]:
-                # Strip trailing newlines but keep tabs
-                line = line.strip('\n')
-                if not line:
-                    continue
-
-                # Split by tab since save_annotations joined them with \t
-                parts = line.split('\t')
-
-                # Check if we have at least Time, Feature, Y, and Text
-                if len(parts) >= 4:
-                    try:
-                        time_val = float(parts[0])
-                        plot_name = parts[1]
-                        y_val = float(parts[2])
-                        text_val = parts[3]
-                    except ValueError:
-                        print(f"Skipping malformed data row: {line}")
-                        continue
-
+            for annotation in annotations:
                     # Determine which plot widget to draw on
                     plot_widget = None
-                    if plot_name == "Pitch":
+                    if annotation['plot'] == "Pitch":
                         plot_widget = self.pitch_plot
-                    elif plot_name == "Formants":
+                    elif annotation['plot'] == "Formants":
                         plot_widget = self.formants_plot
-                    elif plot_name == "Weight":
+                    elif annotation['plot'] == "Weight":
                         plot_widget = self.weight_plot
 
                     # Recreate the marker and save it to memory
                     if plot_widget:
-                        marker = AnnotationMarker(time_val, y_val, text_val, plot_name, plot_widget, self)
+                        marker = AnnotationMarker(annotation['time'], annotation['y'], annotation['text'], annotation['plot'], plot_widget, self)
                         plot_widget.addItem(marker)
-
-                        self.annotations.append({
-                            "time": time_val,
-                            "y": y_val,
-                            "text": text_val,
-                            "plot": plot_name,
-                            "marker": marker
-                        })
+                        annotation['marker'] = marker
+                        self.annotations.append(annotation)
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
@@ -740,37 +694,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             "Text Files (*.txt);;All Files (*)"
         )
 
-        if save_path:
+        if save_path and self.file_path is not None:
             try:
-                with open(save_path, 'w', encoding='utf-8') as f:
-                    # Write header
-                    source_file = getattr(self, 'file_path', 'No file loaded')
-                    f.write(f"Source: {source_file}\n")
-                    f.write("-" * 80 + "\n")
-
-                    # Column headers
-                    f.write("Time\tFeature\tY-Value\tText\n")
-
-                    for annotation in self.annotations:
-                        try:
-                            # Extract attributes
-                            time_val = annotation.get('time', 0.0)
-                            y_val = annotation.get('y', 0.0)
-                            text_val = annotation.get('text', '')
-                            plot_name = annotation.get('plot', '')
-
-                            # Format time to 2 decimals
-                            formatted_time = f"{float(time_val):.2f}"
-
-                            # Format y to 4 figures (using .4g for 4 significant figures)
-                            formatted_y = f"{float(y_val):.4g}"
-
-                            # Write to file separated by tabs
-                            f.write(f"{formatted_time}\t{plot_name}\t{formatted_y}\t{text_val}\n")
-
-                        except (ValueError, TypeError, AttributeError) as item_error:
-                            print(f"Skipping malformed annotation marker: {item_error}")
-
+                save_to_file(save_path, self.annotations, self.file_path)
                 print(f"Successfully saved annotations to: {save_path}")
 
             except Exception as e:
