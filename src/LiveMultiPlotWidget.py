@@ -14,7 +14,7 @@ import os
 import qtawesome as qta
 
 from AnalysisWorker import AnalysisWorker
-from AnnotationHelper import save_to_file, load_from_file
+from utils import save_to_file, load_from_file, save_to_temp_wav
 from AnnotationMarker import AnnotationMarker
 from AudioFeatureExtractor import AudioFeatureExtractor
 from RealTimeAnalysisWorker import RealTimeAnalysisWorker
@@ -395,7 +395,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                 # --- Save to WAV for Playback ---
             pcm_bytes = self.audio_data.data()
-            temp_wav_path = self.save_to_temp_wav(pcm_bytes, self.sampling_rate)
+            temp_wav_path = save_to_temp_wav(pcm_bytes, self.sampling_rate)
 
             self.file_path = temp_wav_path
             self.file_path_display.setText(self.file_path)
@@ -433,24 +433,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.analysis_results["slope_0_500"].append(latest_point["slope_0_500"])
         self.analysis_results["slope_500_1500"].append(latest_point["slope_500_1500"])
 
-
-    def save_to_temp_wav(self, pcm_bytes, sample_rate):
-        # 1. Generate a path in the system's temporary directory
-        temp_dir = tempfile.gettempdir()
-        wav_filepath = os.path.join(temp_dir, "latest_recording.wav")
-
-        # 2. Open the file in binary write mode ('wb')
-        with wave.open(wav_filepath, 'wb') as wav_file:
-            # 3. Configure the WAV header parameters
-            wav_file.setnchannels(1)  # 1 channel (Mono)
-            wav_file.setsampwidth(2)  # 2 bytes per sample (16-bit)
-            wav_file.setframerate(sample_rate)  # e.g., 44100 Hz
-
-            # 4. Write the raw PCM data
-            wav_file.writeframes(pcm_bytes)
-
-        print(f"WAV file saved to: {wav_filepath}")
-        return wav_filepath
 
     def handle_playback(self):
         if self.is_recording:
