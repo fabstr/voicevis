@@ -11,6 +11,7 @@ import time
 import miniaudio
 import os
 
+from AnalysisWorker import AnalysisWorker
 from AnnotationMarker import AnnotationMarker
 from AudioFeatureExtractor import AudioFeatureExtractor
 
@@ -204,23 +205,32 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def selectAnalysisFile(self, file_name):
         # 1. Setup and show the loading dialog
-        loading_dialog = QtWidgets.QProgressDialog("Analyzing audio file...", None, 0, 0, self)
-        loading_dialog.setWindowTitle("Please Wait")
-        loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
-        loading_dialog.setMinimumDuration(0)  # Ensure it shows immediately
-        loading_dialog.show()
+        self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio file...", None, 0, 0, self)
+        self.loading_dialog.setWindowTitle("Please Wait")
+        self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+        self.loading_dialog.setMinimumDuration(0)  # Ensure it shows immediately
+        self.loading_dialog.show()
 
-        # Force Qt to draw the dialog before the blocking computation begins
-        QtWidgets.QApplication.processEvents()
+        # 2. Setup the worker thread
+        self.worker = AnalysisWorker(self.audioFeatureExtractor, file_name)
 
-        try:
-            self.analysis_results = self.audioFeatureExtractor.analyzeWaveFile(file_name)
-            self.current_playback_time = 0
-            self.update_plots()
+        # Connect signals to slots
+        self.worker.result_ready.connect(self.on_analysis_finished)
+        self.worker.error_occurred.connect(self.on_analysis_error)
+        self.worker.finished.connect(self.loading_dialog.close)
 
-        finally:
-            # 3. Ensure the dialog closes even if an error occurs during analysis
-            loading_dialog.close()
+        # 3. Start the background thread
+        self.worker.start()
+
+    def on_analysis_finished(self, results):
+        """Called automatically when the worker thread finishes successfully."""
+        self.analysis_results = results
+        self.current_playback_time = 0
+        self.update_plots()
+
+    def on_analysis_error(self, error_msg):
+        """Called automatically if the worker thread encounters an error."""
+        QtWidgets.QMessageBox.critical(self, "Analysis Error", f"An error occurred during analysis:\n{error_msg}")
 
     # --- Drag & Drop Methods ---
 
@@ -398,10 +408,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             # --- Extract the PCM Data ---
             pcm_bytes = self.audio_data.data()
             temp_wav_path = self.save_to_temp_wav(pcm_bytes, 44100)
-            self.analysis_results = self.audioFeatureExtractor.analyzeWaveFile(temp_wav_path)
+
+            # Update the file path and trigger the multi-threaded analysis
             self.file_path = temp_wav_path
-            self.current_playback_time = 0
-            self.update_plots()
+            self.selectAnalysisFile(temp_wav_path)
 
 
     def save_to_temp_wav(self, pcm_bytes, sample_rate):

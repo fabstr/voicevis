@@ -77,7 +77,7 @@ class AudioFeatureExtractor:
         signal = pcm_data.astype(np.float32) / 32768.0
         return signal, sampling_rate
 
-    def analyzeWaveFile(self, path):
+    def analyzeFile(self, path):
         df = None
         if (path.endswith('.wav')):
             df = self.smile.process_file(path)
