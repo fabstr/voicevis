@@ -14,6 +14,7 @@ import os
 import qtawesome as qta
 
 from AnalysisWorker import AnalysisWorker
+from PlotsSpec import spec
 from utils import save_to_file, load_from_file, save_to_temp_wav
 from AnnotationMarker import AnnotationMarker
 from AudioFeatureExtractor import AudioFeatureExtractor
@@ -28,6 +29,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         self.analysis_results = {}
         self.annotations = []
+        self.plots = {}
 
         self.is_recording = False
         self.is_playing = False
@@ -41,45 +43,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.sampling_rate = 44100
 
         self.audioFeatureExtractor = AudioFeatureExtractor()
-
-        self.plots = {
-            'pitch': {
-                'title': 'Pitch (Hz)',
-                'stretch': 1,
-                'mouse_enabled_x': True,
-                'mouse_enabled_y': False,
-                'curves': {
-                    'pitch': {
-                        'data': [],
-                        'symbol': 'o',
-                        'symbolSize': 6,
-                        'symbolBrush': 'c'
-                    }
-                }
-            },
-            'formant_ratio': {
-                'title': 'Formant ratio',
-                'stretch': 2,
-                'mouse_enabled_x': True,
-                'mouse_enabled_y': False,
-                'curves': {
-                    'f1_ratio': {
-                        'data': [],
-                        'symbol': 'o',
-                        'symbolSize': 6,
-                        'symbolBrush': 'y'
-                    },
-                    'a3_ratio': {
-                        'data': [],
-                        'symbol': 'o',
-                        'symbolSize': 6,
-                        'symbolBrush': 'r'
-                    }
-                }
-            },
-            'formants': {},
-            'weight': {}
-        }
 
         self.setup_GUI()
         self.setup_audio()
@@ -159,46 +122,50 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # --------------------------------------------------
         # 2. GRAPHS SECTION
         # --------------------------------------------------
-        self.pitch_plot = pg.PlotWidget(title="Pitch (Hz)")
-        self.pitch_plot.showGrid(x=True, y=True, alpha=0.3)
-        layout.addWidget(self.pitch_plot, stretch=1)
-        self.pitch_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='c')
-        self.playhead_pitch = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
-        self.pitch_plot.addItem(self.playhead_pitch)
-        self.pitch_plot.setMouseEnabled(x=True, y=False)
 
-        self.formant_ratio_plot = pg.PlotWidget(title="Formant Ratio")
-        self.formant_ratio_plot.showGrid(x=True, y=True, alpha=0.3)
-        layout.addWidget(self.formant_ratio_plot, stretch=2)
-        self.f1_ratio_curve = self.formant_ratio_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='y')
-        self.a3_ratio_curve = self.formant_ratio_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='r')
-        self.playhead_formant_ratio = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
-        self.formant_ratio_plot.addItem(self.playhead_formant_ratio)
-        self.formant_ratio_plot.setMouseEnabled(x=False, y=True)
 
-        self.formants_plot = pg.PlotWidget(title="Formants (Hz)")
-        self.formants_plot.showGrid(x=True, y=True, alpha=0.3)
-        layout.addWidget(self.formants_plot, stretch=2)
-        self.f1_curve = self.formants_plot.plot([], pen=None, symbol='o', symbolSize=5, symbolBrush='r')
-        self.f2_curve = self.formants_plot.plot([], pen=None, symbol='t', symbolSize=5, symbolBrush='g')
-        self.f3_curve = self.formants_plot.plot([], pen=None, symbol='s', symbolSize=5, symbolBrush='y')
-        self.playhead_formants = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
-        self.formants_plot.addItem(self.playhead_formants)
-        self.formants_plot.setMouseEnabled(x=False, y=True)
+        for plot_name, plot_spec in spec.items():
+            plot = pg.PlotWidget(title=plot_spec['title'])
+            plot.showGrid(x=True, y=True, alpha=0.3)
+            layout.addWidget(plot, stretch=plot_spec['stretch'])
 
-        self.weight_plot = pg.PlotWidget(title="Weight")
-        self.weight_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.weight_plot.setLabel('bottom', "Time", units="s")
-        layout.addWidget(self.weight_plot, stretch=2)
-        self.weight_curve_0_500 = self.weight_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='m')
-        self.weight_curve_500_1500 = self.weight_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='w')
-        self.playhead_weight = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
-        self.weight_plot.addItem(self.playhead_weight)
-        self.weight_plot.setMouseEnabled(x=False, y=True)
+            mouseX = True
+            if plot_spec['mouse_enabled_x'] is not None:
+                mouseX = plot_spec['mouse_enabled_x']
 
-        self.formants_plot.setXLink(self.pitch_plot)
-        self.formant_ratio_plot.setXLink(self.pitch_plot)
-        self.weight_plot.setXLink(self.pitch_plot)
+            mouseY = True
+            if plot_spec['mouse_enabled_y'] is not None:
+                mouseY = plot_spec['mouse_enabled_y']
+
+            plot.setMouseEnabled(x=mouseX, y=mouseY)
+
+            self.plots[plot_name] = {
+                'plot': plot,
+                'playhead': pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2)),
+                'curves': {},
+            }
+            for curveName, curveSpec in plot_spec['curves'].items():
+                print(curveName)
+                print(curveSpec)
+                self.plots[plot_name]['curves'][curveName] = {
+                    'curve':  self.plots[plot_name]['plot'].plot(
+                        [],
+                        pen=None,
+                        symbol=curveSpec['symbol'],
+                        symbolSize=curveSpec['symbolSize'],
+                        symbolBrush=curveSpec['symbolBrush']
+                    ),
+                    'analysisResult': curveSpec['analysisResult']
+                }
+            self.plots[plot_name]['plot'].addItem(self.plots[plot_name]['playhead'])
+
+            if plot_spec['linkX'] is not None:
+                targetPlot = self.plots[plot_spec['linkX']]['plot']
+                self.plots[plot_name]['plot'].setXLink(targetPlot)
+
+            self.plots[plot_name]['plot'].scene().sigMouseClicked.connect(
+                lambda event: self.on_mouse_clicked(event, self.plots[plot_name]['plot'], "plot_name"))
+
         layout.addSpacing(10)
 
         # --------------------------------------------------
@@ -217,11 +184,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         file_layout.addWidget(self.browse_button)
 
         layout.addLayout(file_layout)
-
-        # Clicks & Timers
-        self.pitch_plot.scene().sigMouseClicked.connect(lambda event: self.on_mouse_clicked(event, self.pitch_plot, "Pitch"))
-        self.formants_plot.scene().sigMouseClicked.connect(lambda event: self.on_mouse_clicked(event, self.formants_plot, "Formants"))
-        self.weight_plot.scene().sigMouseClicked.connect(lambda event: self.on_mouse_clicked(event, self.weight_plot, "Weight"))
 
         self.timer = QtCore.QTimer()
         self.timer.setInterval(30)
@@ -323,12 +285,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             marker = ann.get('marker')
             plot_name = ann.get('plot')
             if marker:
-                if plot_name == "Pitch":
-                    self.pitch_plot.removeItem(marker)
-                elif plot_name == "Formants":
-                    self.formants_plot.removeItem(marker)
-                elif plot_name == "Weight":
-                    self.weight_plot.removeItem(marker)
+                self.plots[plot_name]['plot'].removeItem(marker)
+                # if plot_name == "Pitch":
+                #     self.pitch_plot.removeItem(marker)
+                # elif plot_name == "Formants":
+                #     self.formants_plot.removeItem(marker)
+                # elif plot_name == "Weight":
+                #     self.weight_plot.removeItem(marker)
 
         self.annotations.clear()
 
@@ -664,10 +627,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playback_start_time = time.time() - target_time
         self.is_playing = True
 
-        # Instantly snap the playhead markers to the new click position
-        self.playhead_pitch.setValue(target_time)
-        self.playhead_formants.setValue(target_time)
-        self.playhead_weight.setValue(target_time)
+        for plot_name, plot in self.plots.items():
+            plot['playhead'].setValue(target_time)
 
         self.timer.start()
 
@@ -676,14 +637,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         if not self.analysis_results:
             return
 
-        self.pitch_curve.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['pitch'])
-        self.f1_ratio_curve.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['F1_ratio'])
-        self.a3_ratio_curve.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['A3_ratio'])
-        self.f1_curve.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['F1'])
-        self.f2_curve.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['F2'])
-        self.f3_curve.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['F3'])
-        self.weight_curve_0_500.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['slope_0_500'])
-        self.weight_curve_500_1500.setData(x=self.analysis_results['timepoints'], y=self.analysis_results['slope_500_1500'])
+        for plot_name, plot in self.plots.items():
+            for curve_name, curve in plot['curves'].items():
+                data = self.analysis_results[curve['analysisResult']]
+                self.plots[plot_name]['curves'][curve_name]['curve'].setData(x=self.analysis_results['timepoints'], y=data)
 
         self.update_playhead()
 
@@ -703,10 +660,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.analysis_results['length_seconds'] = self.current_playback_time
 
         # Move the vertical lines to the new X position
-        self.playhead_pitch.setValue(self.current_playback_time)
-        self.playhead_formants.setValue(self.current_playback_time)
-        self.playhead_weight.setValue(self.current_playback_time)
-        self.playhead_formant_ratio.setValue(self.current_playback_time)
+        for plot_name, plot in self.plots.items():
+            plot['playhead'].setValue(self.current_playback_time)
 
     def save_annotations(self):
         """Saves the self.annotations list of AnnotationMarker objects to a text file."""
