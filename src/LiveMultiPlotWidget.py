@@ -1,3 +1,4 @@
+import queue
 import sys
 import tempfile
 import wave
@@ -14,6 +15,7 @@ import os
 from AnalysisWorker import AnalysisWorker
 from AnnotationMarker import AnnotationMarker
 from AudioFeatureExtractor import AudioFeatureExtractor
+from RealTimeAnalysisWorker import RealTimeAnalysisWorker
 
 
 class LiveMultiPlotWidget(QtWidgets.QWidget):
@@ -56,6 +58,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # 4. Set up a QByteArray and QBuffer to store the recorded data in RAM
         self.audio_data = QByteArray()
         self.audio_buffer = QBuffer(self.audio_data)
+
+        self.audio_queue = queue.Queue()
+
+        self.poll_timer = QtCore.QTimer()
+        self.poll_timer.setInterval(33)  # Grab audio every 100ms
+        self.poll_timer.timeout.connect(self.read_audio_chunk)
+
 
     def setup_GUI(self):
         # Window Setup
@@ -380,20 +389,45 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     # --- UI Control Methods ---
 
     def handle_record_stop(self):
+        if self.is_playing:
+            self.stop_playback()
+
         self.is_recording = not self.is_recording
 
         if self.is_recording:
             # --- UI Updates ---
             self.record_stop_btn.setText("Stop Recording")
             self.record_stop_btn.setStyleSheet("background-color: #ffcccc;")
-            print("Recording started...")
 
-            # --- Audio Recording Logic ---
-            self.audio_data.clear()  # Clear previous recording
-            self.audio_buffer.open(QIODevice.OpenModeFlag.WriteOnly)  # Open buffer for writing
+            # 1. Initialize self.analysis_results with empty arrays
+            self.analysis_results = {
+                "timepoints": [], "pitch": [], "F1": [], "F2": [], "F3": [],
+                "F1_ratio": [], "A3_ratio": [], "slope_0_500": [], "slope_500_1500": [],
+                "sample_rate": self.sampling_rate, "length_seconds": 0.0
+            }
 
-            # Start routing audio from the mic into the buffer
+            # 2. Setup background worker (Clear queue from previous runs)
+            while not self.audio_queue.empty():
+                self.audio_queue.get()
+
+            self.rt_worker = RealTimeAnalysisWorker(self.audioFeatureExtractor, self.audio_queue, self.sampling_rate)
+            self.rt_worker.new_data_point.connect(self.append_live_data)
+            self.rt_worker.start()
+
+            # 3. Audio Recording Logic
+            self.audio_data.clear()
+            self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
+
+            # Track exactly where we are in the byte array to avoid the Cursor Trap
+            self.last_read_pos = 0
+
             self.audio_source.start(self.audio_buffer)
+            self.poll_timer.start()  # Start the data harvester
+
+            self.timer.start()
+
+            print("Real-time recording started...")
+
 
         else:
             # --- UI Updates ---
@@ -402,16 +436,62 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             print("Recording stopped.")
 
             # --- Audio Stop Logic ---
+            self.poll_timer.stop()
+
+            # [NEW] Force one last read to catch stranded bytes before closing the buffer
+            self.read_audio_chunk()
+
             self.audio_source.stop()
             self.audio_buffer.close()
+            self.timer.stop()
 
-            # --- Extract the PCM Data ---
+            # --- Stop Worker ---
+            if hasattr(self, 'rt_worker'):
+                # This flags the loop to stop, but our new logic lets it empty the queue first
+                self.rt_worker.stop()
+                # wait() safely blocks the main thread for a tiny fraction of a second
+                # until the worker finishes its last chunk
+                self.rt_worker.wait()
+
+                # --- Save to WAV for Playback ---
             pcm_bytes = self.audio_data.data()
-            temp_wav_path = self.save_to_temp_wav(pcm_bytes, 44100)
+            temp_wav_path = self.save_to_temp_wav(pcm_bytes, self.sampling_rate)
 
-            # Update the file path and trigger the multi-threaded analysis
             self.file_path = temp_wav_path
-            self.selectAnalysisFile(temp_wav_path)
+            self.file_path_display.setText(self.file_path)
+
+            self.current_playback_time = 0
+            self.update_playhead()
+
+    def read_audio_chunk(self):
+        """Safely slices new audio bytes directly from RAM without touching the buffer cursor."""
+        current_size = self.audio_data.size()
+
+        # If the array has grown since we last checked...
+        if current_size > self.last_read_pos:
+            # Extract just the new bytes using .mid(start_position, length)
+            new_bytes = self.audio_data.mid(self.last_read_pos, current_size - self.last_read_pos).data()
+
+            # Update our tracker so we don't read these bytes again
+            self.last_read_pos = current_size
+
+            if new_bytes:
+                self.audio_queue.put(new_bytes)
+
+    def append_live_data(self, latest_point):
+        """Receives a single processed data point and appends it."""
+        self.analysis_results["timepoints"].append(latest_point["time"])
+        self.analysis_results["pitch"].append(latest_point["pitch"])
+        self.analysis_results["F1"].append(latest_point["F1"])
+        self.analysis_results["F2"].append(latest_point["F2"])
+        self.analysis_results["F3"].append(latest_point["F3"])
+
+        f1_val = latest_point["F1"] if latest_point["F1"] > 0 else 1.0
+        self.analysis_results["F1_ratio"].append(latest_point["F2"] / f1_val)
+        self.analysis_results["A3_ratio"].append(latest_point["F3"] / f1_val)
+
+        self.analysis_results["slope_0_500"].append(latest_point["slope_0_500"])
+        self.analysis_results["slope_500_1500"].append(latest_point["slope_500_1500"])
 
 
     def save_to_temp_wav(self, pcm_bytes, sample_rate):
@@ -449,6 +529,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.stop_playback()
 
     def stop_playback(self):
+        self.is_playing = False  # <-- Add this line
         self.playback_btn.setText("Start Playback")
         self.playback_btn.setStyleSheet("")
         if self.audio_device is not None:
@@ -638,6 +719,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if self.current_playback_time > self.analysis_results['length_seconds']:
                 self.stop_playback()
                 self.current_playback_time = 0
+        elif self.is_recording:
+            # Calculate time based on raw bytes recorded
+            # 16-bit Mono = 2 bytes per sample
+            self.current_playback_time = self.audio_data.size() / (2 * self.sampling_rate)
+
+            # Update the max length so playback works correctly later even with trailing silence
+            self.analysis_results['length_seconds'] = self.current_playback_time
 
         # Move the vertical lines to the new X position
         self.playhead_pitch.setValue(self.current_playback_time)
