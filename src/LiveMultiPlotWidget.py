@@ -11,11 +11,13 @@ import pyqtgraph as pg
 import time
 import miniaudio
 import os
+import qtawesome as qta
 
 from AnalysisWorker import AnalysisWorker
 from AnnotationMarker import AnnotationMarker
 from AudioFeatureExtractor import AudioFeatureExtractor
 from RealTimeAnalysisWorker import RealTimeAnalysisWorker
+
 
 
 class LiveMultiPlotWidget(QtWidgets.QWidget):
@@ -67,78 +69,90 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
 
     def setup_GUI(self):
-        # Window Setup
-        self.setWindowTitle("VoiceVis")
-        self.resize(800, 800)
-
         self.setAcceptDrops(True)
-
-        # Main vertical layout
         layout = QtWidgets.QVBoxLayout(self)
 
         # --------------------------------------------------
-        # 1. GRAPHS SECTION
+        # 1. CONTROL BUTTONS SECTION
         # --------------------------------------------------
+        top_buttons_layout = QtWidgets.QHBoxLayout()
 
-        # Plot 1: Pitch
+        # Pre-load QtAwesome icons
+        self.record_icon = qta.icon('fa5s.microphone')
+        # self.stop_icon = qta.icon('fa5s.mirophone-slash')
+        self.stop_icon = qta.icon('fa5s.stop')  # Or 'fa5s.stop'
+        self.play_icon = qta.icon('fa5s.play')
+        self.pause_icon = qta.icon('fa5s.pause')
+        self.save_icon = qta.icon('fa5s.save')
+
+        # Record Button
+        self.record_stop_btn = QtWidgets.QPushButton()
+        self.record_stop_btn.setFixedSize(40, 40)  # Harmonized size
+        self.record_stop_btn.setIcon(self.record_icon)
+        self.record_stop_btn.setIconSize(QtCore.QSize(20, 20))
+        self.record_stop_btn.setToolTip("Record")  # Added Tooltip
+        self.record_stop_btn.clicked.connect(self.handle_record_stop)
+
+        # Playback Button
+        self.playback_btn = QtWidgets.QPushButton()
+        self.playback_btn.setFixedSize(40, 40)  # Harmonized size
+        self.playback_btn.setIcon(self.play_icon)
+        self.playback_btn.setIconSize(QtCore.QSize(20, 20))
+        self.playback_btn.setToolTip("Play/Pause")
+        self.playback_btn.clicked.connect(self.handle_playback)
+
+        # Save Button
+        self.save_btn = QtWidgets.QPushButton()
+        self.save_btn.setFixedSize(40, 40)  # Harmonized size
+        self.save_btn.setIcon(self.save_icon)
+        self.save_btn.setIconSize(QtCore.QSize(20, 20))
+        self.save_btn.setToolTip("Save Annotations")
+        self.save_btn.clicked.connect(self.save_annotations)
+
+        top_buttons_layout.addWidget(self.record_stop_btn)
+        top_buttons_layout.addWidget(self.playback_btn)
+        top_buttons_layout.addWidget(self.save_btn)
+        top_buttons_layout.addStretch()
+        layout.addLayout(top_buttons_layout)
+
+        # --------------------------------------------------
+        # 2. GRAPHS SECTION
+        # --------------------------------------------------
         self.pitch_plot = pg.PlotWidget(title="Pitch (Hz)")
         self.pitch_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.pitch_plot.setLabel('bottom', "Time", units="s")
         layout.addWidget(self.pitch_plot, stretch=3)
-
-        self.pitch_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='c')  # Cyan
-        self.f1_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6,
-                                                   symbolBrush='y')  # Yellow
-        self.a3_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6,
-                                                   symbolBrush='r')  # Red
-        # Add this after setting up self.pitch_plot
+        self.pitch_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='c')
+        self.f1_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='y')
+        self.a3_ratio_curve = self.pitch_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='r')
         self.playhead_pitch = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
         self.pitch_plot.addItem(self.playhead_pitch)
 
-        # Plot 2: Formants (F1, F2, F3)
         self.formants_plot = pg.PlotWidget(title="Formants (Hz)")
         self.formants_plot.showGrid(x=True, y=True, alpha=0.3)
-        self.formants_plot.addLegend()
-        self.formants_plot.setLabel('bottom', "Time", units="s")
         layout.addWidget(self.formants_plot, stretch=2)
-
-        self.f1_curve = self.formants_plot.plot([], pen=None, symbol='o', symbolSize=5, symbolBrush='r',
-                                                name="F1")  # Red
-        self.f2_curve = self.formants_plot.plot([], pen=None, symbol='t', symbolSize=5, symbolBrush='g',
-                                                name="F2")  # Green
-        self.f3_curve = self.formants_plot.plot([], pen=None, symbol='s', symbolSize=5, symbolBrush='y',
-                                                name="F3")  # Yellow
-        # Add this after setting up self.formants_plot
+        self.f1_curve = self.formants_plot.plot([], pen=None, symbol='o', symbolSize=5, symbolBrush='r')
+        self.f2_curve = self.formants_plot.plot([], pen=None, symbol='t', symbolSize=5, symbolBrush='g')
+        self.f3_curve = self.formants_plot.plot([], pen=None, symbol='s', symbolSize=5, symbolBrush='y')
         self.playhead_formants = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
         self.formants_plot.addItem(self.playhead_formants)
 
-        # Plot 3: Weight
         self.weight_plot = pg.PlotWidget(title="Weight")
         self.weight_plot.showGrid(x=True, y=True, alpha=0.3)
         self.weight_plot.setLabel('bottom', "Time", units="s")
         layout.addWidget(self.weight_plot, stretch=2)
-
-        self.weight_curve_0_500 = self.weight_plot.plot([], pen=None, symbol='o', symbolSize=6,
-                                                        symbolBrush='m')  # Magenta
-        self.weight_curve_500_1500 = self.weight_plot.plot([], pen=None, symbol='o',
-                                                           symbolSize=6, symbolBrush='w')  # White
-
-        # Add this after setting up self.weight_plot
+        self.weight_curve_0_500 = self.weight_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='m')
+        self.weight_curve_500_1500 = self.weight_plot.plot([], pen=None, symbol='o', symbolSize=6, symbolBrush='w')
         self.playhead_weight = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2))
         self.weight_plot.addItem(self.playhead_weight)
 
-        # Synchronize X-Axes
         self.formants_plot.setXLink(self.pitch_plot)
         self.weight_plot.setXLink(self.pitch_plot)
-
-        # Add spacing between graphs and controls
         layout.addSpacing(10)
 
         # --------------------------------------------------
-        # 2. FILE BROWSER SECTION
+        # 3. FILE BROWSER SECTION (Moved to bottom)
         # --------------------------------------------------
         file_layout = QtWidgets.QHBoxLayout()
-
         self.file_path_display = QtWidgets.QLineEdit()
         self.file_path_display.setPlaceholderText("Select or drag & drop a file to analyze...")
         self.file_path_display.setReadOnly(True)
@@ -152,47 +166,16 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         layout.addLayout(file_layout)
 
-        # --------------------------------------------------
-        # 3. CONTROL BUTTONS SECTION
-        # --------------------------------------------------
-        bottom_buttons_layout = QtWidgets.QHBoxLayout()
+        # Clicks & Timers
+        self.pitch_plot.scene().sigMouseClicked.connect(lambda event: self.on_mouse_clicked(event, self.pitch_plot, "Pitch"))
+        self.formants_plot.scene().sigMouseClicked.connect(lambda event: self.on_mouse_clicked(event, self.formants_plot, "Formants"))
+        self.weight_plot.scene().sigMouseClicked.connect(lambda event: self.on_mouse_clicked(event, self.weight_plot, "Weight"))
 
-        self.record_stop_btn = QtWidgets.QPushButton("Record")
-        self.record_stop_btn.setMinimumHeight(50)
-        self.record_stop_btn.clicked.connect(self.handle_record_stop)
-
-        self.playback_btn = QtWidgets.QPushButton("Start Playback")
-        self.playback_btn.setMinimumHeight(50)
-        self.playback_btn.clicked.connect(self.handle_playback)
-
-        # [NEW] Add the Save button
-        self.save_btn = QtWidgets.QPushButton("Save Annotations")
-        self.save_btn.setMinimumHeight(50)
-        self.save_btn.clicked.connect(self.save_annotations)
-
-        bottom_buttons_layout.addWidget(self.record_stop_btn, stretch=1)
-        bottom_buttons_layout.addWidget(self.playback_btn, stretch=1)
-        bottom_buttons_layout.addWidget(self.save_btn, stretch=1)
-
-        layout.addLayout(bottom_buttons_layout)
-
-        self.pitch_plot.scene().sigMouseClicked.connect(
-            lambda event: self.on_mouse_clicked(event, self.pitch_plot, "Pitch")
-        )
-        self.formants_plot.scene().sigMouseClicked.connect(
-            lambda event: self.on_mouse_clicked(event, self.formants_plot, "Formants")
-        )
-        self.weight_plot.scene().sigMouseClicked.connect(
-            lambda event: self.on_mouse_clicked(event, self.weight_plot, "Weight")
-        )
-
-        # --------------------------------------------------
-        # TIMER SETUP
-        # --------------------------------------------------
         self.timer = QtCore.QTimer()
-        self.timer.setInterval(30)  # ~33 FPS
+        self.timer.setInterval(30)
         self.timer.timeout.connect(self.update_plots)
-        # Note: Timer is no longer auto-started here. It is triggered by the Playback button.
+
+
     # --- File Handling Methods ---
 
     def browse_file(self):
@@ -396,8 +379,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         if self.is_recording:
             # --- UI Updates ---
-            self.record_stop_btn.setText("Stop Recording")
-            self.record_stop_btn.setStyleSheet("background-color: #ffcccc;")
+            self.record_stop_btn.setIcon(self.stop_icon)
+            self.record_stop_btn.setToolTip("Stop Recording")  # Use tooltip instead of text
 
             # 1. Initialize self.analysis_results with empty arrays
             self.analysis_results = {
@@ -429,10 +412,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             print("Real-time recording started...")
 
 
+
         else:
             # --- UI Updates ---
-            self.record_stop_btn.setText("Record")
-            self.record_stop_btn.setStyleSheet("")
+            self.record_stop_btn.setIcon(self.record_icon)
+            self.record_stop_btn.setToolTip("Record")  # Use tooltip instead of text
+            # Make sure border-radius matches the new 40x40 size (20px)
             print("Recording stopped.")
 
             # --- Audio Stop Logic ---
@@ -512,7 +497,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         print(f"WAV file saved to: {wav_filepath}")
         return wav_filepath
 
-
     def handle_playback(self):
         if self.is_recording:
             print("Cannot start playback while recording.")
@@ -521,20 +505,23 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.is_playing = not self.is_playing
 
         if self.is_playing:
-            self.playback_btn.setText("Pause Playback")
-            self.playback_btn.setStyleSheet("background-color: #ccffcc;")
+            # Change icon to Pause
+            self.playback_btn.setIcon(self.pause_icon)
+
             self.seek_and_play()
             print("Playback started...")
         else:
             self.stop_playback()
 
     def stop_playback(self):
-        self.is_playing = False  # <-- Add this line
-        self.playback_btn.setText("Start Playback")
-        self.playback_btn.setStyleSheet("")
+        self.is_playing = False
+
+        # Swap back to Play icon
+        self.playback_btn.setIcon(self.play_icon)
+
         if self.audio_device is not None:
             self.audio_device.stop()
-        self.timer.stop()  # Stop the plot updating timer
+        self.timer.stop()
         print("Playback paused.")
 
     def on_mouse_clicked(self, event, plot_widget, plot_name):
