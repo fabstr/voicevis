@@ -25,6 +25,7 @@ from RealTimeAnalysisWorker import RealTimeAnalysisWorker
 
 
 class LiveMultiPlotWidget(QtWidgets.QWidget):
+    file_loaded_signal = QtCore.pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -283,25 +284,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.on_mouse_clicked(event, self.plots[p_name]['plot'], p_title)
             )
 
-        layout.addSpacing(10)
-
-        # --------------------------------------------------
-        # 3. FILE BROWSER SECTION (Moved to bottom)
-        # --------------------------------------------------
-        file_layout = QtWidgets.QHBoxLayout()
-        self.file_path_display = QtWidgets.QLineEdit()
-        self.file_path_display.setPlaceholderText("Select or drag & drop a file to analyze...")
-        self.file_path_display.setReadOnly(True)
-        self.file_path_display.setMinimumHeight(35)
-        file_layout.addWidget(self.file_path_display)
-
-        self.browse_button = QtWidgets.QPushButton("Browse...")
-        self.browse_button.setMinimumHeight(35)
-        self.browse_button.clicked.connect(self.browse_file)
-        file_layout.addWidget(self.browse_button)
-
-        layout.addLayout(file_layout)
-
         self.timer = QtCore.QTimer()
         self.timer.setInterval(30)
         self.timer.timeout.connect(self.update_plots)
@@ -322,8 +304,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.load_annotations_file(file_name)
             else:
                 self.clear_annotations()  # Clear old annotations before loading a new raw audio file
-                self.file_path_display.setText(file_name)
                 self.file_path = file_name
+                self.file_loaded_signal.emit(file_name)
                 self.selectAnalysisFile(file_name)
 
     def selectAnalysisFile(self, file_name):
@@ -371,12 +353,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if file_path.lower().endswith('.txt'):
                 self.load_annotations_file(file_path)
             elif file_path.lower().endswith(('.wav', '.mp3')):
-                self.file_path_display.setText(file_path)
                 self.file_path = file_path
+                self.file_loaded_signal.emit(file_path)
                 self.clear_annotations()
                 self.selectAnalysisFile(file_path)
-            else:
-                self.file_path_display.setText("Error: Unsupported file format.")
 
     def keyPressEvent(self, event):
         # Check if the pressed key is the Spacebar
@@ -423,7 +403,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             # 2. Clear old data and load the audio file using the found path
             self.clear_annotations()
-            self.file_path_display.setText(active_audio_path)
             self.file_path = active_audio_path
             self.selectAnalysisFile(active_audio_path)
 
@@ -532,7 +511,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             temp_wav_path = save_to_temp_wav(pcm_bytes, self.sampling_rate)
 
             self.file_path = temp_wav_path
-            self.file_path_display.setText(self.file_path)
 
             self.current_playback_time = 0
             self.update_playhead()

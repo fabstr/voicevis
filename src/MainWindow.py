@@ -110,13 +110,14 @@ class MainWindow(QtWidgets.QMainWindow):
         dock.raise_()
 
         # Rename dock when a file is loaded
-        new_session.file_path_display.textChanged.connect(
-            lambda text, d=dock: self.update_dock_name(d, text)
+        new_session.file_loaded_signal.connect(
+            lambda file_path, d=dock: self.update_dock_name(d, file_path)
         )
 
-    def update_dock_name(self, dock, text):
-        if text and text != "Select or drag & drop a file to analyze...":
-            filename = os.path.basename(text)
+    def update_dock_name(self, dock, file_path):
+        if file_path:
+            import os
+            filename = os.path.basename(file_path)
             dock.setWindowTitle(filename)
 
     def close_dock(self, dock):
