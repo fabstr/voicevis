@@ -1,3 +1,5 @@
+import time
+
 import opensmile
 import miniaudio
 import numpy as np
@@ -71,92 +73,89 @@ class AudioFeatureExtractor:
     def analyzeFile(self, path):
         df = None
         if (path.endswith('.wav')):
+            start_time = time.perf_counter()
             df = self.smile.process_file(path)
+            elapsed_time = time.perf_counter() - start_time
+            print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
+
             with contextlib.closing(wave.open(path, 'r')) as f:
                 frames = f.getnframes()
                 sampling_rate = f.getframerate()
                 audio_length = frames / float(sampling_rate)
                 return self.extractFeatures(df, sampling_rate, audio_length)
+
         elif (path.endswith('.mp3')):
+
+            start_time = time.perf_counter()
             pcm_data, sampling_rate = self.convertMp3ToPcm(path)
+            elapsed_time = time.perf_counter() - start_time
+            print(f"MP3 convertion time: {elapsed_time:.4f} seconds.")
+
+            start_time = time.perf_counter()
             df = self.smile.process_signal(pcm_data, sampling_rate)
+            elapsed_time = time.perf_counter() - start_time
+            print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
+
             audio_length = len(pcm_data) / float(sampling_rate)
             return self.extractFeatures(df, sampling_rate, audio_length)
 
     def extractFeatures(self, df, sampling_rate, audio_length):
-        timepoints_raw = [t for t in df.index.get_level_values('start').total_seconds()]
+        start_time = time.perf_counter()
 
+        # 1. Vectorized calculations directly on the DataFrame
+        timepoints = df.index.get_level_values('start').total_seconds().to_numpy()
 
-        pitch = [27.5 * (2 ** (semitone/12)) for semitone in df['F0semitoneFrom27.5Hz_sma3nz']]
-        # F1_ratio = [r for r in df["logRelF0-H1-H2_sma3nz"]]
-        # A3_ratio = [-r for r in df["logRelF0-H1-A3_sma3nz"]]
-        F1 = [f for f in df['F1frequency_sma3nz']]
-        F2 = [f for f in df['F2frequency_sma3nz']]
-        F3 = [f for f in df['F3frequency_sma3nz']]
-        slope_0_500 = [s for s in df['slope0-500_sma3']]
-        slope_500_1500 = [s for s in df['slope500-1500_sma3']]
-        loudness = [s for s in df['Loudness_sma3']]
+        # Calculate pitch using vectorized numpy math
+        semitones = df['F0semitoneFrom27.5Hz_sma3nz'].to_numpy()
+        pitch = 27.5 * (2 ** (semitones / 12))
 
+        # Extract formants and features as fast NumPy arrays
+        f1 = df['F1frequency_sma3nz'].to_numpy()
+        f2 = df['F2frequency_sma3nz'].to_numpy()
+        f3 = df['F3frequency_sma3nz'].to_numpy()
+        slope_0 = df['slope0-500_sma3'].to_numpy()
+        slope_500 = df['slope500-1500_sma3'].to_numpy()
+        loudness_raw = df['Loudness_sma3'].to_numpy()
+
+        # 2. Vectorized Filtering (Replaces the slow 'for' loop)
+        valid_mask = pitch > 27.5
+        t_filtered = timepoints[valid_mask]
+
+        # 3. Construct the result dictionary using filtered arrays
         result = {
-            "pitch": {"x": [], "y": []},
+            "pitch": {"x": t_filtered, "y": pitch[valid_mask]},
+            "F1": {"x": t_filtered, "y": f1[valid_mask]},
+            "F2": {"x": t_filtered, "y": f2[valid_mask]},
+            "F3": {"x": t_filtered, "y": f3[valid_mask]},
 
-            "F1": {"x": [], "y": []},
-            "F2": {"x": [], "y": []},
-            "F3": {"x": [], "y": []},
+            "F1_ratio": {"x": t_filtered, "y": f2[valid_mask] / f1[valid_mask]},
+            "F3_ratio": {"x": t_filtered, "y": f3[valid_mask] / f1[valid_mask]},
 
-            "F1_ratio": {"x": [], "y": []},
-            "F3_ratio": {"x": [], "y": []},
+            "slope_0_500": {"x": t_filtered, "y": slope_0[valid_mask]},
+            "slope_500_1500": {"x": t_filtered, "y": slope_500[valid_mask]},
 
-            "slope_0_500": {"x": [], "y": []},
-            "slope_500_1500": {"x": [], "y": []},
-
-            "loudness": {"x": [], "y": []},
+            "loudness": {"x": t_filtered, "y": loudness_raw[valid_mask]},
 
             "sample_rate": sampling_rate,
             "length_seconds": audio_length
         }
 
-
-
-        for i in range(0, len(timepoints_raw)):
-            if pitch[i] > 27.5:
-                result["pitch"]["x"].append(timepoints_raw[i])
-                result["pitch"]["y"].append(pitch[i])
-
-                result["F1"]["x"].append(timepoints_raw[i])
-                result["F1"]["y"].append(F1[i])
-                result["F2"]["x"].append(timepoints_raw[i])
-                result["F2"]["y"].append(F2[i])
-                result["F3"]["x"].append(timepoints_raw[i])
-                result["F3"]["y"].append(F3[i])
-
-
-                result["slope_0_500"]["x"].append(timepoints_raw[i])
-                result["slope_0_500"]["y"].append(slope_500_1500[i])
-
-                result["slope_500_1500"]["x"].append(timepoints_raw[i])
-                result["slope_500_1500"]["y"].append(slope_500_1500[i])
-
-                result["loudness"]["x"].append(timepoints_raw[i])
-                result["loudness"]["y"].append(loudness[i])
-
-                result["F1_ratio"]["x"].append(timepoints_raw[i])
-                result["F1_ratio"]["y"].append(F2[i] / F1[i])
-
-                result["F3_ratio"]["x"].append(timepoints_raw[i])
-                result["F3_ratio"]["y"].append((F3[i] / F1[i]))
-
+        # 4. Handle Outliers
         result["pitch"] = reject_outliers(result["pitch"])
-
         result["F1_ratio"] = reject_outliers(result["F1_ratio"])
-
         result["F3_ratio"] = reject_outliers(result["F3_ratio"])
+
         result["F3_ratio"]["y"] = np.negative(result["F3_ratio"]["y"])
 
-        # normalise loudness
-        l =  np.array(result["loudness"]["y"])
-        l = (l - l.min()) / (l.max() - l.min())
-        result["loudness"]["y"] = l
+        # 5. Vectorized Min-Max Normalization for Loudness
+        l_arr = result["loudness"]["y"]
+        l_min, l_max = l_arr.min(), l_arr.max()
+        if l_max != l_min:
+            result["loudness"]["y"] = (l_arr - l_min) / (l_max - l_min)
+
+        # Stop the timer and calculate elapsed time
+        elapsed_time = time.perf_counter() - start_time
+        print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
 
         return  result
 
