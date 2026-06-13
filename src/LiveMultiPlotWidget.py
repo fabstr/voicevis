@@ -13,6 +13,7 @@ import numpy as np
 import miniaudio
 
 from AnalysisWorker import AnalysisWorker
+from PlaybackWorker import PlaybackWorker
 from PlotsSpec import spec, plotPointDefaultSize
 from utils import save_to_file, load_from_file, save_to_temp_wav
 from AnnotationMarker import AnnotationMarker
@@ -596,17 +597,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         else:
             self.stop_playback()
 
-    def stop_playback(self):
-        self.is_playing = False
-
-        # Swap back to Play icon
-        self.playback_btn.setIcon(self.play_icon)
-
-        if self.audio_device is not None:
-            self.audio_device.stop()
-        self.timer.stop()
-        print("Playback paused.")
-
     def on_mouse_clicked(self, event, plot_widget, plot_name):
         # Check if the click was a left-click
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -736,32 +726,31 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         dialog.exec()
 
     def seek_and_play(self):
-        # Prevent seeking to negative times if the user clicks out of bounds
         target_time = max(0.0, self.current_playback_time)
-
-        # Calculate the exact frame based on the audio's sample rate
         seek_frame = int(target_time * self.analysis_results['sample_rate'])
 
-        # Stop existing playback
-        if self.audio_device and self.audio_device.running:
-            self.audio_device.stop()
+        # Clear old worker if running
+        if hasattr(self, 'play_worker') and self.play_worker.isRunning():
+            self.play_worker.stop_backend()
+            self.play_worker.wait()
 
-        # Start a new miniaudio stream, passing in the offset
-        self.audio_stream = miniaudio.stream_file(
-            self.file_path,
-            seek_frame=seek_frame
-        )
-        self.audio_device = miniaudio.PlaybackDevice()
-        self.audio_device.start(self.audio_stream)
+        # Spawn background playback
+        self.play_worker = PlaybackWorker(self.file_path, seek_frame)
+        self.play_worker.playback_finished.connect(self.stop_playback)
+        self.play_worker.start()
 
-        # Offset the master timer by the target time so the playhead continues smoothly
         self.playback_start_time = time.time() - target_time
         self.is_playing = True
-
-        for plot_name, plot in self.plots.items():
-            plot['playhead'].setValue(target_time)
-
         self.timer.start()
+
+    def stop_playback(self):
+        self.is_playing = False
+        self.playback_btn.setIcon(self.play_icon)
+
+        if hasattr(self, 'play_worker'):
+            self.play_worker.stop_backend()
+
+        self.timer.stop()
 
     def update_plots(self):
         if not self.analysis_results:
