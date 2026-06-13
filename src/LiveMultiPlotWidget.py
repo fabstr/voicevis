@@ -399,21 +399,37 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             # 3. Parse annotations (skip headers: lines 0, 1, and 2)
             for annotation in annotations:
-                    # Determine which plot widget to draw on
-                    plot_widget = None
-                    if annotation['plot'] == "Pitch":
-                        plot_widget = self.pitch_plot
-                    elif annotation['plot'] == "Formants":
-                        plot_widget = self.formants_plot
-                    elif annotation['plot'] == "Weight":
-                        plot_widget = self.weight_plot
+                plot_widget = None
+                target_plot_key = None
 
-                    # Recreate the marker and save it to memory
-                    if plot_widget:
-                        marker = AnnotationMarker(annotation['time'], annotation['y'], annotation['text'], annotation['plot'], plot_widget, self)
-                        plot_widget.addItem(marker)
-                        annotation['marker'] = marker
-                        self.annotations.append(annotation)
+                # Match the saved text against either the dictionary key or the plot's title
+                for p_key, p_data in self.plots.items():
+                    # Get the title from your spec config if it exists
+                    from PlotsSpec import spec
+                    plot_title = spec.get(p_key, {}).get('title', '')
+
+                    if annotation['plot'] == p_key or annotation['plot'] == plot_title:
+                        plot_widget = p_data['plot']
+                        target_plot_key = p_key
+                        break
+
+                # Recreate the marker and save it to memory
+                if plot_widget:
+                    # Crucial: Override the text feature string back to the standardized plot key
+                    # so future updates or saves remain stable
+                    annotation['plot'] = target_plot_key
+
+                    marker = AnnotationMarker(
+                        annotation['time'],
+                        annotation['y'],
+                        annotation['text'],
+                        target_plot_key,
+                        plot_widget,
+                        self
+                    )
+                    plot_widget.addItem(marker)
+                    annotation['marker'] = marker
+                    self.annotations.append(annotation)
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
