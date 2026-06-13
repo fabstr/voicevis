@@ -509,24 +509,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.update_playhead()
 
             # Perform analysis
-            # 1. Setup and show the loading dialog
-            self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio file...", None, 0, 0, self)
-            self.loading_dialog.setWindowTitle("Please Wait")
-            self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
-            self.loading_dialog.setMinimumDuration(0)  # Ensure it shows immediately
-            self.loading_dialog.show()
-
-            # 2. Setup the worker thread
-            self.worker = AnalysisWorker(self.audioFeatureExtractor, self.file_path)
-
-            # Connect signals to slots
-            self.worker.result_ready.connect(self.on_analysis_finished)
-            self.worker.error_occurred.connect(self.on_analysis_error)
-            self.worker.finished.connect(self.loading_dialog.close)
-
-            # 3. Start the background thread
-            self.worker.start()
-
+            self.selectAnalysisFile(self.file_path)
 
 
     def read_audio_chunk(self):
