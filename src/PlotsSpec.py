@@ -2,6 +2,17 @@ defaultSize = 1
 
 outliers_m = 5.
 
+# Colours
+loudness      = (0, 255, 255)
+pitch         = (255, 0, 255)
+ratio_f2_f1   = (57, 255, 20)
+ratio_f3_f1   = (255, 215, 0)
+f1            = (0, 191, 255)
+f2            = (255, 127, 80)
+f3            = (186, 85, 211)
+weight        = (220, 20, 60)
+weight2       = (220, 20, 60)
+
 spec = {
     'Loudness': {
         'title': 'Loudness',
@@ -12,7 +23,7 @@ spec = {
             'pitch': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'w',
+                'colour': loudness,
                 'analysisResult': 'loudness'
             }
         },
@@ -27,7 +38,7 @@ spec = {
             'pitch': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'c',
+                'colour': pitch,
                 'analysisResult': 'pitch'
             }
         },
@@ -42,13 +53,13 @@ spec = {
             'f1_ratio': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'y',
+                'colour': ratio_f2_f1,
                 'analysisResult': 'F1_ratio'
             },
             'f3_ratio': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'r',
+                'colour': ratio_f3_f1,
                 'analysisResult': 'F3_ratio'
             }
         },
@@ -63,19 +74,19 @@ spec = {
             'F1': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'r',
+                'colour': f1,
                 'analysisResult': 'F1'
             },
             'F2': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'g',
+                'colour': f2,
                 'analysisResult': 'F2'
             },
             'F3': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'y',
+                'colour': f3,
                 'analysisResult': 'F3'
             }
         },
@@ -90,13 +101,13 @@ spec = {
             'curve_0_500': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'm',
+                'colour': weight,
                 'analysisResult': 'slope_0_500'
             },
             'curve_500_1500': {
                 'symbol': 'o',
                 'symbolSize': defaultSize,
-                'symbolBrush': 'w',
+                'colour': weight2,
                 'analysisResult': 'slope_500_1500'
             }
         },

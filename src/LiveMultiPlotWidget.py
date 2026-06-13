@@ -12,6 +12,7 @@ import time
 import miniaudio
 import os
 import qtawesome as qta
+from pyqtgraph import mkBrush
 
 from AnalysisWorker import AnalysisWorker
 from PlotsSpec import spec
@@ -148,10 +149,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.plots[plot_name]['curves'][curveName] = {
                     'curve':  self.plots[plot_name]['plot'].plot(
                         [],
+                        symbol="o",
                         pen=None,
-                        symbol=curveSpec['symbol'],
-                        symbolSize=curveSpec['symbolSize'],
-                        symbolBrush=curveSpec['symbolBrush']
+                        symbolBrush=curveSpec['colour'],
+                        symbolPen=None,
+                        symbolSize=curveSpec['symbolSize']  # Sets the point size
                     ),
                     'analysisResult': curveSpec['analysisResult']
                 }

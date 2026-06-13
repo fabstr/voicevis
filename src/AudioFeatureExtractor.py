@@ -116,11 +116,12 @@ class AudioFeatureExtractor:
             "length_seconds": audio_length
         }
 
+
+
         for i in range(0, len(timepoints_raw)):
             if pitch[i] > 27.5:
                 result["pitch"]["x"].append(timepoints_raw[i])
                 result["pitch"]["y"].append(pitch[i])
-
 
                 result["F1"]["x"].append(timepoints_raw[i])
                 result["F1"]["y"].append(F1[i])
