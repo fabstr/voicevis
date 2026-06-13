@@ -37,7 +37,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             "F1_ratio": {"x": np.array([]), "y": np.array([])},
             "F3_ratio": {"x": np.array([]), "y": np.array([])},  # Ensure naming matches 'curves' config
             "loudness": {"x": np.array([]), "y": np.array([])},
-            "Weight": {"x": np.array([]), "y": np.array([])},
+            "slopes": {"x": np.array([]), "y": np.array([])},
 
             "sample_rate": self.sampling_rate,
             "length_seconds": 0.0
@@ -458,9 +458,17 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 "F2": {"x": np.array([]), "y": np.array([])},
                 "F3": {"x": np.array([]), "y": np.array([])},
                 "F1_ratio": {"x": np.array([]), "y": np.array([])},
-                "F3_ratio": {"x": np.array([]), "y": np.array([])},  # Ensure naming matches 'curves' config
+                "F3_ratio": {"x": np.array([]), "y": np.array([])},
                 "loudness": {"x": np.array([]), "y": np.array([])},
-                "Weight": {"x": np.array([]), "y": np.array([])},
+                "slopes": {"x": np.array([]), "y": np.array([])},
+
+                # --- FIX: Add any new keys expected during real-time streaming ---
+                "F1_IBW": {"x": np.array([]), "y": np.array([])},
+                "F2_IBW": {"x": np.array([]), "y": np.array([])},
+                "F3_IBW": {"x": np.array([]), "y": np.array([])},
+                "F2_F1_IBW": {"x": np.array([]), "y": np.array([])},
+                "F3_F1_IBW": {"x": np.array([]), "y": np.array([])},
+                # "slopes": {"x": np.array([]), "y": np.array([])},
 
                 "sample_rate": self.sampling_rate,
                 "length_seconds": 0.0
@@ -546,6 +554,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         using the layout structures from update_plots.
         """
         if not self.analysis_results:
+            print("analysis_results is empty")
             return
 
         current_time = latest_point["time"]
@@ -557,12 +566,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                 # If this quality metric isn't in our results storage, skip it
                 if result_key not in self.analysis_results:
+                    print("key not in results: " + result_key)
                     continue
 
                 data_container = self.analysis_results[result_key]
 
                 # Skip if it uses an unoptimized flat list legacy structure
                 if isinstance(data_container, list):
+                    print("data container is a list")
                     continue
 
                 # Ensure the specific point value exists in our stream packet
@@ -768,8 +779,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 else:
                     if 'has_bw' in curve:
                         y_arr = np.array(data["y"], dtype=float)
-                        bw_arr = np.array(data["BW"], dtype=float)
                         x_arr = np.array(data["x"], dtype=float)
+
+                        # --- FIX: Safely retrieve BW. Fallback to 0 if missing or mismatched ---
+                        if "BW" in data and len(data["BW"]) == len(y_arr):
+                            bw_arr = np.array(data["BW"], dtype=float)
+                        else:
+                            bw_arr = np.zeros_like(y_arr)
+                            # -----------------------------------------------------------------------
 
                         new_upper = y_arr + (bw_arr / 2)
                         new_lower = y_arr - (bw_arr / 2)

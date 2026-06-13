@@ -50,8 +50,6 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                             # Independent Plots
                             "loudness": results['loudness']['y'][-1],
                             "pitch": results['pitch']['y'][-1],
-                            "weight": results['weight']['y'][-1] if 'weight' in results else None,
-                            # Added if weight tracker is active
 
                             # Formant Ratios (Shared Plot)
                             "F1_ratio": results['F1_ratio']['y'][-1],
@@ -63,15 +61,22 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                             "F3": results['F3']['y'][-1],
 
                             # Spectral Slopes
-                            "slope_0_500": results['slope_0_500']['y'][-1],
-                            "slope_500_1500": results['slope_500_1500']['y'][-1],
+                            "slopes": results['slopes']['y'][-1],
+
+                            # IBWs
+                            "F1_IBW": results['F1_IBW']['y'][-1] if len(results['F1_IBW']['y']) > 0 else None,
+                            "F2_IBW": results['F2_IBW']['y'][-1] if len(results['F2_IBW']['y']) > 0 else None,
+                            "F3_IBW": results['F3_IBW']['y'][-1] if len(results['F3_IBW']['y']) > 0 else None,
+                            "F2_F1_IBW": results['F1_ratio']['y'][-1] if len(results['F1_ratio']['y']) > 0 else None,
+                            "F3_F1_IBW": results['F3_ratio']['y'][-1] if len(results['F3_ratio']['y']) > 0 else None,
                         }
                         self.new_data_point.emit(latest_point)
 
             except queue.Empty:
                 continue
-            except Exception as e:
-                print(f"Real-Time Worker Error: {e}")
+            # except Exception as e:
+            #     pass
+                # print(f"Real-Time Worker Error: {e}")
 
     def stop(self):
         self.is_running = False

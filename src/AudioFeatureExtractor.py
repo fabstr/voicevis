@@ -77,7 +77,7 @@ class AudioFeatureExtractor:
             start_time = time.perf_counter()
             df = self.smile.process_file(path)
             elapsed_time = time.perf_counter() - start_time
-            print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
+            # print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
 
             samples, sampling_rate, audio_length = load_pcm_from_wave(path)
             return self.extractFeatures(df, sampling_rate, audio_length, samples)
@@ -87,12 +87,12 @@ class AudioFeatureExtractor:
             start_time = time.perf_counter()
             pcm_data, sampling_rate = self.convertMp3ToPcm(path)
             elapsed_time = time.perf_counter() - start_time
-            print(f"MP3 convertion time: {elapsed_time:.4f} seconds.")
+            # print(f"MP3 convertion time: {elapsed_time:.4f} seconds.")
 
             start_time = time.perf_counter()
             df = self.smile.process_signal(pcm_data, sampling_rate)
             elapsed_time = time.perf_counter() - start_time
-            print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
+            # print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
 
             audio_length = len(pcm_data) / float(sampling_rate)
             return self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
@@ -114,7 +114,7 @@ class AudioFeatureExtractor:
         loudness_raw = df['Loudness_sma3'].to_numpy()
 
         # 2. Vectorized Filtering (Replaces the slow 'for' loop)
-        valid_mask = pitch > 27.5
+        valid_mask = (pitch > 27.5) & (f1 > 0)
         t_filtered = timepoints[valid_mask]
 
         # 3. Construct the result dictionary using filtered arrays
@@ -147,7 +147,7 @@ class AudioFeatureExtractor:
                 result["loudness"]["y"] = (l_arr - l_min) / (l_max - l_min)
 
             elapsed_time = time.perf_counter() - start_time
-            print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
+            # print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
 
             # compute IBW for the formant ratios
             window_size_samples = 50
@@ -195,7 +195,7 @@ class AudioFeatureExtractor:
             )
 
             elapsed_time_bw = time.perf_counter() - start_time_bw
-            print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
+            # print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
 
         else:
             # If the chunk is silent, keep arrays empty and avoid reduction crashes
