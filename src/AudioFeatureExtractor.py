@@ -113,8 +113,8 @@ class AudioFeatureExtractor:
         f1 = df['F1frequency_sma3nz'].to_numpy()
         f2 = df['F2frequency_sma3nz'].to_numpy()
         f3 = df['F3frequency_sma3nz'].to_numpy()
-        slope_0 = df['slope0-500_sma3'].to_numpy()
-        slope_500 = df['slope500-1500_sma3'].to_numpy()
+        slope_0_500 = df['slope0-500_sma3'].to_numpy()
+        slope_500_1500 = df['slope500-1500_sma3'].to_numpy()
         loudness_raw = df['Loudness_sma3'].to_numpy()
 
         # 2. Vectorized Filtering (Replaces the slow 'for' loop)
@@ -131,8 +131,8 @@ class AudioFeatureExtractor:
             "F1_ratio": {"x": t_filtered, "y": f2[valid_mask] / f1[valid_mask]},
             "F3_ratio": {"x": t_filtered, "y": f3[valid_mask] / f1[valid_mask]},
 
-            "slope_0_500": {"x": t_filtered, "y": slope_0[valid_mask]},
-            "slope_500_1500": {"x": t_filtered, "y": slope_500[valid_mask]},
+            "slope_0_500": {"x": t_filtered, "y": slope_0_500[valid_mask]},
+            "slope_500_1500": {"x": t_filtered, "y": slope_500_1500[valid_mask]},
 
             "loudness": {"x": t_filtered, "y": loudness_raw[valid_mask]},
 
@@ -153,6 +153,13 @@ class AudioFeatureExtractor:
             l_min, l_max = l_arr.min(), l_arr.max()
             if l_max != l_min:
                 result["loudness"]["y"] = (l_arr - l_min) / (l_max - l_min)
+
+
+            # adjust weight slopes
+            result["slope_0_500"]["y"] = result["slope_0_500"]["y"] + (0 - result["slope_0_500"]["y"].min())
+            result["slope_500_1500"]["y"] = result["slope_500_1500"]["y"] + (0 - result["slope_500_1500"]["y"].min())
+            result["slope_500_1500"]["y"] = np.negative(result["slope_500_1500"]["y"])
+
         else:
             # If the chunk is silent, keep arrays empty and avoid reduction crashes
             print("Silent/unvoiced frame skipped safely.")
