@@ -2,6 +2,7 @@ import queue
 import sys
 import tempfile
 import wave
+from symtable import Symbol
 
 import numpy as np
 from PyQt6 import QtWidgets, QtCore
@@ -186,7 +187,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.plots[plot_name]['plot'].setXLink(targetPlot)
 
             self.plots[plot_name]['plot'].scene().sigMouseClicked.connect(
-                lambda event: self.on_mouse_clicked(event, self.plots[plot_name]['plot'], plot_spec['title']))
+                lambda event, p_name=plot_name, p_title=plot_spec['title']:
+                self.on_mouse_clicked(event, self.plots[p_name]['plot'], p_title)
+            )
 
         layout.addSpacing(10)
 
@@ -720,14 +723,18 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         Called whenever the slider is moved.
         'value' will be an integer between 1 and 5.
         """
-        print(f"New slider value: {value}")
+
         for plot_name, plot in self.plots.items():
             # Loop through the visual items on the plot canvas
             for item in plot['plot'].getPlotItem().items:
 
                 # 1. Handle standard ScatterPlotItems
                 if isinstance(item, pg.ScatterPlotItem):
-                    item.setSize(value)
+                    if isinstance(item, AnnotationMarker):
+                        # Annotation markers should keep ther size
+                        pass
+                    else:
+                        item.setSize(value)
 
                 # 2. Handle PlotDataItems (The helper function items)
                 elif isinstance(item, pg.PlotDataItem):

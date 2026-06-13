@@ -6,7 +6,7 @@ class AnnotationMarker(pg.ScatterPlotItem):
         # Draw a yellow star at the exact coordinates
         super().__init__(
             x=[x], y=[y],
-            symbol='star', size=20, pen=pg.mkPen('k'), brush=pg.mkBrush('y')
+            symbol='star', size=20, pen=pg.mkPen('k'), brush=pg.mkBrush('w')
         )
         self.x_val = x
         self.y_val = y
