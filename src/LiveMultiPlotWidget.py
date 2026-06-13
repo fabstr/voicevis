@@ -36,10 +36,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             "F3": {"x": np.array([]), "y": np.array([])},
             "F1_ratio": {"x": np.array([]), "y": np.array([])},
             "F3_ratio": {"x": np.array([]), "y": np.array([])},  # Ensure naming matches 'curves' config
-            "slope_0_500": {"x": np.array([]), "y": np.array([])},
-            "slope_500_1500": {"x": np.array([]), "y": np.array([])},
             "loudness": {"x": np.array([]), "y": np.array([])},
-            "weight": {"x": np.array([]), "y": np.array([])},
+            "Weight": {"x": np.array([]), "y": np.array([])},
 
             "sample_rate": self.sampling_rate,
             "length_seconds": 0.0
@@ -396,6 +394,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             # 2. Clear old data and load the audio file using the found path
             self.clear_annotations()
             self.file_path = active_audio_path
+            self.file_loaded_signal.emit(self.file_path)
             self.selectAnalysisFile(active_audio_path)
 
             # 3. Parse annotations (skip headers: lines 0, 1, and 2)
@@ -460,10 +459,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 "F3": {"x": np.array([]), "y": np.array([])},
                 "F1_ratio": {"x": np.array([]), "y": np.array([])},
                 "F3_ratio": {"x": np.array([]), "y": np.array([])},  # Ensure naming matches 'curves' config
-                "slope_0_500": {"x": np.array([]), "y": np.array([])},
-                "slope_500_1500": {"x": np.array([]), "y": np.array([])},
                 "loudness": {"x": np.array([]), "y": np.array([])},
-                "weight": {"x": np.array([]), "y": np.array([])},
+                "Weight": {"x": np.array([]), "y": np.array([])},
 
                 "sample_rate": self.sampling_rate,
                 "length_seconds": 0.0

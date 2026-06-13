@@ -53,7 +53,7 @@ spec = {
         'stretch': 2,
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
-        'y_min': 0,
+        'y_min': 1,
         'y_max': 5,
         'curves': {
             'f1_ratio': {
@@ -77,7 +77,7 @@ spec = {
         'stretch': 2,
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
-        'y_min': 0,
+        'y_min': 1,
         'y_max': 9,
         'curves': {
             'f3_ratio': {
@@ -146,31 +146,21 @@ spec = {
         },
         'linkX': 'Loudness'
     },
-    'Weight': {
+    "Weight": {
         'title': 'Weight',
         'stretch': 2,
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
-        'y_min': -0.1,
-        'y_max': 0.3,
+        'y_min': 0,
+        'y_max': 4.0e-7,
         'curves': {
-            'weight_curve_0_500': {
+            'slopes': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
                 'colour': weight,
-                'analysisResult': 'slope_0_500'
-            },
-            'weight_curve_500_1500': {
-                'symbol': 'o',
-                'symbolSize': plotPointDefaultSize,
-                'colour': weight2,
-                'analysisResult': 'slope_500_1500'
+                'analysisResult': 'slopes'
             }
         },
         'linkX': 'Loudness',
-        'bottomLabel': {
-            'label': 'Time',
-            'units': 's'
-        }
     }
 }

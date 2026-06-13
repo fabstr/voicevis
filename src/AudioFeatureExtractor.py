@@ -6,6 +6,7 @@ import numpy as np
 import wave
 import contextlib
 
+from scipy.signal import stft
 
 from PlotsSpec import outliers_m
 
@@ -48,7 +49,7 @@ class AudioFeatureExtractor:
     def analyzePCM(self, pcm_data, sampling_rate):
         df = self.smile.process_signal(pcm_data, sampling_rate)
         audio_length = len(pcm_data) / float(sampling_rate)
-        return self.extractFeatures(df, sampling_rate, audio_length)
+        return self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
 
     def convertMp3ToPcm(self, mp3_path):
         # 1. Decode MP3 to raw PCM using miniaudio
@@ -78,11 +79,8 @@ class AudioFeatureExtractor:
             elapsed_time = time.perf_counter() - start_time
             print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
 
-            with contextlib.closing(wave.open(path, 'r')) as f:
-                frames = f.getnframes()
-                sampling_rate = f.getframerate()
-                audio_length = frames / float(sampling_rate)
-                return self.extractFeatures(df, sampling_rate, audio_length)
+            samples, sampling_rate, audio_length = load_pcm_from_wave(path)
+            return self.extractFeatures(df, sampling_rate, audio_length, samples)
 
         elif (path.endswith('.mp3')):
 
@@ -97,9 +95,9 @@ class AudioFeatureExtractor:
             print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
 
             audio_length = len(pcm_data) / float(sampling_rate)
-            return self.extractFeatures(df, sampling_rate, audio_length)
+            return self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
 
-    def extractFeatures(self, df, sampling_rate, audio_length):
+    def extractFeatures(self, df, sampling_rate, audio_length, pcm_data):
         start_time = time.perf_counter()
 
         # 1. Vectorized calculations directly on the DataFrame
@@ -113,8 +111,6 @@ class AudioFeatureExtractor:
         f1 = df['F1frequency_sma3nz'].to_numpy()
         f2 = df['F2frequency_sma3nz'].to_numpy()
         f3 = df['F3frequency_sma3nz'].to_numpy()
-        slope_0_500 = df['slope0-500_sma3'].to_numpy()
-        slope_500_1500 = df['slope500-1500_sma3'].to_numpy()
         loudness_raw = df['Loudness_sma3'].to_numpy()
 
         # 2. Vectorized Filtering (Replaces the slow 'for' loop)
@@ -131,14 +127,14 @@ class AudioFeatureExtractor:
             "F1_ratio": {"x": t_filtered, "y": f2[valid_mask] / f1[valid_mask]},
             "F3_ratio": {"x": t_filtered, "y": f3[valid_mask] / f1[valid_mask]},
 
-            "slope_0_500": {"x": t_filtered, "y": slope_0_500[valid_mask]},
-            "slope_500_1500": {"x": t_filtered, "y": slope_500_1500[valid_mask]},
-
             "loudness": {"x": t_filtered, "y": loudness_raw[valid_mask]},
 
             "sample_rate": sampling_rate,
             "length_seconds": audio_length
         }
+
+        t_slopes, slopes = calculate_spectral_slope(pcm_data, sampling_rate, nperseg=2048, noverlap=1024)
+        result['slopes'] = {"x": t_slopes, "y": slopes}
 
         if len(t_filtered) > 0:
             # 4. Handle Outliers
@@ -149,12 +145,6 @@ class AudioFeatureExtractor:
             l_min, l_max = l_arr.min(), l_arr.max()
             if l_max != l_min:
                 result["loudness"]["y"] = (l_arr - l_min) / (l_max - l_min)
-
-
-            # adjust weight slopes
-            result["slope_0_500"]["y"] = result["slope_0_500"]["y"] + (0 - result["slope_0_500"]["y"].min())
-            result["slope_500_1500"]["y"] = result["slope_500_1500"]["y"] + (0 - result["slope_500_1500"]["y"].min())
-            result["slope_500_1500"]["y"] = np.negative(result["slope_500_1500"]["y"])
 
             elapsed_time = time.perf_counter() - start_time
             print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
@@ -281,3 +271,104 @@ def reject_outliers(pair, m=outliers_m):
             filteredX.append(pair["x"][i])
             filteredY.append(pair["y"][i])
     return {"x": filteredX, "y": filteredY}
+
+
+def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512, silence_threshold_db=-30):
+    """
+    Calculates the spectral slope of an audio signal over time, filtering out silent frames.
+    """
+    # 1. Compute the Short-Time Fourier Transform
+    f, t, Zxx = stft(audio_data, fs=sample_rate, nperseg=nperseg, noverlap=noverlap)
+
+    # Use the magnitude spectrum
+    mag_spectrum = np.abs(Zxx)
+
+    # 2. Filter out silence based on frame energy
+    # Calculate the power of each frame (sum of squared magnitudes)
+    frame_power = np.sum(mag_spectrum ** 2, axis=0)
+
+    # Avoid log of zero issues by applying a tiny floor value
+    frame_power = np.maximum(frame_power, 1e-20)
+
+    # Convert power to decibels (dB)
+    frame_power_db = 10 * np.log10(frame_power)
+
+    # Determine the absolute threshold relative to the loudest frame
+    max_power_db = np.max(frame_power_db)
+    threshold = max_power_db + silence_threshold_db
+
+    # Create a boolean mask of frames that are above the silence threshold
+    active_frames = frame_power_db > threshold
+
+    # Apply the mask to filter out silent frames from the time array and magnitude spectrum
+    t = t[active_frames]
+    mag_spectrum = mag_spectrum[:, active_frames]
+
+    # Guard clause: if the entire audio is silent, return empty arrays
+    if mag_spectrum.shape[1] == 0:
+        return np.array([]), np.array([])
+
+    # 3. Calculate the spectral slope for each frame using vectorized linear regression
+    # f shape: (F,)
+    # mag_spectrum shape: (F, T) where F is freq bins, T is remaining active time frames
+
+    f_mean = np.mean(f)
+    mag_mean = np.mean(mag_spectrum, axis=0)  # Mean across frequencies for each frame
+
+    # Calculate covariance and variance
+    f_diff = f - f_mean  # shape: (F,)
+    mag_diff = mag_spectrum - mag_mean  # shape: (F, T)
+
+    # Numerator: Sum of (x - x_mean) * (y - y_mean)
+    # Denominator: Sum of (x - x_mean)^2
+    numerator = np.sum(f_diff[:, None] * mag_diff, axis=0)
+    denominator = np.sum(f_diff ** 2)
+
+    # Slope (m) = Numerator / Denominator
+    slopes = numerator / denominator
+    slopes = np.negative(slopes)
+
+    return t, slopes
+
+
+def load_pcm_from_wave(file_path):
+    with wave.open(file_path, 'rb') as wav_file:
+        # 1. Extract audio metadata
+        n_channels = wav_file.getnchannels()
+        samp_width = wav_file.getsampwidth()
+        frame_rate = wav_file.getframerate()
+        n_frames = wav_file.getnframes()
+
+        # Guard rail: Ensure it's mono as per your application setup
+        if n_channels != 1:
+            raise ValueError(f"Expected mono audio, but found {n_channels} channels.")
+
+        # 2. Read the raw byte data from the file
+        raw_bytes = wav_file.readframes(n_frames)
+
+        # 3. Determine the correct NumPy data type based on sample width
+        if samp_width == 1:
+            dtype = np.uint8  # 8-bit WAV is typically unsigned
+        elif samp_width == 2:
+            dtype = np.int16  # 16-bit WAV is signed integer (most common)
+        elif samp_width == 4:
+            dtype = np.int32  # 32-bit WAV is signed integer
+        else:
+            raise ValueError(f"Unsupported sample width: {samp_width} bytes")
+
+        # 4. Convert the buffer to a NumPy array
+        audio_samples = np.frombuffer(raw_bytes, dtype=dtype)
+
+        # 5. Optional: Normalize to floating point (-1.0 to 1.0)
+        # This is highly recommended for spectral analysis / STFT
+        if samp_width == 1:
+            # Convert unsigned 8-bit (0 to 255) to (-1.0 to 1.0)
+            audio_samples = (audio_samples.astype(np.float32) - 128) / 128.0
+        else:
+            # Convert signed 16-bit or 32-bit to (-1.0 to 1.0)
+            max_val = float(np.iinfo(dtype).max)
+            audio_samples = audio_samples.astype(np.float32) / max_val
+
+        audio_length = n_frames / float(frame_rate)
+
+        return audio_samples, frame_rate, audio_length
