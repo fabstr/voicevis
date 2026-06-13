@@ -268,7 +268,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                 self.plots[plot_name]['curves'][curveName]['analysisResult'] = curveSpec['analysisResult']
 
+
+
             self.plots[plot_name]['plot'].addItem(self.plots[plot_name]['playhead'])
+
+            if 'y_min' in plot_spec and 'y_max' in plot_spec:
+                self.plots[plot_name]['plot'].setYRange(plot_spec['y_min'], plot_spec['y_max'], padding=0)
 
             if plot_spec['linkX'] is not None:
                 targetPlot = self.plots[plot_spec['linkX']]['plot']
@@ -421,6 +426,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.is_recording = not self.is_recording
 
         if self.is_recording:
+            self.record_start()
+        else:
+            self.record_stop()
+
+    def record_start(self):
             # --- UI Updates ---
             self.record_stop_btn.setIcon(self.stop_icon)
             self.record_stop_btn.setToolTip("Stop Recording")  # Use tooltip instead of text
@@ -464,9 +474,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             print("Real-time recording started...")
 
-
-
-        else:
+    def record_stop(self):
             # --- UI Updates ---
             self.record_stop_btn.setIcon(self.record_icon)
             self.record_stop_btn.setToolTip("Record")  # Use tooltip instead of text
@@ -499,6 +507,27 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             self.current_playback_time = 0
             self.update_playhead()
+
+            # Perform analysis
+            # 1. Setup and show the loading dialog
+            self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio file...", None, 0, 0, self)
+            self.loading_dialog.setWindowTitle("Please Wait")
+            self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+            self.loading_dialog.setMinimumDuration(0)  # Ensure it shows immediately
+            self.loading_dialog.show()
+
+            # 2. Setup the worker thread
+            self.worker = AnalysisWorker(self.audioFeatureExtractor, self.file_path)
+
+            # Connect signals to slots
+            self.worker.result_ready.connect(self.on_analysis_finished)
+            self.worker.error_occurred.connect(self.on_analysis_error)
+            self.worker.finished.connect(self.loading_dialog.close)
+
+            # 3. Start the background thread
+            self.worker.start()
+
+
 
     def read_audio_chunk(self):
         """Safely slices new audio bytes directly from RAM without touching the buffer cursor."""
@@ -844,9 +873,28 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         item.scatter.setSize(value)
 
     def handle_reset_zoom(self):
-        """Resets the auto-range scaling for all registered PyQtGraph items."""
+        """Resets the zoom, applying fixed min/max spec boundaries where defined,
+
+        and falling back to autoRange elsewhere.
+        """
         for plot_name, plot_data in self.plots.items():
-            plot_data['plot'].autoRange()
+            plot_item = plot_data['plot']
+            plot_spec = spec.get(plot_name, {})
+
+            y_min = plot_spec.get('y_min')
+            y_max = plot_spec.get('y_max')
+
+            # Safely check if limits are explicitly provided (even if they are 0)
+            if y_min is not None and y_max is not None:
+                # Explicitly lock the Y-axis to your specs
+                plot_item.setYRange(y_min, y_max, padding=0)
+
+                # If X-axis should still auto-fit data while Y is locked:
+                plot_item.enableAutoRange(axis=pg.ViewBox.XAxis)
+            else:
+                # Fallback to pure auto-scaling for both axes if no specs exist
+                plot_item.autoRange()
+
 
     def handle_toggle_ratio(self, checked: bool):
         """Shows or hides Formant Ratio curves based on menu checkbox state."""

@@ -143,10 +143,6 @@ class AudioFeatureExtractor:
         if len(t_filtered) > 0:
             # 4. Handle Outliers
             result["pitch"] = reject_outliers(result["pitch"])
-            # result["F1_ratio"] = reject_outliers(result["F1_ratio"])
-            # result["F3_ratio"] = reject_outliers(result["F3_ratio"])
-
-            result["F3_ratio"]["y"] = np.negative(result["F3_ratio"]["y"])
 
             # 5. Vectorized Min-Max Normalization for Loudness
             l_arr = result["loudness"]["y"]
@@ -179,6 +175,30 @@ class AudioFeatureExtractor:
             result["F3_F1_IBW"] = calculate_bw_and_cf(
                 result["F3_ratio"]["x"],
                 result["F3_ratio"]["y"],
+                result["loudness"]["y"],
+                window_size=window_size_samples,
+                step_size=step_size_samples,
+            )
+
+            result["F1_IBW"] = calculate_bw_and_cf(
+                result["F1"]["x"],
+                result["F1"]["y"],
+                result["loudness"]["y"],
+                window_size=window_size_samples,
+                step_size=step_size_samples,
+            )
+
+            result["F2_IBW"] = calculate_bw_and_cf(
+                result["F2"]["x"],
+                result["F2"]["y"],
+                result["loudness"]["y"],
+                window_size=window_size_samples,
+                step_size=step_size_samples,
+            )
+
+            result["F3_IBW"] = calculate_bw_and_cf(
+                result["F3"]["x"],
+                result["F3"]["y"],
                 result["loudness"]["y"],
                 window_size=window_size_samples,
                 step_size=step_size_samples,

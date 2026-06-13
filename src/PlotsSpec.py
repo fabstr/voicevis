@@ -7,9 +7,9 @@ loudness      = (0, 255, 255)
 pitch         = (255, 0, 255)
 ratio_f2_f1   = "#37ff144b"
 ratio_f3_f1   = "#ffd9007c"
-f1            = (0, 191, 255)
-f2            = (255, 127, 80)
-f3            = (186, 85, 211)
+f1            = "#00bfff6e"
+f2            = "#ff7f5073"
+f3            = "#ba55d377"
 weight        = (220, 20, 60)
 weight2       = (220, 20, 60)
 
@@ -19,6 +19,8 @@ spec = {
         'stretch': 1,
         'mouse_enabled_x': True,
         'mouse_enabled_y': False,
+        'y_min': 0,
+        'y_max': 1,
         'curves': {
             'pitch': {
                 'symbol': 'o',
@@ -34,6 +36,8 @@ spec = {
         'stretch': 1,
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
+        'y_min': 0,
+        'y_max': 300,
         'curves': {
             'pitch': {
                 'symbol': 'o',
@@ -44,11 +48,13 @@ spec = {
         },
         'linkX': 'Loudness'
     },
-    'Formant ratios': {
-        'title': 'Formant ratios',
+    'F2_F1_ratio': {
+        'title': 'Formant ratio F2/F1',
         'stretch': 2,
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
+        'y_min': 0,
+        'y_max': 5,
         'curves': {
             'f1_ratio': {
                 'symbol': 'o',
@@ -63,6 +69,17 @@ spec = {
                 'analysisResult': 'F2_F1_IBW',
                 'BW': True
             },
+        },
+        'linkX': 'Loudness'
+    },
+    'F3_F1_ratio': {
+        'title': 'Formant ratio F3/F1',
+        'stretch': 2,
+        'mouse_enabled_x': True,
+        'mouse_enabled_y': True,
+        'y_min': 0,
+        'y_max': 9,
+        'curves': {
             'f3_ratio': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
@@ -84,24 +101,47 @@ spec = {
         'stretch': 2,
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
+        'y_min': 0,
+        'y_max': 3500,
         'curves': {
             'F1': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
-                'colour': f1,
+                'colour': '#FFFFFF',
                 'analysisResult': 'F1'
             },
             'F2': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
-                'colour': f2,
+                'colour': '#FFFFFF',
                 'analysisResult': 'F2'
             },
             'F3': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
-                'colour': f3,
+                'colour': '#FFFFFF',
                 'analysisResult': 'F3'
+            },
+            'F1_IBW': {
+                'symbol': 'o',
+                'symbolSize': plotPointDefaultSize,
+                'colour': f1,
+                'analysisResult': 'F1_IBW',
+                'BW': True
+            },
+            'F2_IBW': {
+                'symbol': 'o',
+                'symbolSize': plotPointDefaultSize,
+                'colour': f2,
+                'analysisResult': 'F2_IBW',
+                'BW': True
+            },
+            'F3_IBW': {
+                'symbol': 'o',
+                'symbolSize': plotPointDefaultSize,
+                'colour': f3,
+                'analysisResult': 'F3_IBW',
+                'BW': True
             }
         },
         'linkX': 'Loudness'
@@ -111,6 +151,8 @@ spec = {
         'stretch': 2,
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
+        'y_min': -0.1,
+        'y_max': 0.3,
         'curves': {
             'weight_curve_0_500': {
                 'symbol': 'o',
