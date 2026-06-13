@@ -1,19 +1,16 @@
 import queue
 import sys
-import tempfile
-import wave
-from symtable import Symbol
+import time
+import os
 
-import numpy as np
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
 from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import pyqtgraph as pg
-import time
-import miniaudio
-import os
 import qtawesome as qta
-from pyqtgraph import mkBrush
+
+import numpy as np
+import miniaudio
 
 from AnalysisWorker import AnalysisWorker
 from PlotsSpec import spec, plotPointDefaultSize
@@ -65,7 +62,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.setup_GUI()
         self.setup_audio()
 
-
     def setup_audio(self):
         # 1. Define the audio format (Standard CD quality PCM)
         self.audio_format = QAudioFormat()
@@ -89,14 +85,19 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.poll_timer.setInterval(33)  # Grab audio every 100ms
         self.poll_timer.timeout.connect(self.read_audio_chunk)
 
-
     def setup_GUI(self):
         self.setAcceptDrops(True)
-        layout = QtWidgets.QVBoxLayout(self)
+        self.layout = QtWidgets.QVBoxLayout(self)
 
-        # --------------------------------------------------
-        # 0. MENU BAR SECTION
-        # --------------------------------------------------
+        self.setupMenu()
+        self.setupControlButtons()
+        self.setupPlots()
+
+        self.timer = QtCore.QTimer()
+        self.timer.setInterval(30)
+        self.timer.timeout.connect(self.update_plots)
+
+    def setupMenu(self):
         self.menu_bar = QtWidgets.QMenuBar(self)
 
         # --- File Menu ---
@@ -137,11 +138,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.toggle_weight_action.triggered.connect(self.handle_toggle_weights)
 
         # Crucial: Add the menu bar right at the top of the layout
-        layout.setMenuBar(self.menu_bar)
+        self.layout.setMenuBar(self.menu_bar)
 
-        # --------------------------------------------------
-        # 1. CONTROL BUTTONS SECTION
-        # --------------------------------------------------
+    def setupControlButtons(self):
         top_buttons_layout = QtWidgets.QHBoxLayout()
 
         # Pre-load QtAwesome icons
@@ -202,17 +201,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         top_buttons_layout.addStretch()
 
         top_buttons_layout.addStretch()
-        layout.addLayout(top_buttons_layout)
+        self.layout.addLayout(top_buttons_layout)
 
-        # --------------------------------------------------
-        # 2. GRAPHS SECTION
-        # --------------------------------------------------
-
-
+    def setupPlots(self):
         for plot_name, plot_spec in spec.items():
             plot = pg.PlotWidget(title=plot_spec['title'])
             plot.showGrid(x=True, y=True, alpha=0.3)
-            layout.addWidget(plot, stretch=plot_spec['stretch'])
+            self.layout.addWidget(plot, stretch=plot_spec['stretch'])
 
             mouseX = True
             if plot_spec['mouse_enabled_x'] is not None:
@@ -284,13 +279,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.on_mouse_clicked(event, self.plots[p_name]['plot'], p_title)
             )
 
-        self.timer = QtCore.QTimer()
-        self.timer.setInterval(30)
-        self.timer.timeout.connect(self.update_plots)
-
-
-    # --- File Handling Methods ---
-
     def browse_file(self):
         file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
@@ -336,8 +324,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def on_analysis_error(self, error_msg):
         """Called automatically if the worker thread encounters an error."""
         QtWidgets.QMessageBox.critical(self, "Analysis Error", f"An error occurred during analysis:\n{error_msg}")
-
-    # --- Drag & Drop Methods ---
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -427,7 +413,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
                                            f"An error occurred while loading annotations:\n{str(e)}")
-    # --- UI Control Methods ---
 
     def handle_record_stop(self):
         if self.is_playing:
@@ -566,7 +551,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         # Fallback if initialized as standard python lists
                         data_container['x'].append(current_time)
                         data_container['y'].append(new_y_val)
-
 
     def handle_playback(self):
         if self.is_recording:
@@ -723,7 +707,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         dialog.exec()
 
-
     def seek_and_play(self):
         # Prevent seeking to negative times if the user clicks out of bounds
         target_time = max(0.0, self.current_playback_time)
@@ -785,7 +768,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         self.update_playhead()
 
-
     def update_playhead(self):
         if self.is_playing:
             self.current_playback_time = time.time() - self.playback_start_time if self.is_playing else 0
@@ -832,7 +814,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{str(e)}")
-
 
     def handle_symbol_size_change(self, value):
         """
