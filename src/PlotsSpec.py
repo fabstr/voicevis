@@ -5,8 +5,8 @@ outliers_m = 5.
 # Colours
 loudness      = (0, 255, 255)
 pitch         = (255, 0, 255)
-ratio_f2_f1   = (57, 255, 20)
-ratio_f3_f1   = (255, 215, 0)
+ratio_f2_f1   = "#37ff144b"
+ratio_f3_f1   = "#ffd9007c"
 f1            = (0, 191, 255)
 f2            = (255, 127, 80)
 f3            = (186, 85, 211)
@@ -112,13 +112,13 @@ spec = {
         'mouse_enabled_x': True,
         'mouse_enabled_y': True,
         'curves': {
-            'curve_0_500': {
+            'weight_curve_0_500': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
                 'colour': weight,
                 'analysisResult': 'slope_0_500'
             },
-            'curve_500_1500': {
+            'weight_curve_500_1500': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
                 'colour': weight2,

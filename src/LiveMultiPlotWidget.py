@@ -94,6 +94,51 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
 
         # --------------------------------------------------
+        # 0. MENU BAR SECTION
+        # --------------------------------------------------
+        self.menu_bar = QtWidgets.QMenuBar(self)
+
+        # --- File Menu ---
+        file_menu = self.menu_bar.addMenu("&File")
+
+        open_action = file_menu.addAction("&Open")
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(self.browse_file)  # Maps to your existing browse_file method
+
+        save_action = file_menu.addAction("&Save")
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self.save_annotations)  # Maps to your existing save method
+
+        close_action = file_menu.addAction("&Close")
+        close_action.setShortcut("Ctrl+W")
+        close_action.triggered.connect(self.close)  # Built-in QWidget close handler
+
+        # --- View Menu ---
+        view_menu = self.menu_bar.addMenu("&View")
+
+        reset_zoom_action = view_menu.addAction("&Reset zoom")
+        reset_zoom_action.triggered.connect(self.handle_reset_zoom)
+
+        # Checkable items for showing/hiding elements
+        self.toggle_ratio_action = view_menu.addAction("Show formant ratio pixels")
+        self.toggle_ratio_action.setCheckable(True)
+        self.toggle_ratio_action.setChecked(True)  # Set default state
+        self.toggle_ratio_action.triggered.connect(self.handle_toggle_ratio)
+
+        self.toggle_formant_action = view_menu.addAction("Show Formant pixels")
+        self.toggle_formant_action.setCheckable(True)
+        self.toggle_formant_action.setChecked(True)
+        self.toggle_formant_action.triggered.connect(self.handle_toggle_formants)
+
+        self.toggle_weight_action = view_menu.addAction("Show Weight pixels")
+        self.toggle_weight_action.setCheckable(True)
+        self.toggle_weight_action.setChecked(True)
+        self.toggle_weight_action.triggered.connect(self.handle_toggle_weights)
+
+        # Crucial: Add the menu bar right at the top of the layout
+        layout.setMenuBar(self.menu_bar)
+
+        # --------------------------------------------------
         # 1. CONTROL BUTTONS SECTION
         # --------------------------------------------------
         top_buttons_layout = QtWidgets.QHBoxLayout()
@@ -203,7 +248,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     fill_item = pg.FillBetweenItem(
                         min_curve,
                         max_curve,
-                        brush=pg.mkBrush("#006E8A")
+                        brush=pg.mkBrush(curveSpec['colour'])
                     )
                     self.plots[plot_name]['curves'][curveName]['fill_band'] = fill_item
 
@@ -838,6 +883,36 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     # STEP B: Apply it immediately to the active rendering object
                     if item.scatter is not None:
                         item.scatter.setSize(value)
+
+    def handle_reset_zoom(self):
+        """Resets the auto-range scaling for all registered PyQtGraph items."""
+        for plot_name, plot_data in self.plots.items():
+            plot_data['plot'].autoRange()
+
+    def handle_toggle_ratio(self, checked: bool):
+        """Shows or hides Formant Ratio curves based on menu checkbox state."""
+        # Example implementation targeting your curve configs:
+        for plot_name, plot_data in self.plots.items():
+            for curve_name, curve_obj in plot_data['curves'].items():
+                if "ratio" in curve_name.lower():
+                    if 'curve' in curve_obj:
+                        curve_obj['curve'].setVisible(checked)
+
+    def handle_toggle_formants(self, checked: bool):
+        """Shows or hides primary Formant curves (F1, F2, F3)."""
+        for plot_name, plot_data in self.plots.items():
+            for curve_name, curve_obj in plot_data['curves'].items():
+                if curve_name in ["F1", "F2", "F3"]:
+                    if 'curve' in curve_obj:
+                        curve_obj['curve'].setVisible(checked)
+
+    def handle_toggle_weights(self, checked: bool):
+        """Shows or hides Weight curves or fill regions."""
+        for plot_name, plot_data in self.plots.items():
+            for curve_name, curve_obj in plot_data['curves'].items():
+                if "weight" in curve_name.lower():
+                    if 'curve' in curve_obj:
+                        curve_obj['curve'].setVisible(checked)
 
 
 if __name__ == '__main__':
