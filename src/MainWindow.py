@@ -1,9 +1,19 @@
 import sys
-
+import os
 from PyQt6 import QtWidgets, QtCore
 import qtawesome as qta
 
 from LiveMultiPlotWidget import LiveMultiPlotWidget
+
+
+# --- NEW: Subclass to catch the close event properly ---
+class SessionDockWidget(QtWidgets.QDockWidget):
+    closed = QtCore.pyqtSignal(object)
+
+    def closeEvent(self, event):
+        # Emit our custom signal before proceeding with the standard close
+        self.closed.emit(self)
+        super().closeEvent(event)
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -12,82 +22,122 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("VoiceVis")
         self.resize(800, 900)
 
-        # Create the Tab Widget
-        self.tabs = QtWidgets.QTabWidget()
-        self.tabs.setTabsClosable(True)
-        self.tabs.tabCloseRequested.connect(self.close_tab)
-        self.setCentralWidget(self.tabs)
+        # --- DOCK WIDGET SETUP ---
+        # Allow docks to be tabbed together and animate their snapping
+        self.setDockOptions(
+            QtWidgets.QMainWindow.DockOption.AllowTabbedDocks |
+            QtWidgets.QMainWindow.DockOption.AnimatedDocks
+        )
+        # Force the dock tabs to appear at the top (imitating a QTabWidget)
+        self.setTabPosition(QtCore.Qt.DockWidgetArea.AllDockWidgetAreas,
+                            QtWidgets.QTabWidget.TabPosition.North)
 
-        # Add the "+" button to the corner for new sessions using QtAwesome
-        self.add_tab_btn = QtWidgets.QPushButton()
+        # Hide the central widget entirely. This allows our dock widgets
+        # to consume the entire window area without borders.
+        dummy_central = QtWidgets.QWidget()
+        self.setCentralWidget(dummy_central)
+        dummy_central.hide()
+
+        self.dock_widgets = []
+
+        # --- TOOLBAR & ADD BUTTON ---
+        # Because we aren't using QTabWidget, we place the "+" button in a toolbar.
+        self.toolbar = QtWidgets.QToolBar("Session Controls")
+        self.toolbar.setMovable(False)
+        self.addToolBar(QtCore.Qt.ToolBarArea.TopToolBarArea, self.toolbar)
+
+        self.add_tab_btn = QtWidgets.QPushButton(" New Session")
         self.add_tab_btn.setIcon(qta.icon('fa5s.plus'))
-
-        # Slightly smaller size fits the tab bar better
-        self.add_tab_btn.setFixedSize(28, 28)
         self.add_tab_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
 
-        # --- NEW STYLING ---
-        # Remove the blocky background, add padding, and give it a modern hover effect
-        # --- ADJUSTED STYLING ---
+        # Styling adjusted: negative margins removed as they are no longer
+        # needed for corner-widget fitting.
         self.add_tab_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: transparent;
-                        border: none;
-                        /* Pull the button UP by using a negative top margin */
-                        margin-top: 8px; 
-                        /* Ensure it doesn't clip the bottom by adding bottom margin */
-                        margin-bottom: 8px; 
-                        margin-right: 6px; 
-                        
-                        padding: 4px;
-                    }
-                    QPushButton:hover {
-                        background-color: rgba(128, 128, 128, 0.2);
-                        border-radius: 4px;
-                    }
-                    QPushButton:pressed {
-                        background-color: rgba(128, 128, 128, 0.4);
-                    }
-                """)
-
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                padding: 6px;
+                margin: 2px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(128, 128, 128, 0.2);
+                border-radius: 4px;
+            }
+            QPushButton:pressed {
+                background-color: rgba(128, 128, 128, 0.4);
+            }
+        """)
         self.add_tab_btn.clicked.connect(self.add_new_session)
-        self.tabs.setCornerWidget(self.add_tab_btn, QtCore.Qt.Corner.TopRightCorner)
+        self.toolbar.addWidget(self.add_tab_btn)
 
-        # Start with one default tab
+        # Start with one default session
         self.add_new_session()
 
     def add_new_session(self):
         new_session = LiveMultiPlotWidget()
-        tab_name = f"Session {self.tabs.count() + 1}"
+        session_num = len(self.dock_widgets) + 1
+        tab_name = f"Session {session_num}"
 
-        # Add an icon to the tab itself
-        tab_icon = qta.icon('fa5s.file-audio')
-        index = self.tabs.addTab(new_session, tab_icon, tab_name)
-        self.tabs.setCurrentIndex(index)
+        # Create our custom dock widget
+        dock = SessionDockWidget(tab_name, self)
+        dock.setWidget(new_session)
 
-        # Optional: Rename tab when a file is loaded
-        new_session.file_path_display.textChanged.connect(
-            lambda text, idx=index: self.update_tab_name(idx, text)
+        # Adding the window icon here automatically places it in the Tab
+        dock.setWindowIcon(qta.icon('fa5s.file-audio'))
+
+        # Allow it to be closed, moved, and floated (torn off)
+        dock.setFeatures(
+            QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetClosable |
+            QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetMovable |
+            QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetFloatable
         )
 
-    def update_tab_name(self, index, text):
-        if text and text != "Select or drag & drop a file to analyze...":
-            import os
-            filename = os.path.basename(text)
-            self.tabs.setTabText(index, filename)
+        # Connect the close signal for cleanup
+        dock.closed.connect(self.close_dock)
 
-    def close_tab(self, index):
-        widget = self.tabs.widget(index)
+        # Docking Logic:
+        # If it's the first dock, drop it into the main area.
+        # Otherwise, stack it behind the most recently added dock (creating a tab).
+        if not self.dock_widgets:
+            self.addDockWidget(QtCore.Qt.DockWidgetArea.TopDockWidgetArea, dock)
+        else:
+            self.tabifyDockWidget(self.dock_widgets[-1], dock)
+
+        self.dock_widgets.append(dock)
+
+        # Bring the new tab to the front
+        dock.raise_()
+
+        # Rename dock when a file is loaded
+        new_session.file_path_display.textChanged.connect(
+            lambda text, d=dock: self.update_dock_name(d, text)
+        )
+
+    def update_dock_name(self, dock, text):
+        if text and text != "Select or drag & drop a file to analyze...":
+            filename = os.path.basename(text)
+            dock.setWindowTitle(filename)
+
+    def close_dock(self, dock):
+        # Extract the LiveMultiPlotWidget from the dock
+        widget = dock.widget()
         if widget:
-            if widget.is_playing:
+            # Using hasattr() acts as a safety net in case the widget isn't fully initialized
+            if hasattr(widget, 'is_playing') and widget.is_playing:
                 widget.stop_playback()
-            if widget.is_recording:
+            if hasattr(widget, 'is_recording') and widget.is_recording:
                 widget.handle_record_stop()
             widget.deleteLater()
-        self.tabs.removeTab(index)
+
+        # Remove from our tracking list and memory
+        if dock in self.dock_widgets:
+            self.dock_widgets.remove(dock)
+        dock.deleteLater()
+
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    w = MainWindow()  # Changed from LiveMultiPlotWidget()
+    w = MainWindow()
     w.show()
     sys.exit(app.exec())
