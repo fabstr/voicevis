@@ -722,25 +722,22 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         """
         print(f"New slider value: {value}")
         for plot_name, plot in self.plots.items():
-            # Keep your data validation step exactly as it is
-            for curve_name, curve in plot['curves'].items():
-                data = self.analysis_results[curve['analysisResult']]
-                if "x" not in data or "y" not in data:
-                    print([plot_name, curve_name])
-
-            # Update the visual sizes cleanly without touching the data
+            # Loop through the visual items on the plot canvas
             for item in plot['plot'].getPlotItem().items:
 
-                # If you added data using pg.ScatterPlotItem()
+                # 1. Handle standard ScatterPlotItems
                 if isinstance(item, pg.ScatterPlotItem):
                     item.setSize(value)
 
-                # If you used the plot() helper function (PlotDataItem)
+                # 2. Handle PlotDataItems (The helper function items)
                 elif isinstance(item, pg.PlotDataItem):
-                    # Access the internal scatter plot object directly!
+                    # STEP A: Update the internal options dictionary so
+                    # pyqtgraph remembers this size during clicks/pans/zooms
+                    item.opts['symbolSize'] = value
+
+                    # STEP B: Apply it immediately to the active rendering object
                     if item.scatter is not None:
                         item.scatter.setSize(value)
-
 
 
 if __name__ == '__main__':
