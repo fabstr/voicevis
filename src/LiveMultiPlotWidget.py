@@ -15,7 +15,7 @@ import qtawesome as qta
 from pyqtgraph import mkBrush
 
 from AnalysisWorker import AnalysisWorker
-from PlotsSpec import spec
+from PlotsSpec import spec, plotPointDefaultSize
 from utils import save_to_file, load_from_file, save_to_temp_wav
 from AnnotationMarker import AnnotationMarker
 from AudioFeatureExtractor import AudioFeatureExtractor
@@ -117,6 +117,28 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         top_buttons_layout.addWidget(self.record_stop_btn)
         top_buttons_layout.addWidget(self.playback_btn)
         top_buttons_layout.addWidget(self.save_btn)
+
+        ################ Plot item size slider
+        # Label for the slider
+        self.size_label = QtWidgets.QLabel("Point Size:")
+        top_buttons_layout.addWidget(self.size_label)
+
+        # The Slider
+        self.size_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.size_slider.setMinimum(1)
+        self.size_slider.setMaximum(5)
+        self.size_slider.setValue(plotPointDefaultSize)  # Default initial size
+        self.size_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
+        self.size_slider.setTickInterval(1)
+        self.size_slider.setFixedWidth(120)  # Keeps it looking clean
+
+        # Connect to the callback function
+        self.size_slider.valueChanged.connect(self.handle_symbol_size_change)
+        top_buttons_layout.addWidget(self.size_slider)
+
+        # Push everything to the left side of the window
+        top_buttons_layout.addStretch()
+
         top_buttons_layout.addStretch()
         layout.addLayout(top_buttons_layout)
 
@@ -691,6 +713,34 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{str(e)}")
+
+
+    def handle_symbol_size_change(self, value):
+        """
+        Called whenever the slider is moved.
+        'value' will be an integer between 1 and 5.
+        """
+        print(f"New slider value: {value}")
+        for plot_name, plot in self.plots.items():
+            # Keep your data validation step exactly as it is
+            for curve_name, curve in plot['curves'].items():
+                data = self.analysis_results[curve['analysisResult']]
+                if "x" not in data or "y" not in data:
+                    print([plot_name, curve_name])
+
+            # Update the visual sizes cleanly without touching the data
+            for item in plot['plot'].getPlotItem().items:
+
+                # If you added data using pg.ScatterPlotItem()
+                if isinstance(item, pg.ScatterPlotItem):
+                    item.setSize(value)
+
+                # If you used the plot() helper function (PlotDataItem)
+                elif isinstance(item, pg.PlotDataItem):
+                    # Access the internal scatter plot object directly!
+                    if item.scatter is not None:
+                        item.scatter.setSize(value)
+
 
 
 if __name__ == '__main__':

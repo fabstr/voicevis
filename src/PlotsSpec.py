@@ -1,4 +1,4 @@
-defaultSize = 1
+plotPointDefaultSize = 1
 
 outliers_m = 5.
 
@@ -22,7 +22,7 @@ spec = {
         'curves': {
             'pitch': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': loudness,
                 'analysisResult': 'loudness'
             }
@@ -37,7 +37,7 @@ spec = {
         'curves': {
             'pitch': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': pitch,
                 'analysisResult': 'pitch'
             }
@@ -52,13 +52,13 @@ spec = {
         'curves': {
             'f1_ratio': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': ratio_f2_f1,
                 'analysisResult': 'F1_ratio'
             },
             'f3_ratio': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': ratio_f3_f1,
                 'analysisResult': 'F3_ratio'
             }
@@ -73,19 +73,19 @@ spec = {
         'curves': {
             'F1': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': f1,
                 'analysisResult': 'F1'
             },
             'F2': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': f2,
                 'analysisResult': 'F2'
             },
             'F3': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': f3,
                 'analysisResult': 'F3'
             }
@@ -100,13 +100,13 @@ spec = {
         'curves': {
             'curve_0_500': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': weight,
                 'analysisResult': 'slope_0_500'
             },
             'curve_500_1500': {
                 'symbol': 'o',
-                'symbolSize': defaultSize,
+                'symbolSize': plotPointDefaultSize,
                 'colour': weight2,
                 'analysisResult': 'slope_500_1500'
             }
