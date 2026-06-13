@@ -153,6 +153,10 @@ class AudioFeatureExtractor:
         result["F3_ratio"] = reject_outliers(result["F3_ratio"])
         result["F3_ratio"]["y"] = np.negative(result["F3_ratio"]["y"])
 
+        # normalise loudness
+        l =  np.array(result["loudness"]["y"])
+        l = (l - l.min()) / (l.max() - l.min())
+        result["loudness"]["y"] = l
 
         return  result
 
