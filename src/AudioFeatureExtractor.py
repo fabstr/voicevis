@@ -138,7 +138,7 @@ class AudioFeatureExtractor:
                 result["slope_500_1500"]["y"].append(slope_500_1500[i])
 
                 result["loudness"]["x"].append(timepoints_raw[i])
-                result["loudness"]["y"].append(slope_500_1500[i])
+                result["loudness"]["y"].append(loudness[i])
 
                 result["F1_ratio"]["x"].append(timepoints_raw[i])
                 result["F1_ratio"]["y"].append(F2[i] / F1[i])
