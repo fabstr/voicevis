@@ -140,18 +140,22 @@ class AudioFeatureExtractor:
             "length_seconds": audio_length
         }
 
-        # 4. Handle Outliers
-        result["pitch"] = reject_outliers(result["pitch"])
-        result["F1_ratio"] = reject_outliers(result["F1_ratio"])
-        result["F3_ratio"] = reject_outliers(result["F3_ratio"])
+        if len(t_filtered) > 0:
+            # 4. Handle Outliers
+            result["pitch"] = reject_outliers(result["pitch"])
+            result["F1_ratio"] = reject_outliers(result["F1_ratio"])
+            result["F3_ratio"] = reject_outliers(result["F3_ratio"])
 
-        result["F3_ratio"]["y"] = np.negative(result["F3_ratio"]["y"])
+            result["F3_ratio"]["y"] = np.negative(result["F3_ratio"]["y"])
 
-        # 5. Vectorized Min-Max Normalization for Loudness
-        l_arr = result["loudness"]["y"]
-        l_min, l_max = l_arr.min(), l_arr.max()
-        if l_max != l_min:
-            result["loudness"]["y"] = (l_arr - l_min) / (l_max - l_min)
+            # 5. Vectorized Min-Max Normalization for Loudness
+            l_arr = result["loudness"]["y"]
+            l_min, l_max = l_arr.min(), l_arr.max()
+            if l_max != l_min:
+                result["loudness"]["y"] = (l_arr - l_min) / (l_max - l_min)
+        else:
+            # If the chunk is silent, keep arrays empty and avoid reduction crashes
+            print("Silent/unvoiced frame skipped safely.")
 
         # Stop the timer and calculate elapsed time
         elapsed_time = time.perf_counter() - start_time

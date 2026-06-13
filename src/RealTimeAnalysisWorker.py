@@ -43,15 +43,28 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                 if self.total_samples_processed > (self.window_size_samples / 2):
                     results = self.extractor.analyzePCM(self.sliding_buffer, self.sample_rate)
 
-                    if results and len(results['timepoints']) > 0:
+                    if results and len(results['pitch']['x']) > 0:
                         latest_point = {
                             "time": current_time,
-                            "pitch": results['pitch'][-1],
-                            "F1": results['F1'][-1],
-                            "F2": results['F2'][-1],
-                            "F3": results['F3'][-1],
-                            "slope_0_500": results['slope_0_500'][-1],
-                            "slope_500_1500": results['slope_500_1500'][-1],
+
+                            # Independent Plots
+                            "loudness": results['loudness']['y'][-1],
+                            "pitch": results['pitch']['y'][-1],
+                            "weight": results['weight']['y'][-1] if 'weight' in results else None,
+                            # Added if weight tracker is active
+
+                            # Formant Ratios (Shared Plot)
+                            "F1_ratio": results['F1_ratio']['y'][-1],
+                            "F3_ratio": results['F3_ratio']['y'][-1],
+
+                            # Individual Formants (Shared Plot)
+                            "F1": results['F1']['y'][-1],
+                            "F2": results['F2']['y'][-1],
+                            "F3": results['F3']['y'][-1],
+
+                            # Spectral Slopes
+                            "slope_0_500": results['slope_0_500']['y'][-1],
+                            "slope_500_1500": results['slope_500_1500']['y'][-1],
                         }
                         self.new_data_point.emit(latest_point)
 

@@ -29,7 +29,23 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
 
-        self.analysis_results = {}
+        self.sampling_rate = 44100
+        self.analysis_results = {
+            "pitch": {"x": np.array([]), "y": np.array([])},
+            "F1": {"x": np.array([]), "y": np.array([])},
+            "F2": {"x": np.array([]), "y": np.array([])},
+            "F3": {"x": np.array([]), "y": np.array([])},
+            "F1_ratio": {"x": np.array([]), "y": np.array([])},
+            "F3_ratio": {"x": np.array([]), "y": np.array([])},  # Ensure naming matches 'curves' config
+            "slope_0_500": {"x": np.array([]), "y": np.array([])},
+            "slope_500_1500": {"x": np.array([]), "y": np.array([])},
+            "loudness": {"x": np.array([]), "y": np.array([])},
+            "weight": {"x": np.array([]), "y": np.array([])},
+
+            "sample_rate": self.sampling_rate,
+            "length_seconds": 0.0
+        }
+
         self.annotations = []
         self.plots = {}
 
@@ -42,7 +58,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.audio_device = None
         self.audio_stream = None
         self.file_path = None
-        self.sampling_rate = 44100
 
         self.audioFeatureExtractor = AudioFeatureExtractor()
 
@@ -371,9 +386,19 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             # 1. Initialize self.analysis_results with empty arrays
             self.analysis_results = {
-                "timepoints": [], "pitch": [], "F1": [], "F2": [], "F3": [],
-                "F1_ratio": [], "A3_ratio": [], "slope_0_500": [], "slope_500_1500": [],
-                "sample_rate": self.sampling_rate, "length_seconds": 0.0
+                "pitch": {"x": np.array([]), "y": np.array([])},
+                "F1": {"x": np.array([]), "y": np.array([])},
+                "F2": {"x": np.array([]), "y": np.array([])},
+                "F3": {"x": np.array([]), "y": np.array([])},
+                "F1_ratio": {"x": np.array([]), "y": np.array([])},
+                "F3_ratio": {"x": np.array([]), "y": np.array([])},  # Ensure naming matches 'curves' config
+                "slope_0_500": {"x": np.array([]), "y": np.array([])},
+                "slope_500_1500": {"x": np.array([]), "y": np.array([])},
+                "loudness": {"x": np.array([]), "y": np.array([])},
+                "weight": {"x": np.array([]), "y": np.array([])},
+
+                "sample_rate": self.sampling_rate,
+                "length_seconds": 0.0
             }
 
             # 2. Setup background worker (Clear queue from previous runs)
@@ -425,7 +450,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 # until the worker finishes its last chunk
                 self.rt_worker.wait()
 
-                # --- Save to WAV for Playback ---
+            # --- Save to WAV for Playback ---
             pcm_bytes = self.audio_data.data()
             temp_wav_path = save_to_temp_wav(pcm_bytes, self.sampling_rate)
 
@@ -451,19 +476,41 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.audio_queue.put(new_bytes)
 
     def append_live_data(self, latest_point):
-        """Receives a single processed data point and appends it."""
-        self.analysis_results["timepoints"].append(latest_point["time"])
-        self.analysis_results["pitch"].append(latest_point["pitch"])
-        self.analysis_results["F1"].append(latest_point["F1"])
-        self.analysis_results["F2"].append(latest_point["F2"])
-        self.analysis_results["F3"].append(latest_point["F3"])
+        """Receives a single processed data point and appends it dynamically
+        using the layout structures from update_plots.
+        """
+        if not self.analysis_results:
+            return
 
-        f1_val = latest_point["F1"] if latest_point["F1"] > 0 else 1.0
-        self.analysis_results["F1_ratio"].append(latest_point["F2"] / f1_val)
-        self.analysis_results["A3_ratio"].append(latest_point["F3"] / f1_val)
+        current_time = latest_point["time"]
 
-        self.analysis_results["slope_0_500"].append(latest_point["slope_0_500"])
-        self.analysis_results["slope_500_1500"].append(latest_point["slope_500_1500"])
+        # Use the structural mapping loop from update_plots
+        for plot_name, plot in self.plots.items():
+            for curve_name, curve in plot['curves'].items():
+                result_key = curve['analysisResult']
+
+                # If this quality metric isn't in our results storage, skip it
+                if result_key not in self.analysis_results:
+                    continue
+
+                data_container = self.analysis_results[result_key]
+
+                # Skip if it uses an unoptimized flat list legacy structure
+                if isinstance(data_container, list):
+                    continue
+
+                # Ensure the specific point value exists in our stream packet
+                if result_key in latest_point and latest_point[result_key] is not None:
+                    new_y_val = latest_point[result_key]
+
+                    # Append time coordinates to 'x' and metric value to 'y'
+                    if isinstance(data_container['x'], np.ndarray):
+                        data_container['x'] = np.append(data_container['x'], current_time)
+                        data_container['y'] = np.append(data_container['y'], new_y_val)
+                    else:
+                        # Fallback if initialized as standard python lists
+                        data_container['x'].append(current_time)
+                        data_container['y'].append(new_y_val)
 
 
     def handle_playback(self):
@@ -657,7 +704,15 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         for plot_name, plot in self.plots.items():
             for curve_name, curve in plot['curves'].items():
-                data = self.analysis_results[curve['analysisResult']]
+                results = self.analysis_results
+                if curve['analysisResult'] not in results:
+                    continue
+
+                data = results[curve['analysisResult']]
+
+                if isinstance(data, list):
+                    continue
+
                 if "x" not in data or "y" not in data:
                     print([plot_name, curve_name])
                 plot = self.plots[plot_name]
