@@ -184,17 +184,49 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 'curves': {},
             }
             for curveName, curveSpec in plot_spec['curves'].items():
-                self.plots[plot_name]['curves'][curveName] = {
-                    'curve':  self.plots[plot_name]['plot'].plot(
-                        [],
-                        symbol="o",
-                        pen=None,
-                        symbolBrush=curveSpec['colour'],
-                        symbolPen=None,
-                        symbolSize=curveSpec['symbolSize']  # Sets the point size
-                    ),
-                    'analysisResult': curveSpec['analysisResult']
-                }
+                self.plots[plot_name]['curves'][curveName] = {}
+
+                if "BW" in curveSpec and curveSpec["BW"]:
+                    self.plots[plot_name]['curves'][curveName]['has_bw'] = True
+
+                    # 1. Define explicit bounding Curve Items (Not using .plot shortcut)
+                    # We use a solid but completely transparent alpha channel pen
+                    transparent_pen = pg.mkPen(color=(0, 0, 0, 0), width=1)
+
+                    min_curve = pg.PlotCurveItem([], pen=transparent_pen)
+                    max_curve = pg.PlotCurveItem([], pen=transparent_pen)
+
+                    self.plots[plot_name]['curves'][curveName]['bw_curve_min'] = min_curve
+                    self.plots[plot_name]['curves'][curveName]['bw_curve_max'] = max_curve
+
+                    # 2. Build the bridging Fill Item
+                    fill_item = pg.FillBetweenItem(
+                        min_curve,
+                        max_curve,
+                        brush=pg.mkBrush("#006E8A")
+                    )
+                    self.plots[plot_name]['curves'][curveName]['fill_band'] = fill_item
+
+                    # 3. CRITICAL: Add all 3 items explicitly to the plot viewport canvas
+                    self.plots[plot_name]['plot'].addItem(min_curve)
+                    self.plots[plot_name]['plot'].addItem(max_curve)
+                    self.plots[plot_name]['plot'].addItem(fill_item)
+
+                    # 4. Push the shaded area beneath markers and curves
+                    fill_item.setZValue(-10)
+
+                else:
+                    self.plots[plot_name]['curves'][curveName]['curve'] = self.plots[plot_name]['plot'].plot(
+                            [],
+                            symbol="o",
+                            pen=None,
+                            symbolBrush=curveSpec['colour'],
+                            symbolPen=None,
+                            symbolSize=curveSpec['symbolSize']  # Sets the point size
+                        )
+
+                self.plots[plot_name]['curves'][curveName]['analysisResult'] = curveSpec['analysisResult']
+
             self.plots[plot_name]['plot'].addItem(self.plots[plot_name]['playhead'])
 
             if plot_spec['linkX'] is not None:
@@ -698,29 +730,35 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.timer.start()
 
     def update_plots(self):
-        # Prevent errors if update_plots is called before data is loaded
         if not self.analysis_results:
             return
 
-        for plot_name, plot in self.plots.items():
-            for curve_name, curve in plot['curves'].items():
+        for plot_name, plot_container in self.plots.items():
+            for curve_name, curve in plot_container['curves'].items():
                 results = self.analysis_results
                 if curve['analysisResult'] not in results:
                     continue
 
                 data = results[curve['analysisResult']]
-
                 if isinstance(data, list):
                     continue
 
-                if "x" not in data or "y" not in data:
-                    print([plot_name, curve_name])
-                plot = self.plots[plot_name]
-                curve = plot['curves'][curve_name]['curve']
                 if len(data['x']) != len(data['y']):
-                    print("Mismatch in length for x and y values for " + plot_name + "." + curve_name)
+                    print(f"Mismatch in length for {plot_name}.{curve_name}")
                 else:
-                    curve.setData(x=data['x'], y=data['y'])
+                    if 'has_bw' in curve:
+                        y_arr = np.array(data["y"], dtype=float)
+                        bw_arr = np.array(data["BW"], dtype=float)
+                        x_arr = np.array(data["x"], dtype=float)
+
+                        new_upper = y_arr + (bw_arr / 2)
+                        new_lower = y_arr - (bw_arr / 2)
+
+                        # Set data coordinates directly on the individual curves
+                        curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
+                        curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
+                    else:
+                        curve['curve'].setData(x=data['x'], y=data['y'])
 
         self.update_playhead()
 

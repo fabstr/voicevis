@@ -143,8 +143,8 @@ class AudioFeatureExtractor:
         if len(t_filtered) > 0:
             # 4. Handle Outliers
             result["pitch"] = reject_outliers(result["pitch"])
-            result["F1_ratio"] = reject_outliers(result["F1_ratio"])
-            result["F3_ratio"] = reject_outliers(result["F3_ratio"])
+            # result["F1_ratio"] = reject_outliers(result["F1_ratio"])
+            # result["F3_ratio"] = reject_outliers(result["F3_ratio"])
 
             result["F3_ratio"]["y"] = np.negative(result["F3_ratio"]["y"])
 
@@ -160,16 +160,95 @@ class AudioFeatureExtractor:
             result["slope_500_1500"]["y"] = result["slope_500_1500"]["y"] + (0 - result["slope_500_1500"]["y"].min())
             result["slope_500_1500"]["y"] = np.negative(result["slope_500_1500"]["y"])
 
+            elapsed_time = time.perf_counter() - start_time
+            print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
+
+            # compute IBW for the formant ratios
+            window_size_samples = 50
+            step_size_samples = 1
+
+            start_time_bw = time.perf_counter()
+            result["F2_F1_IBW"] = calculate_bw_and_cf(
+                result["F1_ratio"]["x"],
+                result["F1_ratio"]["y"],
+                result["loudness"]["y"],
+                window_size=window_size_samples,
+                step_size=step_size_samples,
+            )
+
+            result["F3_F1_IBW"] = calculate_bw_and_cf(
+                result["F3_ratio"]["x"],
+                result["F3_ratio"]["y"],
+                result["loudness"]["y"],
+                window_size=window_size_samples,
+                step_size=step_size_samples,
+            )
+
+            elapsed_time_bw = time.perf_counter() - start_time_bw
+            print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
+
         else:
             # If the chunk is silent, keep arrays empty and avoid reduction crashes
             print("Silent/unvoiced frame skipped safely.")
+            elapsed_time_bw = 0
 
         # Stop the timer and calculate elapsed time
-        elapsed_time = time.perf_counter() - start_time
-        print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
 
         return  result
 
+def calculate_bw_and_cf(x_time, y_freq, y_mag, window_size=500, step_size=100):
+    """Performs a sliding window analysis over 1D spectral arrays to compute
+
+    the center frequency and RMS bandwidth over time.
+    """
+    out_times = []
+    out_center_freqs = []
+    out_bandwidths = []
+
+    num_elements = len(y_mag)
+
+    # Slide across the array indices
+    for start_idx in range(0, num_elements - window_size + 1, step_size):
+        end_idx = start_idx + window_size
+
+        # CRITICAL FIX: Slice ALL arrays using the exact same indices
+        # This guarantees window_freqs and window_mags have identical shapes (e.g., shape: (200,))
+        window_freqs = y_freq[start_idx:end_idx]
+        window_mags = y_mag[start_idx:end_idx]
+
+        # Calculate the time point corresponding to the center of this window
+        mid_idx = start_idx + (window_size // 2)
+        current_time = x_time[mid_idx]
+
+        # --- Core Calculations with -20dB Filter ---
+        power = window_mags ** 2
+        peak_power = np.max(power)
+        threshold = 0.01 * peak_power  # -20dB filter
+
+        # Clean the noise, keeping the exact same array shape
+        clean_power = np.where(power >= threshold, power, 0.0)
+        total_power = np.sum(clean_power)
+
+        if total_power == 0:
+            continue
+
+        # Element-wise operations (Safe now because shapes are identical)
+        center_freq = np.sum(window_freqs * clean_power) / total_power
+
+        freq_deviations_squared = (window_freqs - center_freq) ** 2
+        variance = np.sum(freq_deviations_squared * clean_power) / total_power
+        rms_bandwidth = np.sqrt(variance)
+
+        # Save calculations
+        out_times.append(current_time)
+        out_center_freqs.append(center_freq)
+        out_bandwidths.append(rms_bandwidth)
+
+    return {
+        "x": out_times,
+        "y": out_center_freqs,
+        "BW": out_bandwidths,
+    }
 
 def reject_outliers(pair, m=outliers_m):
     d = np.abs(pair["y"] - np.median(pair["y"]))

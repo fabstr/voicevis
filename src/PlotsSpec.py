@@ -53,15 +53,29 @@ spec = {
             'f1_ratio': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
-                'colour': ratio_f2_f1,
+                'colour': "#FFFFFF", # ratio_f2_f1,
                 'analysisResult': 'F1_ratio'
+            },
+            "F2_F1_CF_BW": {
+                'symbol': 'o',
+                'symbolSize': plotPointDefaultSize,
+                'colour': ratio_f2_f1,
+                'analysisResult': 'F2_F1_IBW',
+                'BW': True
             },
             'f3_ratio': {
                 'symbol': 'o',
                 'symbolSize': plotPointDefaultSize,
-                'colour': ratio_f3_f1,
+                'colour': "#FFFFFF", # ratio_f3_f1,
                 'analysisResult': 'F3_ratio'
-            }
+            },
+            "F3_F1_CF_BW": {
+                'symbol': 'o',
+                'symbolSize': plotPointDefaultSize,
+                'colour': ratio_f3_f1,
+                'analysisResult': 'F3_F1_IBW',
+                'BW': True
+            },
         },
         'linkX': 'Loudness'
     },
