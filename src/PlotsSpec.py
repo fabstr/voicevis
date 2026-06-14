@@ -14,15 +14,25 @@ weight        = "#fc4b60FF"
 white         = "#FFFFFFFF"
 
 # Target Band Colours (Transparent '33' alpha channel)
-target_loudness = "#00ffff33"
-target_pitch    = "#ff00ff33"
-target_f1       = "#00bfff33"
-target_f2       = "#ff7f5033"
-target_f3       = "#ba55d333"
-target_ratio_f3 = "#ffd90033"
-target_ratio_f2 = "#37ff1433"
-target_weight   = "#fc4b6033"
-target_white    = "#ffffff33"
+# target_loudness = "#00ffff33"
+# target_pitch    = "#ff00ff33"
+# target_f1       = "#00bfff33"
+# target_f2       = "#ff7f5033"
+# target_f3       = "#ba55d333"
+# target_ratio_f3 = "#ffd90033"
+# target_ratio_f2 = "#37ff1433"
+# target_weight   = "#fc4b6033"
+# target_white    = "#ffffff33"
+
+target_loudness = "#88888844"
+target_pitch    = "#88888844"
+target_f1       = "#88888844"
+target_f2       = "#88888844"
+target_f3       = "#88888844"
+target_ratio_f3 = "#88888844"
+target_ratio_f2 = "#88888844"
+target_weight   = "#88888844"
+target_white    = "#88888844"
 
 
 spec = {
@@ -119,6 +129,8 @@ spec = {
 
     'F3_Pitch': {
         'title': 'F3 / Pitch',
+        'y_min': 1,
+        'y_max': 50,
         'curves': {
             'F3_Pitch': {
                 'size': defaultSize,
@@ -140,6 +152,8 @@ spec = {
 
     'F2_Pitch': {
         'title': 'F2 / Pitch',
+        'y_min': 1,
+        'y_max': 30,
         'curves': {
             'F2_Pitch': {
                 'size': defaultSize,
@@ -161,6 +175,8 @@ spec = {
 
     'F1_Pitch': {
         'title': 'F1 / Pitch',
+        'y_min': 1,
+        'y_max': 15,
         'curves': {
             'F1_Pitch': {
                 'size': defaultSize,
