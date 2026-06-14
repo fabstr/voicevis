@@ -191,25 +191,25 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.layout.addLayout(top_buttons_layout)
 
     def setupPlots(self):
+        # Create a vertical splitter so users can drag boundaries up and down
+        self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
+
+        # Keep track of stretch factors to apply them to the splitter later
+        stretch_factors = []
+
         for plot_name, plot_spec in spec.items():
             plot = pg.PlotWidget(title=plot_spec['title'])
             plot.showGrid(x=True, y=True, alpha=0.3)
 
-            if 'stretch' in plot_spec:
-                stretch = plot_spec['stretch']
-            else:
-                stretch = default_stretch
+            # Determine stretch factor
+            stretch = plot_spec.get('stretch', default_stretch)
+            stretch_factors.append(stretch)
 
-            self.layout.addWidget(plot, stretch=stretch)
+            # CRITICAL: Add the plot directly to the splitter instead of self.layout
+            self.plot_splitter.addWidget(plot)
 
-            mouseX = True
-            if 'mouse_enabled_x' in plot_spec:
-                mouseX = plot_spec['mouse_enabled_x']
-
-            mouseY = True
-            if 'mouse_enabled_y' in plot_spec:
-                mouseY = plot_spec['mouse_enabled_y']
-
+            mouseX = plot_spec.get('mouse_enabled_x', True)
+            mouseY = plot_spec.get('mouse_enabled_y', True)
             plot.setMouseEnabled(x=mouseX, y=mouseY)
 
             self.plots[plot_name] = {
@@ -217,6 +217,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 'playhead': pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2)),
                 'curves': {},
             }
+
             for curveName, curveSpec in plot_spec['curves'].items():
                 self.plots[plot_name]['curves'][curveName] = {}
 
@@ -261,8 +262,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                 self.plots[plot_name]['curves'][curveName]['analysisResult'] = curveSpec['analysisResult']
 
-
-
             self.plots[plot_name]['plot'].addItem(self.plots[plot_name]['playhead'])
 
             if 'y_min' in plot_spec and 'y_max' in plot_spec:
@@ -276,6 +275,15 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 lambda event, p_name=plot_name, p_title=plot_spec['title']:
                 self.on_mouse_clicked(event, self.plots[p_name]['plot'], p_title)
             )
+
+            # Apply the initial stretch sizes to the splitter items
+        for idx, stretch in enumerate(stretch_factors):
+            self.plot_splitter.setStretchFactor(idx, stretch)
+
+            # Finally, add the entire splitter tool into your main layout
+        self.layout.addWidget(self.plot_splitter)
+
+        
 
     def browse_file(self):
         file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
