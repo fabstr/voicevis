@@ -101,6 +101,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         targets_menu = self.menu_bar.addMenu("&Targets")
         targets_menu.addAction("Set Targets...", self.open_targets_dialog)
         targets_menu.addSeparator()
+        targets_menu.addAction("Female", lambda: self._load_targets_from_path("src/target_female.json"))
+        targets_menu.addSeparator()
         targets_menu.addAction("Import targets...", self.import_targets)
         targets_menu.addAction("Export targets...", self.export_targets)
 
@@ -1070,14 +1072,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 else:
                     t_data['item'].setVisible(False)
 
-            # --- NEW RECALCULATION LOGIC ---
-            needs_recalc = self.sync_target_config()
-            dialog.accept()
+                if t_name == 'F1_Pitch':
+                        self.audioFeatureExtractor.target_config.f1_pitch_min = elem['min'].value()
+                        self.audioFeatureExtractor.target_config.f1_pitch_max = elem['max'].value()
+                if t_name == 'F2_Pitch':
+                    self.audioFeatureExtractor.target_config.f2_pitch_min = elem['min'].value()
+                    self.audioFeatureExtractor.target_config.f2_pitch_max = elem['max'].value()
+                if t_name == 'F3_Pitch':
+                    self.audioFeatureExtractor.target_config.f3_pitch_min = elem['min'].value()
+                    self.audioFeatureExtractor.target_config.f3_pitch_max = elem['max'].value()
 
-            if needs_recalc and self.file_path and not self.is_recording:
-                if self.is_playing:
-                    self.stop_playback()
-                self.selectAnalysisFile(self.file_path)
+            self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size()
+            self.update_plots()
+
+            dialog.accept()
 
         save_btn.clicked.connect(on_save)
         cancel_btn.clicked.connect(dialog.reject)
@@ -1107,71 +1115,47 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving targets:\n{str(e)}")
 
     def import_targets(self):
-        """Loads a config mapping file, overriding defaults and automatically projecting visual changes."""
+        """Opens a file dialog to dynamically select and load a JSON configuration file."""
         open_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Load Targets", "", "Text/JSON Files (*.txt *.json);;All Files (*)"
         )
         if open_path:
-            try:
-                with open(open_path, 'r') as f:
-                    loaded_data = json.load(f)
+            self._load_targets_from_path(open_path)
 
-                for plot_name, targets in loaded_data.items():
-                    if plot_name in self.target_bands:
-                        for target_name, target_data in targets.items():
-                            if target_name in self.target_bands[plot_name]:
-                                t_obj = self.target_bands[plot_name][target_name]
-                                t_obj['enabled'] = target_data.get('enabled', False)
-                                t_obj['min'] = target_data.get('min', 0.0)
-                                t_obj['max'] = target_data.get('max', 1.0)
+    def _load_targets_from_path(self, open_path):
+        """Shared logic to read and parse target profiles from a specific file path location."""
+        try:
+            with open(open_path, 'r') as f:
+                loaded_data = json.load(f)
 
-                                if t_obj['enabled']:
-                                    t_obj['item'].setRegion((t_obj['min'], t_obj['max']))
-                                    t_obj['item'].setVisible(True)
-                                else:
-                                    t_obj['item'].setVisible(False)
-                needs_recalc = self.sync_target_config()
-                print(f"Successfully loaded targets from: {open_path}")
+            for plot_name, targets in loaded_data.items():
+                if plot_name in self.target_bands:
+                    for target_name, target_data in targets.items():
+                        if target_name in self.target_bands[plot_name]:
+                            t_obj = self.target_bands[plot_name][target_name]
+                            t_obj['enabled'] = target_data.get('enabled', False)
+                            t_obj['min'] = target_data.get('min', 0.0)
+                            t_obj['max'] = target_data.get('max', 1.0)
 
-                if needs_recalc and self.file_path and not self.is_recording:
-                    if self.is_playing:
-                        self.stop_playback()
-                    self.selectAnalysisFile(self.file_path)
+                            if t_obj['enabled']:
+                                t_obj['item'].setRegion((t_obj['min'], t_obj['max']))
+                                t_obj['item'].setVisible(True)
+                            else:
+                                t_obj['item'].setVisible(False)
 
-                print(f"Successfully loaded targets from: {open_path}")
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Load Error",
-                                               f"An error occurred while loading targets:\n{str(e)}")
+            self.audioFeatureExtractor.target_config.f1_pitch_min = loaded_data.get('F1_Pitch').get('F1_Pitch').get('min')
+            self.audioFeatureExtractor.target_config.f1_pitch_max = loaded_data.get('F1_Pitch').get('F1_Pitch').get('max')
+            self.audioFeatureExtractor.target_config.f2_pitch_min = loaded_data.get('F2_Pitch').get('F2_Pitch').get('min')
+            self.audioFeatureExtractor.target_config.f3_pitch_max = loaded_data.get('F2_Pitch').get('F2_Pitch').get('max')
+            self.audioFeatureExtractor.target_config.f3_pitch_min = loaded_data.get('F3_Pitch').get('F3_Pitch').get('min')
+            self.audioFeatureExtractor.target_config.f3_pitch_max = loaded_data.get('F3_Pitch').get('F3_Pitch').get('max')
+            self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size()
+            self.update_plots()
+            print(f"Successfully loaded targets from: {open_path}")
 
-    def sync_target_config(self):
-        """Synchronizes the TargetConfig with the UI's active targets.
-        Returns True if the 'Size' target was changed, indicating a recalculation is needed."""
-        requires_recalculation = False
-
-        for plot_name, targets in self.target_bands.items():
-            for target_name, target_data in targets.items():
-                attr_min = f"{target_name.lower()}_min"
-                attr_max = f"{target_name.lower()}_max"
-
-                # Check if 'Size' limits are changing before we overwrite them
-                if target_name.lower() == "size":
-                    current_min = getattr(self.target_config, attr_min, None)
-                    current_max = getattr(self.target_config, attr_max, None)
-
-                    if current_min != target_data['min'] or current_max != target_data['max']:
-                        requires_recalculation = True
-
-                # Push the UI target bounds back to the dataclass
-                if hasattr(self.target_config, attr_min):
-                    setattr(self.target_config, attr_min, target_data['min'])
-                if hasattr(self.target_config, attr_max):
-                    setattr(self.target_config, attr_max, target_data['max'])
-
-        # Pass the updated dataclass reference to the extractor
-        if hasattr(self, 'audioFeatureExtractor') and self.audioFeatureExtractor is not None:
-            self.audioFeatureExtractor.target_config = self.target_config
-
-        return requires_recalculation
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Load Error",
+                                           f"An error occurred while loading targets:\n{str(e)}")
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

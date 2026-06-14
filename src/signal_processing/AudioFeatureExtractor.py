@@ -48,6 +48,7 @@ class AudioFeatureExtractor:
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
         )
         self.target_config = targets
+        self.cachedResults = None
 
     def analyzePCM(self, pcm_data, sampling_rate) -> AudioFeatures:
         df = self.smile.process_signal(pcm_data, sampling_rate)
@@ -230,27 +231,50 @@ class AudioFeatureExtractor:
             elapsed_time_bw = time.perf_counter() - start_time_bw
             # print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
 
-            f1_min = np.divide(self.target_config.f1_min, bw_pitch["y"])
-            f1_max = np.divide(self.target_config.f1_max, bw_pitch["y"])
-            f2_min = np.divide(self.target_config.f2_min, bw_pitch["y"])
-            f2_max = np.divide(self.target_config.f2_max, bw_pitch["y"])
-            f3_min = np.divide(self.target_config.f3_min, bw_pitch["y"])
-            f3_max = np.divide(self.target_config.f3_max, bw_pitch["y"])
-
-            size_y = calculate_size(result.F1_Pitch_BW.y, result.F2_Pitch_BW.y, result.F3_Pitch_BW.y,
-                                    f1_min,
-                                    f1_max,
-                                    f2_min,
-                                    f2_max,
-                                    f3_min,
-                                    f3_max)
-            result.size = SignalTimeSeries(x=result.F1_Pitch_BW.x, y=size_y)
+            self.cachedResults = result
+            self.recalculate_size()
 
         else:
             print("Silent/unvoiced frame skipped safely.")
             elapsed_time_bw = 0
 
         return result
+
+    def recalculate_size(self):
+        if self.cachedResults is None:
+            return None
+
+        print([
+            self.target_config.f1_pitch_min, self.target_config.f1_pitch_max,
+            self.target_config.f2_pitch_min, self.target_config.f2_pitch_max,
+            self.target_config.f3_pitch_min, self.target_config.f3_pitch_max
+        ])
+
+        # f1_min = np.divide(self.target_config.f1_pitch_min, self.cachedResults.Pitch_BW.y)
+        # f1_max = np.divide(self.target_config.f1_pitch_max, self.cachedResults.Pitch_BW.y)
+        # f2_min = np.divide(self.target_config.f2_pitch_min, self.cachedResults.Pitch_BW.y)
+        # f2_max = np.divide(self.target_config.f2_pitch_max, self.cachedResults.Pitch_BW.y)
+        # f3_min = np.divide(self.target_config.f3_pitch_min, self.cachedResults.Pitch_BW.y)
+        # f3_max = np.divide(self.target_config.f3_pitch_max, self.cachedResults.Pitch_BW.y)
+
+        f1_min = self.target_config.f1_pitch_min
+        f1_max = self.target_config.f1_pitch_max
+        f2_min = self.target_config.f2_pitch_min
+        f2_max = self.target_config.f2_pitch_max
+        f3_min = self.target_config.f3_pitch_min
+        f3_max = self.target_config.f3_pitch_max
+
+        size_y = calculate_size(self.cachedResults.F1_Pitch_BW.y,
+                                self.cachedResults.F2_Pitch_BW.y,
+                                self.cachedResults.F3_Pitch_BW.y,
+                                f1_min,
+                                f1_max,
+                                f2_min,
+                                f2_max,
+                                f3_min,
+                                f3_max)
+        self.cachedResults.size = SignalTimeSeries(x=self.cachedResults.F1_Pitch_BW.x, y=size_y)
+        return self.cachedResults
 
 def calculate_bw_and_cf(x_time, y_freq, y_mag, window_size=500, step_size=100):
     """Performs a sliding window analysis over 1D spectral arrays to compute
