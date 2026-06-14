@@ -1081,15 +1081,18 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 else:
                     t_data['item'].setVisible(False)
 
+                val_min = elem['min'].value()
+                val_max = elem['max'].value()
+
                 if t_name == 'F1_Pitch':
-                        self.audioFeatureExtractor.target_config.f1_pitch_min = elem['min'].value()
-                        self.audioFeatureExtractor.target_config.f1_pitch_max = elem['max'].value()
-                if t_name == 'F2_Pitch':
-                    self.audioFeatureExtractor.target_config.f2_pitch_min = elem['min'].value()
-                    self.audioFeatureExtractor.target_config.f2_pitch_max = elem['max'].value()
-                if t_name == 'F3_Pitch':
-                    self.audioFeatureExtractor.target_config.f3_pitch_min = elem['min'].value()
-                    self.audioFeatureExtractor.target_config.f3_pitch_max = elem['max'].value()
+                    self.audioFeatureExtractor.target_config.f1_pitch_min = val_min
+                    self.audioFeatureExtractor.target_config.f1_pitch_max = val_max
+                elif t_name == 'F2_Pitch':
+                    self.audioFeatureExtractor.target_config.f2_pitch_min = val_min
+                    self.audioFeatureExtractor.target_config.f2_pitch_max = val_max
+                elif t_name == 'F3_Pitch':
+                    self.audioFeatureExtractor.target_config.f3_pitch_min = val_min
+                    self.audioFeatureExtractor.target_config.f3_pitch_max = val_max
 
             self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size()
             self.update_plots()
@@ -1152,12 +1155,18 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                             else:
                                 t_obj['item'].setVisible(False)
 
-            self.audioFeatureExtractor.target_config.f1_pitch_min = loaded_data.get('F1_Pitch').get('F1_Pitch').get('min')
-            self.audioFeatureExtractor.target_config.f1_pitch_max = loaded_data.get('F1_Pitch').get('F1_Pitch').get('max')
-            self.audioFeatureExtractor.target_config.f2_pitch_min = loaded_data.get('F2_Pitch').get('F2_Pitch').get('min')
-            self.audioFeatureExtractor.target_config.f3_pitch_max = loaded_data.get('F2_Pitch').get('F2_Pitch').get('max')
-            self.audioFeatureExtractor.target_config.f3_pitch_min = loaded_data.get('F3_Pitch').get('F3_Pitch').get('min')
-            self.audioFeatureExtractor.target_config.f3_pitch_max = loaded_data.get('F3_Pitch').get('F3_Pitch').get('max')
+            targets_f1 = loaded_data.get('F1_Pitch', {}).get('F1_Pitch', {})
+            self.audioFeatureExtractor.target_config.f1_pitch_min = targets_f1.get('min', 0.0)
+            self.audioFeatureExtractor.target_config.f1_pitch_max = targets_f1.get('max', 1.0)
+
+            targets_f2 = loaded_data.get('F2_Pitch', {}).get('F2_Pitch', {})
+            self.audioFeatureExtractor.target_config.f2_pitch_min = targets_f2.get('min', 0.0)
+            self.audioFeatureExtractor.target_config.f2_pitch_max = targets_f2.get('max', 1.0)
+
+            targets_f3 = loaded_data.get('F3_Pitch', {}).get('F3_Pitch', {})
+            self.audioFeatureExtractor.target_config.f3_pitch_min = targets_f3.get('min', 0.0)
+            self.audioFeatureExtractor.target_config.f3_pitch_max = targets_f3.get('max', 1.0)
+
             self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size()
             self.update_plots()
             print(f"Successfully loaded targets from: {open_path}")
