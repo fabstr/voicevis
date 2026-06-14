@@ -1,4 +1,5 @@
 import queue
+import shutil
 import sys
 import time
 import os
@@ -94,6 +95,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         file_menu = self.menu_bar.addMenu("&File")
         file_menu.addAction("&Open", "Ctrl+O", self.browse_file)
         file_menu.addAction("&Save Annotations", "Ctrl+S", self.save_annotations)
+        file_menu.addAction("Save &Audio As...", "Ctrl+Shift+S", self.save_audio)
         file_menu.addSeparator()
         file_menu.addAction("&Close", "Ctrl+W", self.close)
 
@@ -537,41 +539,48 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             print("Real-time recording started...")
 
     def record_stop(self):
-            # --- UI Updates ---
-            self.record_stop_btn.setIcon(self.record_icon)
-            self.record_stop_btn.setToolTip("Record")  # Use tooltip instead of text
-            # Make sure border-radius matches the new 40x40 size (20px)
-            print("Recording stopped.")
+        # --- UI Updates ---
+        self.record_stop_btn.setIcon(self.record_icon)
+        self.record_stop_btn.setToolTip("Record")
+        print("Recording stopped.")
 
-            # --- Audio Stop Logic ---
-            self.poll_timer.stop()
+        # --- Audio Stop Logic ---
+        self.poll_timer.stop()
 
-            # [NEW] Force one last read to catch stranded bytes before closing the buffer
-            self.read_audio_chunk()
+        # [NEW] Force one last read to catch stranded bytes before closing the buffer
+        self.read_audio_chunk()
 
-            self.audio_source.stop()
-            self.audio_buffer.close()
-            self.timer.stop()
+        self.audio_source.stop()
+        self.audio_buffer.close()
+        self.timer.stop()
 
-            # --- Stop Worker ---
-            if hasattr(self, 'rt_worker'):
-                # This flags the loop to stop, but our new logic lets it empty the queue first
-                self.rt_worker.stop()
-                # wait() safely blocks the main thread for a tiny fraction of a second
-                # until the worker finishes its last chunk
-                self.rt_worker.wait()
+        # --- Stop Worker ---
+        if hasattr(self, 'rt_worker'):
+            self.rt_worker.stop()
+            self.rt_worker.wait()
 
-            # --- Save to WAV for Playback ---
-            pcm_bytes = self.audio_data.data()
-            temp_wav_path = save_to_temp_wav(pcm_bytes, self.sampling_rate)
+        # --- Save to WAV for Playback ---
+        pcm_bytes = self.audio_data.data()
 
-            self.file_path = temp_wav_path
+        # 1. Save to the temporary location first
+        temp_wav_path = save_to_temp_wav(pcm_bytes, self.sampling_rate)
 
-            self.current_playback_time = 0
-            self.update_playhead()
+        # 2. Generate a unique filename using the current date and time
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        unique_wav_path = f"recording_{timestamp}.wav"
 
-            # Perform analysis
-            self.selectAnalysisFile(self.file_path)
+        # 3. Rename/move the temp file to the unique, permanent filename
+        import shutil
+        shutil.move(temp_wav_path, unique_wav_path)
+
+        # 4. Set the app to use the new unique file
+        self.file_path = unique_wav_path
+
+        self.current_playback_time = 0
+        self.update_playhead()
+
+        # Perform analysis
+        self.selectAnalysisFile(self.file_path)
 
 
     def read_audio_chunk(self):
@@ -1156,6 +1165,39 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
                                            f"An error occurred while loading targets:\n{str(e)}")
+
+    def save_audio(self):
+        """Saves the currently loaded/recorded audio to a permanent WAV file."""
+        if not hasattr(self, 'file_path') or not self.file_path or not os.path.exists(self.file_path):
+            QtWidgets.QMessageBox.warning(self, "No Audio", "There is no audio currently loaded or recorded to save.")
+            return
+
+        # Determine a default save name based on the current file path
+        base_path, _ = os.path.splitext(self.file_path)
+        default_save_path = f"{base_path}_saved.wav"
+
+        # Open a save file dialog
+        save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Audio As",
+            default_save_path,
+            "WAV Files (*.wav);;All Files (*)"
+        )
+
+        if save_path:
+            try:
+                # Copy the temporary/current file to the new permanent destination
+                shutil.copy2(self.file_path, save_path)
+                print(f"Successfully saved audio to: {save_path}")
+
+                # Update the application's file path to point to the new permanent file
+                # This ensures future annotations save alongside the permanent file, not the temp one.
+                self.file_path = save_path
+                self.file_loaded_signal.emit(self.file_path)
+
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Save Error",
+                                               f"An error occurred while saving the audio:\n{str(e)}")
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
