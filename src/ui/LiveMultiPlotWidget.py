@@ -45,7 +45,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.audio_device = None
         self.audio_stream = None
         self.file_path = None
-        self.target_config = TargetConfig(f1_min=300, f1_max=500, f2_min=1300, f2_max=1700, f3_min=2550, f3_max=2750)
+        self.target_config = TargetConfig()
 
         self.audioFeatureExtractor = AudioFeatureExtractor(self.target_config)
 
@@ -1061,7 +1061,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 t_data = self.target_bands[p_name][t_name]
 
                 t_data['enabled'] = elem['cb'].isChecked()
-                # pyqtgraph SpinBox still uses .value() just like standard Qt widgets
                 t_data['min'] = elem['min'].value()
                 t_data['max'] = elem['max'].value()
 
@@ -1071,7 +1070,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 else:
                     t_data['item'].setVisible(False)
 
+            # --- NEW RECALCULATION LOGIC ---
+            needs_recalc = self.sync_target_config()
             dialog.accept()
+
+            if needs_recalc and self.file_path and not self.is_recording:
+                if self.is_playing:
+                    self.stop_playback()
+                self.selectAnalysisFile(self.file_path)
 
         save_btn.clicked.connect(on_save)
         cancel_btn.clicked.connect(dialog.reject)
@@ -1124,10 +1130,48 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                                     t_obj['item'].setVisible(True)
                                 else:
                                     t_obj['item'].setVisible(False)
+                needs_recalc = self.sync_target_config()
+                print(f"Successfully loaded targets from: {open_path}")
+
+                if needs_recalc and self.file_path and not self.is_recording:
+                    if self.is_playing:
+                        self.stop_playback()
+                    self.selectAnalysisFile(self.file_path)
+
                 print(f"Successfully loaded targets from: {open_path}")
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Load Error",
                                                f"An error occurred while loading targets:\n{str(e)}")
+
+    def sync_target_config(self):
+        """Synchronizes the TargetConfig with the UI's active targets.
+        Returns True if the 'Size' target was changed, indicating a recalculation is needed."""
+        requires_recalculation = False
+
+        for plot_name, targets in self.target_bands.items():
+            for target_name, target_data in targets.items():
+                attr_min = f"{target_name.lower()}_min"
+                attr_max = f"{target_name.lower()}_max"
+
+                # Check if 'Size' limits are changing before we overwrite them
+                if target_name.lower() == "size":
+                    current_min = getattr(self.target_config, attr_min, None)
+                    current_max = getattr(self.target_config, attr_max, None)
+
+                    if current_min != target_data['min'] or current_max != target_data['max']:
+                        requires_recalculation = True
+
+                # Push the UI target bounds back to the dataclass
+                if hasattr(self.target_config, attr_min):
+                    setattr(self.target_config, attr_min, target_data['min'])
+                if hasattr(self.target_config, attr_max):
+                    setattr(self.target_config, attr_max, target_data['max'])
+
+        # Pass the updated dataclass reference to the extractor
+        if hasattr(self, 'audioFeatureExtractor') and self.audioFeatureExtractor is not None:
+            self.audioFeatureExtractor.target_config = self.target_config
+
+        return requires_recalculation
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

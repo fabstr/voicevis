@@ -10,21 +10,7 @@ from scipy.signal import stft
 
 from PlotsSpec import outliers_m
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, BandwidthTimeSeries
-
-
-@dataclass
-class TargetConfig:
-    # F1 Targets
-    f1_min: float
-    f1_max: float
-
-    # F2 Targets
-    f2_min: float
-    f2_max: float
-
-    # F3 Targets
-    f3_min: float
-    f3_max: float
+from signal_processing.TargetConfig import TargetConfig
 
 
 class AudioFeatureExtractor:
@@ -244,8 +230,21 @@ class AudioFeatureExtractor:
             elapsed_time_bw = time.perf_counter() - start_time_bw
             # print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
 
-            size_y = calculate_size(f1[valid_mask], f2[valid_mask], f3[valid_mask], self.target_config)
-            result.size = SignalTimeSeries(x=t_filtered, y=size_y)
+            f1_min = np.divide(self.target_config.f1_min, bw_pitch["y"])
+            f1_max = np.divide(self.target_config.f1_max, bw_pitch["y"])
+            f2_min = np.divide(self.target_config.f2_min, bw_pitch["y"])
+            f2_max = np.divide(self.target_config.f2_max, bw_pitch["y"])
+            f3_min = np.divide(self.target_config.f3_min, bw_pitch["y"])
+            f3_max = np.divide(self.target_config.f3_max, bw_pitch["y"])
+
+            size_y = calculate_size(result.F1_Pitch_BW.y, result.F2_Pitch_BW.y, result.F3_Pitch_BW.y,
+                                    f1_min,
+                                    f1_max,
+                                    f2_min,
+                                    f2_max,
+                                    f3_min,
+                                    f3_max)
+            result.size = SignalTimeSeries(x=result.F1_Pitch_BW.x, y=size_y)
 
         else:
             print("Silent/unvoiced frame skipped safely.")
@@ -427,16 +426,24 @@ def load_pcm_from_wave(file_path):
 
         return audio_samples, frame_rate, audio_length
 
-def calculate_size(F1, F2, F3,
-                   targets: TargetConfig):
+def calculate_size(
+        F1,
+        F2,
+        F3,
+        f1_min,
+        f1_max,
+        f2_min,
+        f2_max,
+        f3_min,
+        f3_max):
     """
     Calculates the Signed RMS Error time series for three features
     based on their respective min/max target boundaries.
     """
     # 1. Calculate signed error vectors (Corrected argument order)
-    err_F1 = calculate_boundary_error(F1, targets.f1_min, targets.f1_max)
-    err_F2 = calculate_boundary_error(F2, targets.f2_min, targets.f2_max)
-    err_F3 = calculate_boundary_error(F3, targets.f3_min, targets.f3_max)
+    err_F1 = calculate_boundary_error(F1, f1_min, f1_max)
+    err_F2 = calculate_boundary_error(F2, f2_min, f2_max)
+    err_F3 = calculate_boundary_error(F3, f3_min, f3_max)
 
     # 2. Stack them into a 2D array of shape (3, time_steps)
     stacked_errors = np.vstack([err_F1, err_F2, err_F3])
@@ -452,10 +459,20 @@ def calculate_size(F1, F2, F3,
 
     return signed_rms_time_series
 
+
 def calculate_boundary_error(vector, target_min, target_max):
     """
     Calculates the directional distance a vector violates its target range.
     Positive = over max, Negative = under min, 0 = within bounds.
+
+    Supports time-varying targets via NumPy array broadcasting.
     """
+    # Ensure inputs are numpy arrays so np.clip works pairwise at each time step
+    vector = np.asarray(vector)
+    target_min = np.asarray(target_min)
+    target_max = np.asarray(target_max)
+
+    # np.clip will bound vector[i] between target_min[i] and target_max[i]
     closest_bound = np.clip(vector, target_min, target_max)
+
     return vector - closest_bound
