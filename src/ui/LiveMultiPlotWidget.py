@@ -89,18 +89,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- File Menu ---
         file_menu = self.menu_bar.addMenu("&File")
-
-        open_action = file_menu.addAction("&Open")
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self.browse_file)  # Maps to your existing browse_file method
-
-        save_action = file_menu.addAction("&Save")
-        save_action.setShortcut("Ctrl+S")
-        save_action.triggered.connect(self.save_annotations)  # Maps to your existing save method
-
-        close_action = file_menu.addAction("&Close")
-        close_action.setShortcut("Ctrl+W")
-        close_action.triggered.connect(self.close)  # Built-in QWidget close handler
+        file_menu.addAction("&Open", "Ctrl+O", self.browse_file)
+        file_menu.addAction("&Save", "Ctrl+S", self.save_annotations)
+        file_menu.addAction("&Close", "Ctrl+W", self.close)
 
         # --- View Menu ---
         view_menu = self.menu_bar.addMenu("&View")
@@ -108,23 +99,58 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         reset_zoom_action = view_menu.addAction("&Reset zoom")
         reset_zoom_action.triggered.connect(self.handle_reset_zoom)
 
-        # Checkable items for showing/hiding elements
-        self.toggle_ratio_action = view_menu.addAction("Show formant ratio pixels")
-        self.toggle_ratio_action.setCheckable(True)
-        self.toggle_ratio_action.setChecked(True)  # Set default state
-        self.toggle_ratio_action.triggered.connect(self.handle_toggle_ratio)
+        # New "Reset plots" Action
+        reset_plots_action = view_menu.addAction("Reset plots")
+        reset_plots_action.triggered.connect(self.handle_reset_plots)
 
-        self.toggle_formant_action = view_menu.addAction("Show Formant pixels")
-        self.toggle_formant_action.setCheckable(True)
-        self.toggle_formant_action.setChecked(True)
-        self.toggle_formant_action.triggered.connect(self.handle_toggle_formants)
+        view_menu.addSeparator()
 
-        self.toggle_weight_action = view_menu.addAction("Show Weight pixels")
-        self.toggle_weight_action.setCheckable(True)
-        self.toggle_weight_action.setChecked(True)
-        self.toggle_weight_action.triggered.connect(self.handle_toggle_weights)
+        # We keep track of the toggle actions in a dictionary so handle_reset_plots can re-check them
+        self.menu_toggle_actions = {
+            'plots': {},
+            'pixels': {},
+            'bandwidths': {}
+        }
 
-        # Crucial: Add the menu bar right at the top of the layout
+        # Grouping dynamically by Plot
+        for plot_key, plot_spec in spec.items():
+            plot_submenu = view_menu.addMenu(plot_spec['title'])
+
+            # 1. Action to Show/Hide the entire Plot panel
+            show_plot_action = plot_submenu.addAction("Show Plot Panel")
+            show_plot_action.setCheckable(True)
+            show_plot_action.setChecked(True)
+            show_plot_action.triggered.connect(
+                lambda checked, name=plot_key: self.handle_toggle_plot(name, checked)
+            )
+            self.menu_toggle_actions['plots'][plot_key] = show_plot_action
+            plot_submenu.addSeparator()
+
+            # 2. Actions for every pixel/scatter curve inside this plot
+            for curve_key, curve_spec in plot_spec['curves'].items():
+                if not curve_spec.get("BW", False):
+                    show_pixel_action = plot_submenu.addAction(f"Show '{curve_key}' Pixels")
+                    show_pixel_action.setCheckable(True)
+                    show_pixel_action.setChecked(True)
+                    show_pixel_action.triggered.connect(
+                        lambda checked, p_key=plot_key, c_key=curve_key:
+                        self.handle_toggle_pixels(p_key, c_key, checked)
+                    )
+                    # Use a composite key to safely track nested components
+                    self.menu_toggle_actions['pixels'][(plot_key, curve_key)] = show_pixel_action
+
+            # 3. Actions for every Bandwidth curve inside this plot
+            for curve_key, curve_spec in plot_spec['curves'].items():
+                if curve_spec.get("BW", False):
+                    show_bw_action = plot_submenu.addAction("Show Bandwidth Region")
+                    show_bw_action.setCheckable(True)
+                    show_bw_action.setChecked(True)
+                    show_bw_action.triggered.connect(
+                        lambda checked, p_key=plot_key, c_key=curve_key:
+                        self.handle_toggle_bandwidth(p_key, c_key, checked)
+                    )
+                    self.menu_toggle_actions['bandwidths'][(plot_key, curve_key)] = show_bw_action
+
         self.layout.setMenuBar(self.menu_bar)
 
     def setupControlButtons(self):
@@ -283,7 +309,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             # Finally, add the entire splitter tool into your main layout
         self.layout.addWidget(self.plot_splitter)
 
-        
+
 
     def browse_file(self):
         file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -869,31 +895,76 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 # Fallback to pure auto-scaling for both axes if no specs exist
                 plot_item.autoRange()
 
+    def handle_toggle_plot(self, plot_name: str, checked: bool):
+        """Shows or hides an entire PlotWidget panel inside the QSplitter layout."""
+        if plot_name in self.plots:
+            self.plots[plot_name]['plot'].setVisible(checked)
 
-    def handle_toggle_ratio(self, checked: bool):
-        """Shows or hides Formant Ratio curves based on menu checkbox state."""
-        # Example implementation targeting your curve configs:
-        for plot_name, plot_data in self.plots.items():
-            for curve_name, curve_obj in plot_data['curves'].items():
-                if "ratio" in curve_name.lower():
-                    if 'curve' in curve_obj:
-                        curve_obj['curve'].setVisible(checked)
+    def handle_toggle_bandwidth(self, plot_name: str, curve_name: str, checked: bool):
+        """Shows or hides background shaded bandwidth fills and boundary lines."""
+        if plot_name in self.plots:
+            curve_obj = self.plots[plot_name]['curves'].get(curve_name, {})
+            if curve_obj.get('has_bw', False):
+                if 'fill_band' in curve_obj:
+                    curve_obj['fill_band'].setVisible(checked)
+                if 'bw_curve_min' in curve_obj:
+                    curve_obj['bw_curve_min'].setVisible(checked)
+                if 'bw_curve_max' in curve_obj:
+                    curve_obj['bw_curve_max'].setVisible(checked)
 
-    def handle_toggle_formants(self, checked: bool):
-        """Shows or hides primary Formant curves (F1, F2, F3)."""
-        for plot_name, plot_data in self.plots.items():
-            for curve_name, curve_obj in plot_data['curves'].items():
-                if curve_name in ["F1", "F2", "F3"]:
-                    if 'curve' in curve_obj:
-                        curve_obj['curve'].setVisible(checked)
+    def handle_toggle_pixels(self, plot_name: str, curve_name: str, checked: bool):
+        """Shows or hides an individual pixel/scatter point curve series."""
+        if plot_name in self.plots:
+            curve_obj = self.plots[plot_name]['curves'].get(curve_name, {})
+            if 'curve' in curve_obj:
+                curve_obj['curve'].setVisible(checked)
 
-    def handle_toggle_weights(self, checked: bool):
-        """Shows or hides Weight curves or fill regions."""
-        for plot_name, plot_data in self.plots.items():
-            for curve_name, curve_obj in plot_data['curves'].items():
-                if "weight" in curve_name.lower():
-                    if 'curve' in curve_obj:
-                        curve_obj['curve'].setVisible(checked)
+    def handle_reset_plots(self):
+        """Restores visibility to all plots, curves, and bandwidth regions,
+        updates the menu checkboxes, and resets the draggable layout splitter
+        back to its original default stretch configurations.
+        """
+        # --- 1. Reset Draggable Sizes ---
+        if hasattr(self, 'plot_splitter'):
+            # Look up the current combined height of the plot container area
+            total_height = self.plot_splitter.height()
+
+            # Recalculate total stretch units allocated across all specs
+            from PlotsSpec import default_stretch, spec
+            total_stretch = sum(plot_spec.get('stretch', default_stretch) for plot_spec in spec.values())
+
+            # Calculate pixel distribution per plot based on its original stretch factor
+            default_sizes = []
+            for plot_spec in spec.values():
+                stretch = plot_spec.get('stretch', default_stretch)
+                # Assign proportional pixel shares from the live height layout
+                allocated_pixels = int((stretch / total_stretch) * total_height)
+                default_sizes.append(allocated_pixels)
+
+            # Forces the splitter to re-snap to the original geometric proportions
+            self.plot_splitter.setSizes(default_sizes)
+
+        # --- 2. Reset Component Visibilities & Menu Sync ---
+        for plot_key, plot_spec in spec.items():
+            # Reset Plot Panel Visibility
+            self.handle_toggle_plot(plot_key, True)
+            if plot_key in self.menu_toggle_actions['plots']:
+                self.menu_toggle_actions['plots'][plot_key].setChecked(True)
+
+            for curve_key, curve_spec in plot_spec['curves'].items():
+                # Reset Pixel Visibility
+                if not curve_spec.get("BW", False):
+                    self.handle_toggle_pixels(plot_key, curve_key, True)
+                    action_key = (plot_key, curve_key)
+                    if action_key in self.menu_toggle_actions['pixels']:
+                        self.menu_toggle_actions['pixels'][action_key].setChecked(True)
+
+                # Reset Bandwidth Visibility
+                else:
+                    self.handle_toggle_bandwidth(plot_key, curve_key, True)
+                    action_key = (plot_key, curve_key)
+                    if action_key in self.menu_toggle_actions['bandwidths']:
+                        self.menu_toggle_actions['bandwidths'][action_key].setChecked(True)
 
 
 if __name__ == '__main__':
