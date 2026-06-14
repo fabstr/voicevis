@@ -13,7 +13,7 @@ import qtawesome as qta
 import numpy as np
 
 from PlotsSpec import spec, defaultSize, default_stretch
-from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor
+from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries
 from ui.AnnotationMarker import AnnotationMarker
 from ui.workers.AnalysisWorker import AnalysisWorker
@@ -45,8 +45,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.audio_device = None
         self.audio_stream = None
         self.file_path = None
+        self.target_config = TargetConfig(f1_min=300, f1_max=500, f2_min=1300, f2_max=1700, f3_min=2550, f3_max=2750)
 
-        self.audioFeatureExtractor = AudioFeatureExtractor()
+        self.audioFeatureExtractor = AudioFeatureExtractor(self.target_config)
 
         self.setup_GUI()
         self.setup_audio()

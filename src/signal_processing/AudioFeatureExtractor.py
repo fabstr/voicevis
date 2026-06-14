@@ -1,4 +1,5 @@
 import time
+from dataclasses import dataclass
 
 import opensmile
 import miniaudio
@@ -9,6 +10,21 @@ from scipy.signal import stft
 
 from PlotsSpec import outliers_m
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, BandwidthTimeSeries
+
+
+@dataclass
+class TargetConfig:
+    # F1 Targets
+    f1_min: float
+    f1_max: float
+
+    # F2 Targets
+    f2_min: float
+    f2_max: float
+
+    # F3 Targets
+    f3_min: float
+    f3_max: float
 
 
 class AudioFeatureExtractor:
@@ -40,11 +56,12 @@ class AudioFeatureExtractor:
     #     F3bandwidth_sma3nz
     #     F3amplitudeLogRelF0_sma3nz
 
-    def __init__(self):
+    def __init__(self, targets: TargetConfig):
         self.smile = opensmile.Smile(
             feature_set=opensmile.FeatureSet.eGeMAPSv02,
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
         )
+        self.target_config = targets
 
     def analyzePCM(self, pcm_data, sampling_rate) -> AudioFeatures:
         df = self.smile.process_signal(pcm_data, sampling_rate)
@@ -115,8 +132,12 @@ class AudioFeatureExtractor:
         f3 = df['F3frequency_sma3nz'].to_numpy()
         loudness_raw = df['Loudness_sma3'].to_numpy()
 
-        # 2. Vectorized Filtering (Replaces the slow 'for' loop)
-        valid_mask = (pitch > 27.5) & (f1 > 0)
+        # Determine a floor threshold (e.g., dropping the quietest 10% of frames)
+        # Since your range is -1 to 1, quiet frames will sit near -1.
+        loudness_floor = -0.8
+
+        # Vectorized Filtering
+        valid_mask = (pitch > 27.5) & (f1 > 0) & (loudness_raw > loudness_floor)
         t_filtered = timepoints[valid_mask]
 
         # 3. Construct the result dictionary using filtered arrays
@@ -222,6 +243,9 @@ class AudioFeatureExtractor:
 
             elapsed_time_bw = time.perf_counter() - start_time_bw
             # print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
+
+            size_y = calculate_size(f1[valid_mask], f2[valid_mask], f3[valid_mask], self.target_config)
+            result.size = SignalTimeSeries(x=t_filtered, y=size_y)
 
         else:
             print("Silent/unvoiced frame skipped safely.")
@@ -402,3 +426,36 @@ def load_pcm_from_wave(file_path):
         audio_length = n_frames / float(frame_rate)
 
         return audio_samples, frame_rate, audio_length
+
+def calculate_size(F1, F2, F3,
+                   targets: TargetConfig):
+    """
+    Calculates the Signed RMS Error time series for three features
+    based on their respective min/max target boundaries.
+    """
+    # 1. Calculate signed error vectors (Corrected argument order)
+    err_F1 = calculate_boundary_error(F1, targets.f1_min, targets.f1_max)
+    err_F2 = calculate_boundary_error(F2, targets.f2_min, targets.f2_max)
+    err_F3 = calculate_boundary_error(F3, targets.f3_min, targets.f3_max)
+
+    # 2. Stack them into a 2D array of shape (3, time_steps)
+    stacked_errors = np.vstack([err_F1, err_F2, err_F3])
+
+    # 3. Calculate standard RMS magnitude (always positive)
+    rms_magnitude = np.sqrt(np.mean(stacked_errors ** 2, axis=0))
+
+    # 4. Extract the net direction of the errors at each timestamp (Option 1)
+    net_direction = np.sign(np.sum(stacked_errors, axis=0))
+
+    # 5. Combine magnitude and direction
+    signed_rms_time_series = net_direction * rms_magnitude
+
+    return signed_rms_time_series
+
+def calculate_boundary_error(vector, target_min, target_max):
+    """
+    Calculates the directional distance a vector violates its target range.
+    Positive = over max, Negative = under min, 0 = within bounds.
+    """
+    closest_bound = np.clip(vector, target_min, target_max)
+    return vector - closest_bound

@@ -50,6 +50,8 @@ class AudioFeatures:
     F3_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F3_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
 
+    size: SignalTimeSeries = field(default_factory=lambda: np.array([]))
+
     # Metadata (Initialized via your audio processing pipeline)
     sample_rate: float = 0.0
     length_seconds: float = 0.0
@@ -73,6 +75,8 @@ class FeatureSnapshot:
 
     # Spectral Slopes
     slopes: float
+
+    size: float
 
     # IBWs (Optional, as they can be None on empty/silent chunks)
     F1_IBW: Optional[float] = None

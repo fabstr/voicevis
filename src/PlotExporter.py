@@ -86,7 +86,7 @@ class HeadlessPlotExporter(QtCore.QObject):
         splitter.setMaximumSize(16777215, 16777215)
 
         # Make sure ALL standard plots are toggled VISIBLE on the layout canvas
-        ALLOWED_PLOTS = ["Formants", "F3 / Pitch", "F2 / Pitch", "F1 / Pitch", "Weight"]
+        ALLOWED_PLOTS = ["Pitch (Hz)", "F3 / Pitch", "F2 / Pitch", "F1 / Pitch", "Size", "Weight"]
         for plot_name in list(self.widget.plots.keys()):
             plot_spec_title = self.widget.plots[plot_name]['plot'].plotItem.titleLabel.text
             if plot_name in ALLOWED_PLOTS or plot_spec_title in ALLOWED_PLOTS:
@@ -115,10 +115,11 @@ class HeadlessPlotExporter(QtCore.QObject):
 
         # Define consistent min/max coordinate bounds based on your data spreads
         Y_RANGES = {
-            "Formants": (0, 4000),  # Formants usually range from 0 to 4000 Hz
+            "Pitch (Hz)": (0, 350),  # Formants usually range from 0 to 4000 Hz
             "F3 / Pitch": (0, 50),  # Uniform scale covering up to your max observed pitch ratios
             "F2 / Pitch": (0, 40),
             "F1 / Pitch": (0, 15),
+            "Size": (-500, 1000),
             "Weight": (0, 5e-7)  # Covers scientific notation limits cleanly
         }
 
@@ -150,11 +151,15 @@ class HeadlessPlotExporter(QtCore.QObject):
                 plot_item.getViewBox().update()
                 continue
 
+            if "Size" in plot_name or "Size" in current_title:
+                plot_item.getViewBox().update()
+                continue
+
             # Hide standard data curves so only the target region highlights remain
-            import pyqtgraph as pg
-            for item in plot_item.items:
-                if isinstance(item, pg.PlotDataItem):
-                    item.setVisible(False)
+            # import pyqtgraph as pg
+            # for item in plot_item.items:
+            #     if isinstance(item, pg.PlotDataItem):
+            #         item.setVisible(False)
 
             plot_item.getViewBox().update()
 
