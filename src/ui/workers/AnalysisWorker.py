@@ -1,9 +1,11 @@
 from PyQt6 import QtCore
 
+from signal_processing.AudioFeatures import AudioFeatures
+
 
 class AnalysisWorker(QtCore.QThread):
     # Signals to communicate back to the main GUI thread safely
-    result_ready = QtCore.pyqtSignal(dict)
+    result_ready = QtCore.pyqtSignal(AudioFeatures)
     error_occurred = QtCore.pyqtSignal(str)
 
     def __init__(self, extractor, file_path):

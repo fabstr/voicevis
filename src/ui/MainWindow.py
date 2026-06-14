@@ -1,9 +1,8 @@
 import sys
-import os
 from PyQt6 import QtWidgets, QtCore
 import qtawesome as qta
 
-from LiveMultiPlotWidget import LiveMultiPlotWidget
+from ui.LiveMultiPlotWidget import LiveMultiPlotWidget
 
 
 # --- NEW: Subclass to catch the close event properly ---
@@ -137,8 +136,3 @@ class MainWindow(QtWidgets.QMainWindow):
         dock.deleteLater()
 
 
-if __name__ == '__main__':
-    app = QtWidgets.QApplication(sys.argv)
-    w = MainWindow()
-    w.show()
-    sys.exit(app.exec())

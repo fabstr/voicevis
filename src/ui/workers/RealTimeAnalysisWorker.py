@@ -3,6 +3,8 @@ import queue
 import numpy as np
 from PyQt6 import QtCore
 
+from signal_processing.AudioFeatures import FeatureSnapshot
+
 
 class RealTimeAnalysisWorker(QtCore.QThread):
     new_data_point = QtCore.pyqtSignal(dict)
@@ -44,32 +46,32 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                     results = self.extractor.analyzePCM(self.sliding_buffer, self.sample_rate)
 
                     if results and len(results['pitch']['x']) > 0:
-                        latest_point = {
-                            "time": current_time,
+                        latest_point = FeatureSnapshot(
+                            time=current_time,
 
                             # Independent Plots
-                            "loudness": results['loudness']['y'][-1],
-                            "pitch": results['pitch']['y'][-1],
+                            loudness=results.loudness.y[-1],
+                            pitch=results.pitch.y[-1],
 
-                            # Formant Ratios (Shared Plot)
-                            "F1_ratio": results['F1_ratio']['y'][-1],
-                            "F3_ratio": results['F3_ratio']['y'][-1],
+                            # Formant Ratios
+                            F1_ratio=results.F2_F1.y[-1],
+                            F3_ratio=results.F3_F1.y[-1],
 
-                            # Individual Formants (Shared Plot)
-                            "F1": results['F1']['y'][-1],
-                            "F2": results['F2']['y'][-1],
-                            "F3": results['F3']['y'][-1],
+                            # Individual Formants
+                            F1=results.F1.y[-1],
+                            F2=results.F2.y[-1],
+                            F3=results.F3.y[-1],
 
                             # Spectral Slopes
-                            "slopes": results['slopes']['y'][-1],
+                            slopes=results.slopes.y[-1],
 
-                            # IBWs
-                            "F1_IBW": results['F1_IBW']['y'][-1] if len(results['F1_IBW']['y']) > 0 else None,
-                            "F2_IBW": results['F2_IBW']['y'][-1] if len(results['F2_IBW']['y']) > 0 else None,
-                            "F3_IBW": results['F3_IBW']['y'][-1] if len(results['F3_IBW']['y']) > 0 else None,
-                            "F2_F1_IBW": results['F1_ratio']['y'][-1] if len(results['F1_ratio']['y']) > 0 else None,
-                            "F3_F1_IBW": results['F3_ratio']['y'][-1] if len(results['F3_ratio']['y']) > 0 else None,
-                        }
+                            # IBWs (with safety guards for empty arrays)
+                            F1_IBW=results.F1_IBW.y[-1] if len(results.F1_IBW.y) > 0 else None,
+                            F2_IBW=results.F2_IBW.y[-1] if len(results.F2_IBW.y) > 0 else None,
+                            F3_IBW=results.F3_IBW.y[-1] if len(results.F3_IBW.y) > 0 else None,
+                            F2_F1_IBW=results.F2_F1_IBW.y[-1] if len(results.F2_F1_IBW.y) > 0 else None,
+                            F3_F1_IBW=results.F3_F1_IBW.y[-1] if len(results.F3_F1_IBW.y) > 0 else None,
+                        )
                         self.new_data_point.emit(latest_point)
 
             except queue.Empty:

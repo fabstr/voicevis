@@ -10,15 +10,15 @@ import pyqtgraph as pg
 import qtawesome as qta
 
 import numpy as np
-import miniaudio
 
-from AnalysisWorker import AnalysisWorker
-from PlaybackWorker import PlaybackWorker
-from PlotsSpec import spec, plotPointDefaultSize
+from PlotsSpec import spec, defaultSize
+from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor
+from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries
+from ui.AnnotationMarker import AnnotationMarker
+from ui.workers.AnalysisWorker import AnalysisWorker
+from ui.workers.PlaybackWorker import PlaybackWorker
+from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
 from utils import save_to_file, load_from_file, save_to_temp_wav
-from AnnotationMarker import AnnotationMarker
-from AudioFeatureExtractor import AudioFeatureExtractor
-from RealTimeAnalysisWorker import RealTimeAnalysisWorker
 
 
 
@@ -29,19 +29,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         super().__init__()
 
         self.sampling_rate = 44100
-        self.analysis_results = {
-            "pitch": {"x": np.array([]), "y": np.array([])},
-            "F1": {"x": np.array([]), "y": np.array([])},
-            "F2": {"x": np.array([]), "y": np.array([])},
-            "F3": {"x": np.array([]), "y": np.array([])},
-            "F1_ratio": {"x": np.array([]), "y": np.array([])},
-            "F3_ratio": {"x": np.array([]), "y": np.array([])},  # Ensure naming matches 'curves' config
-            "loudness": {"x": np.array([]), "y": np.array([])},
-            "slopes": {"x": np.array([]), "y": np.array([])},
-
-            "sample_rate": self.sampling_rate,
-            "length_seconds": 0.0
-        }
+        self.analysedAudioFeatures = AudioFeatures()
 
         self.annotations = []
         self.plots = {}
@@ -187,7 +175,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.size_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.size_slider.setMinimum(1)
         self.size_slider.setMaximum(5)
-        self.size_slider.setValue(plotPointDefaultSize)  # Default initial size
+        self.size_slider.setValue(defaultSize)  # Default initial size
         self.size_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
         self.size_slider.setTickInterval(1)
         self.size_slider.setFixedWidth(120)  # Keeps it looking clean
@@ -262,7 +250,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                             pen=None,
                             symbolBrush=curveSpec['colour'],
                             symbolPen=None,
-                            symbolSize=curveSpec['symbolSize']  # Sets the point size
+                            symbolSize=curveSpec['size']  # Sets the point size
                         )
 
                 self.plots[plot_name]['curves'][curveName]['analysisResult'] = curveSpec['analysisResult']
@@ -321,7 +309,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def on_analysis_finished(self, results):
         """Called automatically when the worker thread finishes successfully."""
-        self.analysis_results = results
+        self.analysedAudioFeatures = results
         self.current_playback_time = 0
         self.update_plots()
 
@@ -451,28 +439,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.record_stop_btn.setIcon(self.stop_icon)
             self.record_stop_btn.setToolTip("Stop Recording")  # Use tooltip instead of text
 
-            # 1. Initialize self.analysis_results with empty arrays
-            self.analysis_results = {
-                "pitch": {"x": np.array([]), "y": np.array([])},
-                "F1": {"x": np.array([]), "y": np.array([])},
-                "F2": {"x": np.array([]), "y": np.array([])},
-                "F3": {"x": np.array([]), "y": np.array([])},
-                "F1_ratio": {"x": np.array([]), "y": np.array([])},
-                "F3_ratio": {"x": np.array([]), "y": np.array([])},
-                "loudness": {"x": np.array([]), "y": np.array([])},
-                "slopes": {"x": np.array([]), "y": np.array([])},
-
-                # --- FIX: Add any new keys expected during real-time streaming ---
-                "F1_IBW": {"x": np.array([]), "y": np.array([])},
-                "F2_IBW": {"x": np.array([]), "y": np.array([])},
-                "F3_IBW": {"x": np.array([]), "y": np.array([])},
-                "F2_F1_IBW": {"x": np.array([]), "y": np.array([])},
-                "F3_F1_IBW": {"x": np.array([]), "y": np.array([])},
-                # "slopes": {"x": np.array([]), "y": np.array([])},
-
-                "sample_rate": self.sampling_rate,
-                "length_seconds": 0.0
-            }
+            # Clear the analysed features
+            self.analysedAudioFeatures = AudioFeatures()
 
             # 2. Setup background worker (Clear queue from previous runs)
             while not self.audio_queue.empty():
@@ -553,10 +521,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         """Receives a single processed data point and appends it dynamically
         using the layout structures from update_plots.
         """
-        if not self.analysis_results:
-            print("analysis_results is empty")
-            return
-
         current_time = latest_point["time"]
 
         # Use the structural mapping loop from update_plots
@@ -564,30 +528,21 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             for curve_name, curve in plot['curves'].items():
                 result_key = curve['analysisResult']
 
-                # If this quality metric isn't in our results storage, skip it
-                if result_key not in self.analysis_results:
+                # If this quality metric isn't an attribute of our results object, skip it
+                if not hasattr(self.analysis_results, result_key):
                     print("key not in results: " + result_key)
                     continue
 
-                data_container = self.analysis_results[result_key]
+                # Retrieve the specific SignalTimeSeries or BandwidthTimeSeries container
+                data_container = getattr(self.analysis_results, result_key)
 
-                # Skip if it uses an unoptimized flat list legacy structure
-                if isinstance(data_container, list):
-                    print("data container is a list")
-                    continue
-
-                # Ensure the specific point value exists in our stream packet
+                # Ensure the specific point value exists in our incoming live stream packet
                 if result_key in latest_point and latest_point[result_key] is not None:
                     new_y_val = latest_point[result_key]
 
-                    # Append time coordinates to 'x' and metric value to 'y'
-                    if isinstance(data_container['x'], np.ndarray):
-                        data_container['x'] = np.append(data_container['x'], current_time)
-                        data_container['y'] = np.append(data_container['y'], new_y_val)
-                    else:
-                        # Fallback if initialized as standard python lists
-                        data_container['x'].append(current_time)
-                        data_container['y'].append(new_y_val)
+                    # Append coordinates dynamically. Dataclasses guarantee they are numpy arrays.
+                    data_container.x = np.append(data_container.x, current_time)
+                    data_container.y = np.append(data_container.y, new_y_val)
 
     def handle_playback(self):
         if self.is_recording:
@@ -735,7 +690,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def seek_and_play(self):
         target_time = max(0.0, self.current_playback_time)
-        seek_frame = int(target_time * self.analysis_results['sample_rate'])
+        seek_frame = int(target_time * self.analysedAudioFeatures.sample_rate)
 
         # Clear old worker if running
         if hasattr(self, 'play_worker') and self.play_worker.isRunning():
@@ -761,32 +716,30 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.timer.stop()
 
     def update_plots(self):
-        if not self.analysis_results:
-            return
-
         for plot_name, plot_container in self.plots.items():
             for curve_name, curve in plot_container['curves'].items():
-                results = self.analysis_results
-                if curve['analysisResult'] not in results:
+                # Ensure the required feature exists in our AudioFeatures result object
+                if not hasattr(self.analysedAudioFeatures, curve['analysisResult']):
                     continue
 
-                data = results[curve['analysisResult']]
-                if isinstance(data, list):
+                # Retrieve the data object (e.g., a SignalTimeSeries or BandwidthTimeSeries instance)
+                data = getattr(self.analysedAudioFeatures, curve['analysisResult'])
+
+                # Guard against unexpected types (mimicking your isinstance(data, list) check)
+                if not hasattr(data, 'x') or not hasattr(data, 'y'):
                     continue
 
-                if len(data['x']) != len(data['y']):
+                if len(data.x) != len(data.y):
                     print(f"Mismatch in length for {plot_name}.{curve_name}")
                 else:
                     if 'has_bw' in curve:
-                        y_arr = np.array(data["y"], dtype=float)
-                        x_arr = np.array(data["x"], dtype=float)
+                        y_arr = np.array(data.y, dtype=float)
+                        x_arr = np.array(data.x, dtype=float)
 
-                        # --- FIX: Safely retrieve BW. Fallback to 0 if missing or mismatched ---
-                        if "BW" in data and len(data["BW"]) == len(y_arr):
-                            bw_arr = np.array(data["BW"], dtype=float)
+                        if isinstance(data, BandwidthTimeSeries) and len(data.BW) == len(y_arr):
+                            bw_arr = np.array(data.BW, dtype=float)
                         else:
                             bw_arr = np.zeros_like(y_arr)
-                            # -----------------------------------------------------------------------
 
                         new_upper = y_arr + (bw_arr / 2)
                         new_lower = y_arr - (bw_arr / 2)
@@ -795,14 +748,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
                         curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
                     else:
-                        curve['curve'].setData(x=data['x'], y=data['y'])
+                        curve['curve'].setData(x=data.x, y=data.y)
 
         self.update_playhead()
 
     def update_playhead(self):
         if self.is_playing:
             self.current_playback_time = time.time() - self.playback_start_time if self.is_playing else 0
-            if self.current_playback_time > self.analysis_results['length_seconds']:
+            if self.current_playback_time > self.analysedAudioFeatures.length_seconds:
                 self.stop_playback()
                 self.current_playback_time = 0
         elif self.is_recording:
@@ -811,7 +764,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.current_playback_time = self.audio_data.size() / (2 * self.sampling_rate)
 
             # Update the max length so playback works correctly later even with trailing silence
-            self.analysis_results['length_seconds'] = self.current_playback_time
+            self.analysedAudioFeatures.length_seconds = self.current_playback_time
 
         # Move the vertical lines to the new X position
         for plot_name, plot in self.plots.items():
