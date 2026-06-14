@@ -412,13 +412,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # Check if the pressed key is the Spacebar
         if event.key() == QtCore.Qt.Key.Key_Space:
             if self.is_playing:
-                # --- PAUSE AUDIO ---
-                self.is_playing = False
-                if self.audio_device and self.audio_device.running:
-                    self.audio_device.stop()
+                # FIXED: Route through stop_playback to safely stop the worker thread and change the button icon
+                self.stop_playback()
             else:
                 if self.file_path:
-                    self.playback_btn.setIcon(self.pause_icon)
                     self.seek_and_play()
 
             event.accept()  # Tell Qt we handled this key press
@@ -621,12 +618,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             print("Cannot start playback while recording.")
             return
 
-        self.is_playing = not self.is_playing
-
-        if self.is_playing:
-            # Change icon to Pause
-            self.playback_btn.setIcon(self.pause_icon)
-
+        if not self.is_playing:
             self.seek_and_play()
             print("Playback started...")
         else:
@@ -683,11 +675,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     self.update_playhead()
 
     def add_annotation(self, plot_name, plot, target_time, target_y, existing_marker=None):
-        # Pause audio automatically
+        # FIXED: Route cleanly through stop_playback() to keep states and UI synced
         if self.is_playing:
-            self.is_playing = False
-            if self.audio_device and self.audio_device.running:
-                self.audio_device.stop()
+            self.stop_playback()
             self.paused_time = time.time() - self.playback_start_time
 
         # Setup the Custom Dialog Window
@@ -776,11 +766,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         self.playback_start_time = time.time() - target_time
         self.is_playing = True
+        self.playback_btn.setIcon(self.pause_icon)  # FIXED: Unified explicit icon setting here
         self.timer.start()
 
     def stop_playback(self):
         self.is_playing = False
-        self.playback_btn.setIcon(self.play_icon)
+        self.playback_btn.setIcon(self.play_icon)  # FIXED: Ensured icon always goes to Play
 
         if hasattr(self, 'play_worker'):
             self.play_worker.stop_backend()
