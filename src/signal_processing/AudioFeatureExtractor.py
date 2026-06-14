@@ -250,13 +250,6 @@ class AudioFeatureExtractor:
             self.target_config.f3_pitch_min, self.target_config.f3_pitch_max
         ])
 
-        # f1_min = np.divide(self.target_config.f1_pitch_min, self.cachedResults.Pitch_BW.y)
-        # f1_max = np.divide(self.target_config.f1_pitch_max, self.cachedResults.Pitch_BW.y)
-        # f2_min = np.divide(self.target_config.f2_pitch_min, self.cachedResults.Pitch_BW.y)
-        # f2_max = np.divide(self.target_config.f2_pitch_max, self.cachedResults.Pitch_BW.y)
-        # f3_min = np.divide(self.target_config.f3_pitch_min, self.cachedResults.Pitch_BW.y)
-        # f3_max = np.divide(self.target_config.f3_pitch_max, self.cachedResults.Pitch_BW.y)
-
         f1_min = self.target_config.f1_pitch_min
         f1_max = self.target_config.f1_pitch_max
         f2_min = self.target_config.f2_pitch_min

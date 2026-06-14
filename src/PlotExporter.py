@@ -119,7 +119,7 @@ class HeadlessPlotExporter(QtCore.QObject):
             "F3 / Pitch": (0, 50),  # Uniform scale covering up to your max observed pitch ratios
             "F2 / Pitch": (0, 40),
             "F1 / Pitch": (0, 15),
-            "Size": (-500, 1000),
+            "Size": (-5, 20),
             "Weight": (0, 5e-7)  # Covers scientific notation limits cleanly
         }
 
