@@ -11,7 +11,7 @@ import qtawesome as qta
 
 import numpy as np
 
-from PlotsSpec import spec, defaultSize
+from PlotsSpec import spec, defaultSize, default_stretch
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor
 from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries
 from ui.AnnotationMarker import AnnotationMarker
@@ -194,14 +194,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         for plot_name, plot_spec in spec.items():
             plot = pg.PlotWidget(title=plot_spec['title'])
             plot.showGrid(x=True, y=True, alpha=0.3)
-            self.layout.addWidget(plot, stretch=plot_spec['stretch'])
+
+            if 'stretch' in plot_spec:
+                stretch = plot_spec['stretch']
+            else:
+                stretch = default_stretch
+
+            self.layout.addWidget(plot, stretch=stretch)
 
             mouseX = True
-            if plot_spec['mouse_enabled_x'] is not None:
+            if 'mouse_enabled_x' in plot_spec:
                 mouseX = plot_spec['mouse_enabled_x']
 
             mouseY = True
-            if plot_spec['mouse_enabled_y'] is not None:
+            if 'mouse_enabled_y' in plot_spec:
                 mouseY = plot_spec['mouse_enabled_y']
 
             plot.setMouseEnabled(x=mouseX, y=mouseY)
@@ -816,6 +822,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         pass
                     else:
                         item.setSize(value)
+                        if plot_name == "Weight":
+                            item.setSize(value+1)
+
 
                 # 2. Handle PlotDataItems (The helper function items)
                 elif isinstance(item, pg.PlotDataItem):
@@ -826,6 +835,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     # STEP B: Apply it immediately to the active rendering object
                     if item.scatter is not None:
                         item.scatter.setSize(value)
+                        if plot_name == "Weight":
+                            item.scatter.setSize(value + 1)
 
     def handle_reset_zoom(self):
         """Resets the zoom, applying fixed min/max spec boundaries where defined,
