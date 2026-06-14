@@ -247,8 +247,8 @@ spec = {
 
     "Size": {
         'title': 'Size',
-        'y_min': -5,
-        'y_max': 10  ,
+        'y_min': -15,
+        'y_max': 25  ,
         'stretch': 2,
         'curves': {
             'slopes': {

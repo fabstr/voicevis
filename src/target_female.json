@@ -37,8 +37,8 @@
     "Size": {
         "Size": {
             "enabled": true,
-            "min": -12,
-            "max": -5
+            "min": -5.0,
+            "max": 5.0
         }
     },
     "Weight": {
