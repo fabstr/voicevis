@@ -2,6 +2,7 @@ import queue
 import sys
 import time
 import os
+import json
 
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
@@ -33,6 +34,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         self.annotations = []
         self.plots = {}
+        self.target_bands = {}
 
         self.is_recording = False
         self.is_playing = False
@@ -90,8 +92,16 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # --- File Menu ---
         file_menu = self.menu_bar.addMenu("&File")
         file_menu.addAction("&Open", "Ctrl+O", self.browse_file)
-        file_menu.addAction("&Save", "Ctrl+S", self.save_annotations)
+        file_menu.addAction("&Save Annotations", "Ctrl+S", self.save_annotations)
+        file_menu.addSeparator()
         file_menu.addAction("&Close", "Ctrl+W", self.close)
+
+        # --- Targets Menu [NEW] ---
+        targets_menu = self.menu_bar.addMenu("&Targets")
+        targets_menu.addAction("Set Targets...", self.open_targets_dialog)
+        targets_menu.addSeparator()
+        targets_menu.addAction("Import targets...", self.import_targets)
+        targets_menu.addAction("Export targets...", self.export_targets)
 
         # --- View Menu ---
         view_menu = self.menu_bar.addMenu("&View")
@@ -289,6 +299,28 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.plots[plot_name]['curves'][curveName]['analysisResult'] = curveSpec['analysisResult']
 
             self.plots[plot_name]['plot'].addItem(self.plots[plot_name]['playhead'])
+
+            # --- [NEW] Construct the Target Bands ---
+            self.target_bands[plot_name] = {}
+            for target_name, target_spec in plot_spec.get('targets', {}).items():
+                # Generate horizontal linear region
+                region = pg.LinearRegionItem(orientation='horizontal', movable=False, brush=target_spec['colour'])
+
+                # Remove outline borders from pyqtgraph's linear region item
+                for line in region.lines:
+                    line.setPen(pg.mkPen(None))
+                    line.setHoverPen(pg.mkPen(None))
+
+                region.setZValue(-20)  # Make sure the band is deeply below annotations and lines
+                region.setVisible(False)
+                self.plots[plot_name]['plot'].addItem(region)
+
+                self.target_bands[plot_name][target_name] = {
+                    'item': region,
+                    'min': 0.0,
+                    'max': 1.0,
+                    'enabled': False
+                }
 
             if 'y_min' in plot_spec and 'y_max' in plot_spec:
                 self.plots[plot_name]['plot'].setYRange(plot_spec['y_min'], plot_spec['y_max'], padding=0)
@@ -966,6 +998,144 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     if action_key in self.menu_toggle_actions['bandwidths']:
                         self.menu_toggle_actions['bandwidths'][action_key].setChecked(True)
 
+    def open_targets_dialog(self):
+        """Displays a dialog box allowing the user to configure visual targets."""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Set Targets")
+        dialog.setMinimumWidth(400)
+
+        layout = QtWidgets.QVBoxLayout(dialog)
+        form_layout = QtWidgets.QGridLayout()
+        layout.addLayout(form_layout)
+
+        # Headers
+        form_layout.addWidget(QtWidgets.QLabel("<b>Enable</b>"), 0, 0)
+        form_layout.addWidget(QtWidgets.QLabel("<b>Plot</b>"), 0, 1)
+        form_layout.addWidget(QtWidgets.QLabel("<b>Target min</b>"), 0, 2)
+        form_layout.addWidget(QtWidgets.QLabel("<b>Target max</b>"), 0, 3)
+
+        row = 1
+        gui_elements = []
+
+        for plot_name, targets in self.target_bands.items():
+            for target_name, target_data in targets.items():
+                cb = QtWidgets.QCheckBox()
+                cb.setChecked(target_data['enabled'])
+
+                # Format the label nicely
+                lbl_text = f"{plot_name} - {target_name}" if plot_name != target_name else target_name
+                lbl = QtWidgets.QLabel(lbl_text)
+
+                # --- PyQtGraph SpinBox Setup ---
+                # Handles scientific notation natively and limits display to 2 decimals
+                min_spin = pg.SpinBox(
+                    value=target_data['min'],
+                    bounds=[-100000, 100000],
+                    decimals=2
+                )
+
+                max_spin = pg.SpinBox(
+                    value=target_data['max'],
+                    bounds=[-100000, 100000],
+                    decimals=2
+                )
+                # -------------------------------
+
+                form_layout.addWidget(cb, row, 0)
+                form_layout.addWidget(lbl, row, 1)
+                form_layout.addWidget(min_spin, row, 2)
+                form_layout.addWidget(max_spin, row, 3)
+
+                gui_elements.append({
+                    'plot': plot_name,
+                    'target': target_name,
+                    'cb': cb,
+                    'min': min_spin,
+                    'max': max_spin
+                })
+                row += 1
+
+        btn_layout = QtWidgets.QHBoxLayout()
+        save_btn = QtWidgets.QPushButton("Apply && Close")
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        def on_save():
+            for elem in gui_elements:
+                p_name = elem['plot']
+                t_name = elem['target']
+                t_data = self.target_bands[p_name][t_name]
+
+                t_data['enabled'] = elem['cb'].isChecked()
+                # pyqtgraph SpinBox still uses .value() just like standard Qt widgets
+                t_data['min'] = elem['min'].value()
+                t_data['max'] = elem['max'].value()
+
+                if t_data['enabled']:
+                    t_data['item'].setRegion((t_data['min'], t_data['max']))
+                    t_data['item'].setVisible(True)
+                else:
+                    t_data['item'].setVisible(False)
+
+            dialog.accept()
+
+        save_btn.clicked.connect(on_save)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        dialog.exec()
+
+    def export_targets(self):
+        """Dumps dictionary rules to a standard JSON configured txt file."""
+        save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Save Targets", "", "Text Files (*.txt);;JSON Files (*.json);;All Files (*)"
+        )
+        if save_path:
+            try:
+                data_to_save = {}
+                for plot_name, targets in self.target_bands.items():
+                    data_to_save[plot_name] = {}
+                    for target_name, target_data in targets.items():
+                        data_to_save[plot_name][target_name] = {
+                            'enabled': target_data['enabled'],
+                            'min': target_data['min'],
+                            'max': target_data['max']
+                        }
+                with open(save_path, 'w') as f:
+                    json.dump(data_to_save, f, indent=4)
+                print(f"Successfully saved targets to: {save_path}")
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving targets:\n{str(e)}")
+
+    def import_targets(self):
+        """Loads a config mapping file, overriding defaults and automatically projecting visual changes."""
+        open_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Load Targets", "", "Text/JSON Files (*.txt *.json);;All Files (*)"
+        )
+        if open_path:
+            try:
+                with open(open_path, 'r') as f:
+                    loaded_data = json.load(f)
+
+                for plot_name, targets in loaded_data.items():
+                    if plot_name in self.target_bands:
+                        for target_name, target_data in targets.items():
+                            if target_name in self.target_bands[plot_name]:
+                                t_obj = self.target_bands[plot_name][target_name]
+                                t_obj['enabled'] = target_data.get('enabled', False)
+                                t_obj['min'] = target_data.get('min', 0.0)
+                                t_obj['max'] = target_data.get('max', 1.0)
+
+                                if t_obj['enabled']:
+                                    t_obj['item'].setRegion((t_obj['min'], t_obj['max']))
+                                    t_obj['item'].setVisible(True)
+                                else:
+                                    t_obj['item'].setVisible(False)
+                print(f"Successfully loaded targets from: {open_path}")
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Load Error",
+                                               f"An error occurred while loading targets:\n{str(e)}")
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
