@@ -457,10 +457,13 @@ def calculate_size(
     Calculates the Signed RMS Error time series for three features
     based on their respective min/max target boundaries.
     """
-    # 1. Calculate signed error vectors (Corrected argument order)
-    err_F1 = calculate_boundary_error(F1, f1_min, f1_max)
-    err_F2 = calculate_boundary_error(F2, f2_min, f2_max)
-    err_F3 = calculate_boundary_error(F3, f3_min, f3_max)
+    f1_target = (f1_max + f1_min) / 2
+    f2_target = (f2_max + f2_min) / 2
+    f3_target = (f3_max + f3_min) / 2
+    # 1. Calculate signed error vectors (Actual - Target)
+    err_F1 = calculate_target_error(F1, f1_target)
+    err_F2 = calculate_target_error(F2, f2_target)
+    err_F3 = calculate_target_error(F3, f3_target)
 
     # 2. Stack them into a 2D array of shape (3, time_steps)
     stacked_errors = np.vstack([err_F1, err_F2, err_F3])
@@ -468,7 +471,7 @@ def calculate_size(
     # 3. Calculate standard RMS magnitude (always positive)
     rms_magnitude = np.sqrt(np.mean(stacked_errors ** 2, axis=0))
 
-    # 4. Extract the net direction of the errors at each timestamp (Option 1)
+    # 4. Extract the net direction of the errors at each timestamp
     net_direction = np.sign(np.sum(stacked_errors, axis=0))
 
     # 5. Combine magnitude and direction
@@ -477,19 +480,16 @@ def calculate_size(
     return signed_rms_time_series
 
 
-def calculate_boundary_error(vector, target_min, target_max):
+def calculate_target_error(vector, target):
     """
-    Calculates the directional distance a vector violates its target range.
-    Positive = over max, Negative = under min, 0 = within bounds.
+    Calculates the directional distance a vector deviates from its target value.
+    Positive = over target, Negative = under target, 0 = exactly on target.
 
     Supports time-varying targets via NumPy array broadcasting.
     """
-    # Ensure inputs are numpy arrays so np.clip works pairwise at each time step
+    # Ensure inputs are numpy arrays for reliable vector operations
     vector = np.asarray(vector)
-    target_min = np.asarray(target_min)
-    target_max = np.asarray(target_max)
+    target = np.asarray(target)
 
-    # np.clip will bound vector[i] between target_min[i] and target_max[i]
-    closest_bound = np.clip(vector, target_min, target_max)
-
-    return vector - closest_bound
+    # Simple subtraction replaces np.clip
+    return vector - target
