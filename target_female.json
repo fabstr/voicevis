@@ -1,0 +1,75 @@
+{
+    "Loudness": {
+        "Loudness": {
+            "enabled": false,
+            "min": 0.0,
+            "max": 1.0
+        }
+    },
+    "Pitch": {
+        "Pitch": {
+            "enabled": true,
+            "min": 180.0,
+            "max": 250.0
+        }
+    },
+    "Formants": {
+        "F1": {
+            "enabled": true,
+            "min": 300.0,
+            "max": 500.0
+        },
+        "F2": {
+            "enabled": true,
+            "min": 1300.0,
+            "max": 1700.0
+        },
+        "F3": {
+            "enabled": true,
+            "min": 2550.0,
+            "max": 2750.0
+        }
+    },
+    "F3_Pitch": {
+        "F3_Pitch": {
+            "enabled": true,
+            "min": 9.0,
+            "max": 15.0
+        }
+    },
+    "F2_Pitch": {
+        "F2_Pitch": {
+            "enabled": true,
+            "min": 4.0,
+            "max": 10.0
+        }
+    },
+    "F1_Pitch": {
+        "F1_Pitch": {
+            "enabled": true,
+            "min": 1.0,
+            "max": 4.0
+        }
+    },
+    "F3_F1": {
+        "F3_F1": {
+            "enabled": true,
+            "min": 5.0,
+            "max": 8.0
+        }
+    },
+    "F2_F1": {
+        "F2_F1": {
+            "enabled": true,
+            "min": 3.0,
+            "max": 5.0
+        }
+    },
+    "Weight": {
+        "Weight": {
+            "enabled": true,
+            "min": 0.0,
+            "max": 8e-08
+        }
+    }
+}
