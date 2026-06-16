@@ -77,12 +77,18 @@ class AudioFeatureExtractor:
 
     def analyzeFile(self, path) -> AudioFeatures:
         if (path.endswith('.wav')):
+            samples, sampling_rate, audio_length = load_pcm_from_wave(path)
+            
+            # Peak amplitude normalization
+            max_val = np.max(np.abs(samples))
+            if max_val > 0:
+                samples = samples / max_val
+
             start_time = time.perf_counter()
-            df = self.smile.process_file(path)
+            df = self.smile.process_signal(samples, sampling_rate)
             elapsed_time = time.perf_counter() - start_time
             # print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
 
-            samples, sampling_rate, audio_length = load_pcm_from_wave(path)
             return self.extractFeatures(df, sampling_rate, audio_length, samples)
 
         elif (path.endswith('.mp3')):
@@ -91,6 +97,11 @@ class AudioFeatureExtractor:
             pcm_data, sampling_rate = self.convertMp3ToPcm(path)
             elapsed_time = time.perf_counter() - start_time
             # print(f"MP3 convertion time: {elapsed_time:.4f} seconds.")
+
+            # Peak amplitude normalization
+            max_val = np.max(np.abs(pcm_data))
+            if max_val > 0:
+                pcm_data = pcm_data / max_val
 
             start_time = time.perf_counter()
             df = self.smile.process_signal(pcm_data, sampling_rate)
