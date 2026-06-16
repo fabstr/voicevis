@@ -255,12 +255,6 @@ class AudioFeatureExtractor:
         if self.cachedResults is None:
             return None
 
-        print([
-            self.target_config.f1_pitch_min, self.target_config.f1_pitch_max,
-            self.target_config.f2_pitch_min, self.target_config.f2_pitch_max,
-            self.target_config.f3_pitch_min, self.target_config.f3_pitch_max
-        ])
-
         f1_min = self.target_config.f1_pitch_min
         f1_max = self.target_config.f1_pitch_max
         f2_min = self.target_config.f2_pitch_min
