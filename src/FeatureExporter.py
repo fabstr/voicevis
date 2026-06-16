@@ -3,6 +3,7 @@ import sys
 import os
 import argparse
 import csv
+import json
 import numpy as np
 import scipy.stats as stats
 
@@ -15,7 +16,7 @@ from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor
 from signal_processing.TargetConfig import TargetConfig
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract mean and median values of Pitch, F3/Pitch, F2/Pitch, F1/Pitch and Weight to CSV with 99% CI group summaries")
+    parser = argparse.ArgumentParser(description="Extract mean and median values of Pitch, F3/Pitch, F2/Pitch, F1/Pitch and Weight to CSV with 99% CI group summaries and target JSON export")
     parser.add_argument("-i", "--input", required=True, help="Directory path containing input .wav/.mp3 files")
     parser.add_argument("-o", "--output", required=True, help="Path to the output CSV file")
     args = parser.parse_known_args()[0]
@@ -81,9 +82,9 @@ def main():
                         return None, None
 
                     pitch_mean, pitch_med = get_stats(features.pitch)
-                    f3_pitch_mean, f3_pitch_med = get_stats(features.F3_Pitch_BW)
-                    f2_pitch_mean, f2_pitch_med = get_stats(features.F2_Pitch_BW)
-                    f1_pitch_mean, f1_pitch_med = get_stats(features.F1_Pitch_BW)
+                    f3_pitch_mean, f3_pitch_med = get_stats(features.F3_Pitch)
+                    f2_pitch_mean, f2_pitch_med = get_stats(features.F2_Pitch)
+                    f1_pitch_mean, f1_pitch_med = get_stats(features.F1_Pitch)
                     weight_mean, weight_med = get_stats(features.slopes)
 
                     row_data = {
@@ -122,8 +123,8 @@ def main():
 
         print(f"\nDone! Successfully wrote results to: {output_csv}")
 
-        # Compute and display 99% Confidence Intervals
-        def compute_99_ci(values):
+        # Compute 99% Confidence Intervals
+        def compute_95_ci(values):
             clean_values = np.array([v for v in values if v is not None], dtype=float)
             clean_values = clean_values[~np.isnan(clean_values)]
             n = len(clean_values)
@@ -137,16 +138,16 @@ def main():
             
             sem = std_val / np.sqrt(n)
             try:
-                lower, upper = stats.t.interval(0.99, df=n-1, loc=mean_val, scale=sem)
+                lower, upper = stats.t.interval(0.95, df=n-1, loc=mean_val, scale=sem)
                 return float(lower), float(upper), n, mean_val
             except Exception:
                 return np.nan, np.nan, n, mean_val
 
         def print_group_summary(group_name, group_data):
             print("\n" + "=" * 70)
-            print(f"SUMMARY STATISTICS & 99% CONFIDENCE INTERVALS: {group_name.upper()}")
+            print(f"SUMMARY STATISTICS & 95% CONFIDENCE INTERVALS: {group_name.upper()}")
             print("=" * 70)
-            print(f"{'Feature / Metric':<18} | {'Count':<5} | {'Mean':<12} | {'99% Confidence Interval':<26}")
+            print(f"{'Feature / Metric':<18} | {'Count':<5} | {'Mean':<12} | {'95% Confidence Interval':<26}")
             print("-" * 70)
             
             has_data = False
@@ -155,7 +156,7 @@ def main():
                 if not vals:
                     continue
                 has_data = True
-                lower, upper, count, mean_val = compute_99_ci(vals)
+                lower, upper, count, mean_val = compute_95_ci(vals)
                 
                 # Format output
                 if np.isnan(mean_val):
@@ -182,6 +183,93 @@ def main():
         # Print summaries for both groups
         print_group_summary("Male Files (_M)", m_data)
         print_group_summary("Female Files (_F)", f_data)
+
+        # Function to export target JSONs
+        def export_group_targets(group_data, output_paths):
+            pitch_ci = compute_95_ci(group_data["Pitch_Mean"])[0:2]
+            f3_pitch_ci = compute_95_ci(group_data["F3_Pitch_Mean"])[0:2]
+            f2_pitch_ci = compute_95_ci(group_data["F2_Pitch_Mean"])[0:2]
+            f1_pitch_ci = compute_95_ci(group_data["F1_Pitch_Mean"])[0:2]
+            weight_ci = compute_95_ci(group_data["Weight_Mean"])[0:2]
+
+            # Populate config layout
+            data = {
+                "Loudness": {
+                    "Loudness": {
+                        "enabled": False,
+                        "min": 0.0,
+                        "max": 1.0
+                    }
+                },
+                "Pitch": {
+                    "Pitch": {
+                        "enabled": True,
+                        "min": float(pitch_ci[0]) if not np.isnan(pitch_ci[0]) else 0.0,
+                        "max": float(pitch_ci[1]) if not np.isnan(pitch_ci[1]) else 350.0
+                    }
+                },
+                "F3_Pitch": {
+                    "F3_Pitch": {
+                        "enabled": True,
+                        "min": float(f3_pitch_ci[0]) if not np.isnan(f3_pitch_ci[0]) else 1.0,
+                        "max": float(f3_pitch_ci[1]) if not np.isnan(f3_pitch_ci[1]) else 50.0
+                    }
+                },
+                "F2_Pitch": {
+                    "F2_Pitch": {
+                        "enabled": True,
+                        "min": float(f2_pitch_ci[0]) if not np.isnan(f2_pitch_ci[0]) else 1.0,
+                        "max": float(f2_pitch_ci[1]) if not np.isnan(f2_pitch_ci[1]) else 30.0
+                    }
+                },
+                "F1_Pitch": {
+                    "F1_Pitch": {
+                        "enabled": True,
+                        "min": float(f1_pitch_ci[0]) if not np.isnan(f1_pitch_ci[0]) else 1.0,
+                        "max": float(f1_pitch_ci[1]) if not np.isnan(f1_pitch_ci[1]) else 15.0
+                    }
+                },
+                "Size": {
+                    "Size": {
+                        "enabled": True,
+                        "min": -4.0,
+                        "max": 4.0
+                    }
+                },
+                "Weight": {
+                    "Weight": {
+                        "enabled": True,
+                        "min": float(weight_ci[0]) if not np.isnan(weight_ci[0]) else 0.0,
+                        "max": float(weight_ci[1]) if not np.isnan(weight_ci[1]) else 4.0e-7
+                    }
+                }
+            }
+
+            for path in output_paths:
+                try:
+                    with open(path, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, indent=4)
+                    print(f"Exported target JSON file: {path}")
+                except Exception as ex:
+                    print(f"Error exporting to {path}: {ex}", file=sys.stderr)
+
+        # Output target json paths
+        output_paths_male = [
+            os.path.join(script_dir, "target_male.json")
+        ]
+        output_paths_female = [
+            os.path.join(script_dir, "target_female.json")
+        ]
+
+        # De-duplicate paths
+        output_paths_male = list(set(os.path.abspath(p) for p in output_paths_male))
+        output_paths_female = list(set(os.path.abspath(p) for p in output_paths_female))
+
+        # Save Target Config files
+        if any(m_data[col] for col in headers[1:]):
+            export_group_targets(m_data, output_paths_male)
+        if any(f_data[col] for col in headers[1:]):
+            export_group_targets(f_data, output_paths_female)
 
     except Exception as e:
         print(f"Error writing CSV file '{output_csv}': {e}", file=sys.stderr)
