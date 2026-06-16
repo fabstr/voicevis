@@ -104,6 +104,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         targets_menu.addAction("Set Targets...", self.open_targets_dialog)
         targets_menu.addSeparator()
         targets_menu.addAction("Female", lambda: self._load_targets_from_path("src/target_female.json"))
+        targets_menu.addAction("Male", lambda: self._load_targets_from_path("src/target_male.json"))
         targets_menu.addSeparator()
         targets_menu.addAction("Import targets...", self.import_targets)
         targets_menu.addAction("Export targets...", self.export_targets)
