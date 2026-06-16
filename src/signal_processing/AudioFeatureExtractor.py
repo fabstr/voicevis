@@ -135,7 +135,7 @@ class AudioFeatureExtractor:
         loudness_floor = -0.8
 
         # Vectorized Filtering
-        valid_mask = (pitch > 27.5) & (f1 > 0) & (loudness_raw > loudness_floor)
+        valid_mask = (pitch > 65) & (pitch < 500) & (f1 > 0) & (loudness_raw > loudness_floor)
         t_filtered = timepoints[valid_mask]
 
         # 3. Construct the result dictionary using filtered arrays
