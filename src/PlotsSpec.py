@@ -266,7 +266,7 @@ spec = {
     "Weight": {
         'title': 'Weight',
         'y_min': 0,
-        'y_max': 4.0e-7,
+        'y_max': 8.0e-7,
         'stretch': 1,
         'curves': {
             'slopes': {
