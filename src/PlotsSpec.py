@@ -81,59 +81,60 @@ spec = {
         'linkX': 'Loudness'
     },
 
-    # 'Formants': {
-    #     'title': 'Formants (Hz)',
-    #     'y_min': 0,
-    #     'y_max': 3500,
-    #     'stretch': 1,
-    #     'curves': {
-    #         'F1': {
-    #             'size': defaultSize,
-    #             'colour': white,
-    #             'analysisResult': 'F1'
-    #         },
-    #         'F2': {
-    #             'symbol': 'o',
-    #             'size': defaultSize,
-    #             'colour': white,
-    #             'analysisResult': 'F2'
-    #         },
-    #         'F3': {
-    #             'size': defaultSize,
-    #             'colour': white,
-    #             'analysisResult': 'F3'
-    #         },
-    #         'F1_IBW': {
-    #             'size': defaultSize,
-    #             'colour': f1,
-    #             'analysisResult': 'F1_IBW',
-    #             'BW': True
-    #         },
-    #         'F2_IBW': {
-    #             'size': defaultSize,
-    #             'colour': f2,
-    #             'analysisResult': 'F2_IBW',
-    #             'BW': True
-    #         },
-    #         'F3_IBW': {
-    #             'size': defaultSize,
-    #             'colour': f3,
-    #             'analysisResult': 'F3_IBW',
-    #             'BW': True
-    #         }
-    #     },
-    #     'targets': {
-    #         'F1': {'colour': target_f1},
-    #         'F2': {'colour': target_f2},
-    #         'F3': {'colour': target_f3}
-    #     },
-    #     'linkX': 'Loudness'
-    # },
+    'Formants': {
+        'title': 'Formants (Hz)',
+        'y_min': 0,
+        'y_max': 3500,
+        'hidden': True,
+        'curves': {
+            'F1': {
+                'size': defaultSize,
+                'colour': white,
+                'analysisResult': 'F1'
+            },
+            'F2': {
+                'symbol': 'o',
+                'size': defaultSize,
+                'colour': white,
+                'analysisResult': 'F2'
+            },
+            'F3': {
+                'size': defaultSize,
+                'colour': white,
+                'analysisResult': 'F3'
+            },
+            'F1_IBW': {
+                'size': defaultSize,
+                'colour': f1,
+                'analysisResult': 'F1_IBW',
+                'BW': True
+            },
+            'F2_IBW': {
+                'size': defaultSize,
+                'colour': f2,
+                'analysisResult': 'F2_IBW',
+                'BW': True
+            },
+            'F3_IBW': {
+                'size': defaultSize,
+                'colour': f3,
+                'analysisResult': 'F3_IBW',
+                'BW': True
+            }
+        },
+        'targets': {
+            'F1': {'colour': target_f1},
+            'F2': {'colour': target_f2},
+            'F3': {'colour': target_f3}
+        },
+        'linkX': 'Loudness'
+    },
 
     'F3_Pitch': {
         'title': 'F3 / Pitch',
         'y_min': 1,
         'y_max': 50,
+        'hidden': True,
         'curves': {
             'F3_Pitch': {
                 'size': defaultSize,
@@ -157,6 +158,7 @@ spec = {
         'title': 'F2 / Pitch',
         'y_min': 1,
         'y_max': 30,
+        'hidden': True,
         'curves': {
             'F2_Pitch': {
                 'size': defaultSize,
@@ -180,6 +182,7 @@ spec = {
         'title': 'F1 / Pitch',
         'y_min': 1,
         'y_max': 15,
+        'hidden': True,
         'curves': {
             'F1_Pitch': {
                 'size': defaultSize,
@@ -203,7 +206,6 @@ spec = {
         'title': 'Size',
         'y_min': -15,
         'y_max': 25  ,
-        'stretch': 2,
         'curves': {
             'slopes': {
                 'size': defaultSize+1,
@@ -221,7 +223,6 @@ spec = {
         'title': 'Weight',
         'y_min': 0,
         'y_max': 8.0e-7,
-        'stretch': 1,
         'curves': {
             'slopes': {
                 'size': defaultSize+1,
@@ -231,6 +232,24 @@ spec = {
         },
         'targets': {
             'Weight': {'colour': target_weight}
+        },
+        'linkX': 'Loudness',
+    },
+
+    "Size_vs_Weight_Colored": {
+        'title': 'Fullness (size on y vs weight as colour)',
+        'y_min': -15,
+        'y_max': 25,
+        'curves': {
+            'size_weight': {
+                'size': defaultSize + 2,
+                'colour': white,  # Fallback color
+                'analysisResult': 'size', # Y-axis
+                'colorSource': 'slopes'   # Z-axis (Color)
+            }
+        },
+        'targets': {
+            'Size': {'colour': target_weight}
         },
         'linkX': 'Loudness',
     }

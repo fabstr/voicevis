@@ -130,8 +130,7 @@ class AudioFeatureExtractor:
         f3 = df['F3frequency_sma3nz'].to_numpy()
         loudness_raw = df['Loudness_sma3'].to_numpy()
 
-        # Determine a floor threshold (e.g., dropping the quietest 10% of frames)
-        # Since your range is -1 to 1, quiet frames will sit near -1.
+        # Determine a floor threshold
         loudness_floor = -0.8
 
         # Vectorized Filtering
@@ -154,9 +153,24 @@ class AudioFeatureExtractor:
             length_seconds=audio_length
         )
 
-        # Calculate and assign spectral slopes
+        # Calculate spectral slopes (continuous)
         t_slopes, slopes = calculate_spectral_slope(pcm_data, sampling_rate, nperseg=2048, noverlap=1024)
-        result.slopes = SignalTimeSeries(x=t_slopes, y=slopes)
+
+        # ------------------------------------------------------------------
+        # CRITICAL FIX: Interpolate slopes to match the filtered timepoints
+        # ------------------------------------------------------------------
+        if len(t_slopes) > 0 and len(t_filtered) > 0:
+            matched_slopes = np.interp(t_filtered, t_slopes, slopes)
+        else:
+            matched_slopes = np.zeros_like(t_filtered)
+
+        # Now slopes perfectly matches the length and timeline of everything else
+        result.slopes = SignalTimeSeries(x=t_filtered, y=matched_slopes)
+
+        if len(t_filtered) > 0:
+            print('len(t_filtered) = ', len(t_filtered))
+
+            # ... [The rest of your BW calculations remain unchanged here] ...
 
         if len(t_filtered) > 0:
             print('len(t_filtered) = ', len(t_filtered))
@@ -233,8 +247,6 @@ class AudioFeatureExtractor:
 
             self.cachedResults = result
             self.recalculate_size()
-
-
 
         else:
             print("Silent/unvoiced frame skipped safely.")
@@ -347,9 +359,11 @@ def reject_outliers(pair: SignalTimeSeries, m: float = outliers_m) -> SignalTime
     )
 
 
-def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512, silence_threshold_db=-30):
+def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512):
     """
-    Calculates the spectral slope of an audio signal over time, filtering out silent frames.
+    Calculates the spectral slope of an audio signal over time.
+    Silence filtering is delegated to the master valid_mask in the extractor
+    to prevent misaligned timeframes.
     """
     # 1. Compute the Short-Time Fourier Transform
     f, t, Zxx = stft(audio_data, fs=sample_rate, nperseg=nperseg, noverlap=noverlap)
@@ -357,35 +371,13 @@ def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512
     # Use the magnitude spectrum
     mag_spectrum = np.abs(Zxx)
 
-    # 2. Filter out silence based on frame energy
-    # Calculate the power of each frame (sum of squared magnitudes)
-    frame_power = np.sum(mag_spectrum ** 2, axis=0)
-
-    # Avoid log of zero issues by applying a tiny floor value
-    frame_power = np.maximum(frame_power, 1e-20)
-
-    # Convert power to decibels (dB)
-    frame_power_db = 10 * np.log10(frame_power)
-
-    # Determine the absolute threshold relative to the loudest frame
-    max_power_db = np.max(frame_power_db)
-    threshold = max_power_db + silence_threshold_db
-
-    # Create a boolean mask of frames that are above the silence threshold
-    active_frames = frame_power_db > threshold
-
-    # Apply the mask to filter out silent frames from the time array and magnitude spectrum
-    t = t[active_frames]
-    mag_spectrum = mag_spectrum[:, active_frames]
-
-    # Guard clause: if the entire audio is silent, return empty arrays
+    # Guard clause: if the entire audio is empty, return empty arrays
     if mag_spectrum.shape[1] == 0:
         return np.array([]), np.array([])
 
-    # 3. Calculate the spectral slope for each frame using vectorized linear regression
+    # 2. Calculate the spectral slope for each frame using vectorized linear regression
     # f shape: (F,)
-    # mag_spectrum shape: (F, T) where F is freq bins, T is remaining active time frames
-
+    # mag_spectrum shape: (F, T)
     f_mean = np.mean(f)
     mag_mean = np.mean(mag_spectrum, axis=0)  # Mean across frequencies for each frame
 

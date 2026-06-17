@@ -134,9 +134,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             plot_submenu = view_menu.addMenu(plot_spec['title'])
 
             # 1. Action to Show/Hide the entire Plot panel
+            is_visible = not plot_spec.get('hidden', False)
+
             show_plot_action = plot_submenu.addAction("Show Plot Panel")
             show_plot_action.setCheckable(True)
-            show_plot_action.setChecked(True)
+            show_plot_action.setChecked(is_visible)
+
             show_plot_action.triggered.connect(
                 lambda checked, name=plot_key: self.handle_toggle_plot(name, checked)
             )
@@ -243,8 +246,17 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         for plot_name, plot_spec in spec.items():
             plot = pg.PlotWidget(title=plot_spec['title'])
             plot.showGrid(x=True, y=True, alpha=0.3)
-            plot.setClipToView(True)
-            plot.setDownsampling(mode='peak', auto=True)
+
+            has_dynamic_colors = any('colorSource' in curve for curve in plot_spec['curves'].values())
+
+            if has_dynamic_colors:
+                # Disable clipping and downsampling to prevent brush array desync
+                plot.setClipToView(False)
+                plot.setDownsampling(auto=False)
+            else:
+                # Keep standard optimizations for normal plots
+                plot.setClipToView(True)
+                plot.setDownsampling(mode='peak', auto=True)
 
             # Determine stretch factor
             stretch = plot_spec.get('stretch', default_stretch)
@@ -299,13 +311,17 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                 else:
                     self.plots[plot_name]['curves'][curveName]['curve'] = self.plots[plot_name]['plot'].plot(
-                            [],
-                            symbol="o",
-                            pen=None,
-                            symbolBrush=curveSpec['colour'],
-                            symbolPen=None,
-                            symbolSize=curveSpec['size']  # Sets the point size
-                        )
+                        [],
+                        symbol="o",
+                        pen=None,
+                        symbolBrush=curveSpec['colour'],
+                        symbolPen=None,
+                        symbolSize=curveSpec['size']  # Sets the point size
+                    )
+
+                    # Register the Z-axis color source if it exists
+                    if 'colorSource' in curveSpec:
+                        self.plots[plot_name]['curves'][curveName]['colorSource'] = curveSpec['colorSource']
 
                 self.plots[plot_name]['curves'][curveName]['analysisResult'] = curveSpec['analysisResult']
 
@@ -344,6 +360,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 lambda event, p_name=plot_name, p_title=plot_spec['title']:
                 self.on_mouse_clicked(event, self.plots[p_name]['plot'], p_title)
             )
+
+            if plot_spec.get('hidden', False):
+                self.plots[plot_name]['plot'].setVisible(False)
 
             # Apply the initial stretch sizes to the splitter items
         for idx, stretch in enumerate(stretch_factors):
@@ -844,7 +863,38 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
                         curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
                     else:
-                        curve['curve'].setData(x=data.x, y=data.y)
+                        if 'colorSource' in curve:
+                            # 1. Fetch the Z-axis data (Weight / slopes)
+                            z_feature = curve['colorSource']
+                            if hasattr(self.analysedAudioFeatures, z_feature):
+                                z_data = getattr(self.analysedAudioFeatures, z_feature)
+
+                                # 2. Proceed only if we have data to map
+                                if len(z_data.x) > 0 and len(data.x) > 0:
+                                    # Interpolate Z to match Y's exact timestamps
+                                    z_interp = np.interp(data.x, z_data.x, z_data.y)
+
+                                    # Normalize Z to a 0.0 - 1.0 scale for the colormap
+                                    z_min, z_max = np.nanmin(z_interp), np.nanmax(z_interp)
+                                    if z_max > z_min:
+                                        z_norm = (z_interp - z_min) / (z_max - z_min)
+                                    else:
+                                        z_norm = np.zeros_like(z_interp)
+
+                                    # 3. Apply a scientific colormap (Viridis)
+                                    cmap = pg.colormap.get('viridis')
+                                    colors = cmap.map(z_norm)  # Returns RGBA tuples/arrays
+
+                                    # Generate PyQTGraph brushes
+                                    brushes = [pg.mkBrush(tuple(c)) for c in colors]
+
+                                    # Draw with dynamic colors
+                                    curve['curve'].setData(x=data.x, y=data.y, symbolBrush=brushes)
+                                else:
+                                    curve['curve'].setData(x=data.x, y=data.y)
+                        else:
+                            # Standard uniform color drawing
+                            curve['curve'].setData(x=data.x, y=data.y)
 
         self.update_playhead()
 
@@ -1007,10 +1057,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- 2. Reset Component Visibilities & Menu Sync ---
         for plot_key, plot_spec in spec.items():
-            # Reset Plot Panel Visibility
-            self.handle_toggle_plot(plot_key, True)
+            # Reset Plot Panel Visibility to Default Spec
+            is_visible = not plot_spec.get('hidden', False)
+
+            self.handle_toggle_plot(plot_key, is_visible)
             if plot_key in self.menu_toggle_actions['plots']:
-                self.menu_toggle_actions['plots'][plot_key].setChecked(True)
+                self.menu_toggle_actions['plots'][plot_key].setChecked(is_visible)
 
             for curve_key, curve_spec in plot_spec['curves'].items():
                 # Reset Pixel Visibility
