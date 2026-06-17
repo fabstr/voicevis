@@ -159,6 +159,7 @@ class AudioFeatureExtractor:
         result.slopes = SignalTimeSeries(x=t_slopes, y=slopes)
 
         if len(t_filtered) > 0:
+            print('len(t_filtered) = ', len(t_filtered))
             # 4. Handle Outliers (Note: reject_outliers should now accept/return SignalTimeSeries)
             # result.pitch = reject_outliers(result.pitch)
 
@@ -172,7 +173,7 @@ class AudioFeatureExtractor:
             # print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
 
             # Compute IBW for the formant ratios
-            window_size_samples = 50
+            window_size_samples = 5
             step_size_samples = 1
 
             start_time_bw = time.perf_counter()
@@ -186,18 +187,6 @@ class AudioFeatureExtractor:
                 window_size=window_size_samples, step_size=step_size_samples
             )
             result.Pitch_BW = BandwidthTimeSeries(x=bw_pitch["x"], y=bw_pitch["y"], BW=bw_pitch["BW"])
-
-            bw_f2_f1 = calculate_bw_and_cf(
-                result.F2_F1.x, result.F2_F1.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F2_F1_IBW = BandwidthTimeSeries(x=bw_f2_f1["x"], y=bw_f2_f1["y"], BW=bw_f2_f1["BW"])
-
-            bw_f3_f1 = calculate_bw_and_cf(
-                result.F3_F1.x, result.F3_F1.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F3_F1_IBW = BandwidthTimeSeries(x=bw_f3_f1["x"], y=bw_f3_f1["y"], BW=bw_f3_f1["BW"])
 
             bw_f1 = calculate_bw_and_cf(
                 result.F1.x, result.F1.y, result.loudness.y,
@@ -245,6 +234,8 @@ class AudioFeatureExtractor:
             self.cachedResults = result
             self.recalculate_size()
 
+
+
         else:
             print("Silent/unvoiced frame skipped safely.")
             elapsed_time_bw = 0
@@ -272,6 +263,11 @@ class AudioFeatureExtractor:
                                 f3_min,
                                 f3_max)
         self.cachedResults.size = SignalTimeSeries(x=self.cachedResults.F1_Pitch_BW.x, y=size_y)
+
+        if len(self.cachedResults.size.x) > 0:
+            size = np.interp(self.cachedResults.slopes.x, self.cachedResults.size.x, self.cachedResults.size.y)
+            self.size_vs_weight = SignalTimeSeries(x=self.cachedResults.slopes.x,
+                                                   y=size / self.cachedResults.slopes.y)
         return self.cachedResults
 
 def calculate_bw_and_cf(x_time, y_freq, y_mag, window_size=500, step_size=100):
@@ -284,6 +280,9 @@ def calculate_bw_and_cf(x_time, y_freq, y_mag, window_size=500, step_size=100):
     out_bandwidths = []
 
     num_elements = len(y_mag)
+
+    if num_elements < window_size:
+        window_size = num_elements
 
     # Slide across the array indices
     for start_idx in range(0, num_elements - window_size + 1, step_size):

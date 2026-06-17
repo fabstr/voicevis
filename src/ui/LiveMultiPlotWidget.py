@@ -4,6 +4,7 @@ import sys
 import time
 import os
 import json
+import shutil
 
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
@@ -15,7 +16,7 @@ import numpy as np
 
 from PlotsSpec import spec, defaultSize, default_stretch
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
-from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries
+from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.workers.AnalysisWorker import AnalysisWorker
 from ui.workers.PlaybackWorker import PlaybackWorker
@@ -571,7 +572,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         unique_wav_path = f"recording_{timestamp}.wav"
 
         # 3. Rename/move the temp file to the unique, permanent filename
-        import shutil
         shutil.move(temp_wav_path, unique_wav_path)
 
         # 4. Set the app to use the new unique file
@@ -599,11 +599,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if new_bytes:
                 self.audio_queue.put(new_bytes)
 
-    def append_live_data(self, latest_point):
+    def append_live_data(self, latest_point: FeatureSnapshot):
         """Receives a single processed data point and appends it dynamically
         using the layout structures from update_plots.
         """
-        current_time = latest_point["time"]
+        current_time = latest_point.time
 
         # Use the structural mapping loop from update_plots
         for plot_name, plot in self.plots.items():
@@ -611,20 +611,22 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 result_key = curve['analysisResult']
 
                 # If this quality metric isn't an attribute of our results object, skip it
-                if not hasattr(self.analysis_results, result_key):
+                if not hasattr(self.analysedAudioFeatures, result_key):
                     print("key not in results: " + result_key)
                     continue
 
                 # Retrieve the specific SignalTimeSeries or BandwidthTimeSeries container
-                data_container = getattr(self.analysis_results, result_key)
+                data_container = getattr(self.analysedAudioFeatures, result_key)
 
                 # Ensure the specific point value exists in our incoming live stream packet
-                if result_key in latest_point and latest_point[result_key] is not None:
-                    new_y_val = latest_point[result_key]
+                if hasattr(latest_point, result_key) and latest_point.time and getattr(latest_point, result_key) is not None:
+                    new_y_val = getattr(latest_point, result_key)
 
                     # Append coordinates dynamically. Dataclasses guarantee they are numpy arrays.
                     data_container.x = np.append(data_container.x, current_time)
                     data_container.y = np.append(data_container.y, new_y_val)
+
+        self.update_plots()
 
     def handle_playback(self):
         if self.is_recording:

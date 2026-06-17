@@ -50,7 +50,8 @@ class AudioFeatures:
     F3_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F3_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
 
-    size: SignalTimeSeries = field(default_factory=lambda: np.array([]))
+    size: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    size_vs_weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     # Metadata (Initialized via your audio processing pipeline)
     sample_rate: float = 0.0
@@ -64,10 +65,6 @@ class FeatureSnapshot:
     loudness: float
     pitch: float
 
-    # Formant Ratios
-    F1_ratio: float
-    F3_ratio: float
-
     # Individual Formants
     F1: float
     F2: float
@@ -76,11 +73,16 @@ class FeatureSnapshot:
     # Spectral Slopes
     slopes: float
 
-    size: float
+    # Formant to pitch ratios and BW
+    F1_Pitch: Optional[float] = None
+    F2_Pitch: Optional[float] = None
+    F3_Pitch: Optional[float] = None
+    F1_Pitch_BW: Optional[float] = None
+    F2_Pitch_BW: Optional[float] = None
+    F3_Pitch_BW: Optional[float] = None
 
-    # IBWs (Optional, as they can be None on empty/silent chunks)
     F1_IBW: Optional[float] = None
     F2_IBW: Optional[float] = None
     F3_IBW: Optional[float] = None
-    F2_F1_IBW: Optional[float] = None
-    F3_F1_IBW: Optional[float] = None
+
+    size: Optional[float] = None

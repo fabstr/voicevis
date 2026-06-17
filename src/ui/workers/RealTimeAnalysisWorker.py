@@ -7,7 +7,7 @@ from signal_processing.AudioFeatures import FeatureSnapshot
 
 
 class RealTimeAnalysisWorker(QtCore.QThread):
-    new_data_point = QtCore.pyqtSignal(dict)
+    new_data_point = QtCore.pyqtSignal(FeatureSnapshot)
 
     def __init__(self, extractor, audio_queue, sample_rate=44100):
         super().__init__()
@@ -45,17 +45,13 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                 if self.total_samples_processed > (self.window_size_samples / 2):
                     results = self.extractor.analyzePCM(self.sliding_buffer, self.sample_rate)
 
-                    if results and len(results['pitch']['x']) > 0:
+                    if results and hasattr(results, 'pitch') and len(results.pitch.x) > 0:
                         latest_point = FeatureSnapshot(
                             time=current_time,
 
                             # Independent Plots
                             loudness=results.loudness.y[-1],
                             pitch=results.pitch.y[-1],
-
-                            # Formant Ratios
-                            F1_ratio=results.F2_F1.y[-1],
-                            F3_ratio=results.F3_F1.y[-1],
 
                             # Individual Formants
                             F1=results.F1.y[-1],
@@ -65,12 +61,18 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                             # Spectral Slopes
                             slopes=results.slopes.y[-1],
 
-                            # IBWs (with safety guards for empty arrays)
+                            F1_Pitch = results.F1_Pitch.y[-1] if len(results.F1_Pitch.y) > 0 else None,
+                            F2_Pitch = results.F2_Pitch.y[-1] if len(results.F2_Pitch.y) > 0 else None,
+                            F3_Pitch = results.F3_Pitch.y[-1] if len(results.F3_Pitch.y) > 0 else None,
+
+                            F1_Pitch_BW = results.F1_Pitch_BW.y[-1] if len(results.F1_Pitch_BW.y) > 0 else None,
+                            F2_Pitch_BW = results.F2_Pitch_BW.y[-1] if len(results.F2_Pitch_BW.y) > 0 else None,
+                            F3_Pitch_BW = results.F3_Pitch_BW.y[-1] if len(results.F3_Pitch_BW.y) > 0 else None,
+
                             F1_IBW=results.F1_IBW.y[-1] if len(results.F1_IBW.y) > 0 else None,
                             F2_IBW=results.F2_IBW.y[-1] if len(results.F2_IBW.y) > 0 else None,
                             F3_IBW=results.F3_IBW.y[-1] if len(results.F3_IBW.y) > 0 else None,
-                            F2_F1_IBW=results.F2_F1_IBW.y[-1] if len(results.F2_F1_IBW.y) > 0 else None,
-                            F3_F1_IBW=results.F3_F1_IBW.y[-1] if len(results.F3_F1_IBW.y) > 0 else None,
+                            size=results.size.y[-1] if len(results.size.y) > 0 else None,
                         )
                         self.new_data_point.emit(latest_point)
 

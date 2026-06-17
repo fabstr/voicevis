@@ -9,43 +9,43 @@
     "Pitch": {
         "Pitch": {
             "enabled": true,
-            "min": 185.31156011508253,
-            "max": 190.89019982746575
+            "min": 161.0,
+            "max": 209.0
         }
     },
     "F3_Pitch": {
         "F3_Pitch": {
             "enabled": true,
-            "min": 15.499986989619643,
-            "max": 16.071878643647644
+            "min": 12.95,
+            "max": 15.92
         }
     },
     "F2_Pitch": {
         "F2_Pitch": {
             "enabled": true,
-            "min": 9.525858608840919,
-            "max": 9.877227747854269
+            "min": 7.92,
+            "max": 9.56
         }
     },
     "F1_Pitch": {
         "F1_Pitch": {
             "enabled": true,
-            "min": 3.2339361684454198,
-            "max": 3.367380921998284
+            "min": 2.38,
+            "max": 3.27
         }
     },
     "Size": {
         "Size": {
             "enabled": true,
-            "min": -4.0,
-            "max": 4.0
+            "min": -2.0,
+            "max": 2.0
         }
     },
     "Weight": {
         "Weight": {
             "enabled": true,
-            "min": 9.9944107248865e-08,
-            "max": 1.0555329910942937e-07
+            "min": 7.4915e-08,
+            "max": 1.2780e-07
         }
     }
 }

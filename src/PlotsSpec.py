@@ -199,52 +199,6 @@ spec = {
         'linkX': 'Loudness'
     },
 
-    # 'F3_F1': {
-    #     'title': 'Formant ratio F3/F1',
-    #     'y_min': 1,
-    #     'y_max': 9,
-    #     'curves': {
-    #         'F3_F1': {
-    #             'size': defaultSize,
-    #             'colour': white,
-    #             'analysisResult': 'F3_F1'
-    #         },
-    #         "F3_F1_IBW": {
-    #             'size': defaultSize,
-    #             'colour': ratio_f3_f1,
-    #             'analysisResult': 'F3_F1_IBW',
-    #             'BW': True
-    #         },
-    #     },
-    #     'targets': {
-    #         'F3_F1': {'colour': target_ratio_f3}
-    #     },
-    #     'linkX': 'Loudness'
-    # },
-    #
-    # 'F2_F1': {
-    #     'title': 'Formant ratio F2/F1',
-    #     'y_min': 1,
-    #     'y_max': 5,
-    #     'curves': {
-    #         'F2_F1': {
-    #             'size': defaultSize,
-    #             'colour': white,
-    #             'analysisResult': 'F2_F1'
-    #         },
-    #         "F2_F1_IBW": {
-    #             'size': defaultSize,
-    #             'colour': ratio_f2_f1,
-    #             'analysisResult': 'F2_F1_IBW',
-    #             'BW': True
-    #         },
-    #     },
-    #     'targets': {
-    #         'F2_F1': {'colour': target_ratio_f2}
-    #     },
-    #     'linkX': 'Loudness'
-    # },
-
     "Size": {
         'title': 'Size',
         'y_min': -15,
