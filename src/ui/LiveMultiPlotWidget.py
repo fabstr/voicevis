@@ -18,6 +18,7 @@ from PlotsSpec import spec, defaultSize, default_stretch
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
+from ui.HelpWindow import HelpWindow
 from ui.workers.AnalysisWorker import AnalysisWorker
 from ui.workers.PlaybackWorker import PlaybackWorker
 from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
@@ -53,6 +54,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         self.setup_GUI()
         self.setup_audio()
+
+        self.help_window = None
 
     def setup_audio(self):
         # 1. Define the audio format (Standard CD quality PCM)
@@ -170,6 +173,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         self.handle_toggle_bandwidth(p_key, c_key, checked)
                     )
                     self.menu_toggle_actions['bandwidths'][(plot_key, curve_key)] = show_bw_action
+
+        # Build the Help Menu
+        help_menu = self.menu_bar.addMenu("Help")
+
+        # Add the Action
+        open_help_action = help_menu.addAction("Documentation")
+        open_help_action.setShortcut("F1")
+        open_help_action.triggered.connect(self.show_help_window)
 
         self.layout.setMenuBar(self.menu_bar)
 
@@ -1285,6 +1296,16 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error",
                                                f"An error occurred while saving the audio:\n{str(e)}")
+
+    def show_help_window(self):
+        # Create the window only if it doesn't exist yet
+        if self.help_window is None:
+            self.help_window = HelpWindow()
+
+        # Show it and bring it to the front
+        self.help_window.show()
+        self.help_window.raise_()
+        self.help_window.activateWindow()
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
