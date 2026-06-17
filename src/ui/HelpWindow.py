@@ -66,9 +66,9 @@ class HelpWindow(QWidget):
                     "title": title,
                     "file_name": file_path
                 }
-
+                print(filename)
                 # Check if this is our main file
-                if filename.lower() == "README.md":
+                if filename.lower() == "readme.md":
                     main_item = item
                 else:
                     help_items.append(item)
@@ -76,6 +76,7 @@ class HelpWindow(QWidget):
         # If main.md was found, insert it at the very top (index 0)
         if main_item:
             help_items.insert(0, main_item)
+        print("main", main_item)
 
         return help_items
 
