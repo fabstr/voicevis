@@ -86,7 +86,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.setupPlots()
 
         self.timer = QtCore.QTimer()
-        self.timer.setInterval(30)
+        self.timer.setInterval(33)
         self.timer.timeout.connect(self.update_plots)
 
     def setupMenu(self):
@@ -243,6 +243,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         for plot_name, plot_spec in spec.items():
             plot = pg.PlotWidget(title=plot_spec['title'])
             plot.showGrid(x=True, y=True, alpha=0.3)
+            plot.setClipToView(True)
+            plot.setDownsampling(mode='peak', auto=True)
 
             # Determine stretch factor
             stretch = plot_spec.get('stretch', default_stretch)
@@ -284,6 +286,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         brush=pg.mkBrush(curveSpec['colour'])
                     )
                     self.plots[plot_name]['curves'][curveName]['fill_band'] = fill_item
+
+                    
 
                     # 3. CRITICAL: Add all 3 items explicitly to the plot viewport canvas
                     self.plots[plot_name]['plot'].addItem(min_curve)
@@ -803,7 +807,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 # Retrieve the data object (e.g., a SignalTimeSeries or BandwidthTimeSeries instance)
                 data = getattr(self.analysedAudioFeatures, curve['analysisResult'])
 
-                # Guard against unexpected types (mimicking your isinstance(data, list) check)
+                # Guard against unexpected types
                 if not hasattr(data, 'x') or not hasattr(data, 'y'):
                     continue
 
@@ -821,6 +825,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                         new_upper = y_arr + (bw_arr / 2)
                         new_lower = y_arr - (bw_arr / 2)
+
+                        # Assuming an analysis step of ~50-100ms, any gap > 0.15s means silence.
+                        # Adjust this threshold if your frame rate changes!
+                        gap_threshold = 0.15
+
+                        if len(x_arr) > 1:
+                            # Find indices where the time difference exceeds our threshold
+                            gaps = np.where(np.diff(x_arr) > gap_threshold)[0] + 1
+
+                            if len(gaps) > 0:
+                                # Insert NaN at these indices to tell PyQtGraph to stop drawing
+                                x_arr = np.insert(x_arr, gaps, np.nan)
+                                new_upper = np.insert(new_upper, gaps, np.nan)
+                                new_lower = np.insert(new_lower, gaps, np.nan)
 
                         # Set data coordinates directly on the individual curves
                         curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
@@ -847,6 +865,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # Move the vertical lines to the new X position
         for plot_name, plot in self.plots.items():
             plot['playhead'].setValue(self.current_playback_time)
+
+            if self.is_recording:
+                view_window_seconds = 10.0
+                min_x = max(0.0, self.current_playback_time - view_window_seconds)
+                plot['plot'].setXRange(min_x, max(view_window_seconds, self.current_playback_time), padding=0)
 
     def save_annotations(self):
         """Saves the self.annotations list of AnnotationMarker objects to a text file."""
