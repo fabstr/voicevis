@@ -33,13 +33,6 @@ class AudioFeatures:
     F3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F3_IBW: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
-    # Formant Ratios
-    F2_F1: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F2_F1_IBW: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-
-    F3_F1: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F3_F1_IBW: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-
     # Pitch-Relative Formants (Standard & Bandwidth variants)
     F1_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F1_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)

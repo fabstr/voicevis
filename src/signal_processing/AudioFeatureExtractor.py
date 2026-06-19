@@ -1,5 +1,4 @@
 import time
-from dataclasses import dataclass
 
 import opensmile
 import miniaudio
@@ -55,26 +54,6 @@ class AudioFeatureExtractor:
         audio_length = len(pcm_data) / float(sampling_rate)
         return self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
 
-    def convertMp3ToPcm(self, mp3_path):
-        # 1. Decode MP3 to raw PCM using miniaudio
-        audio_file = miniaudio.decode_file(mp3_path)
-        sampling_rate = audio_file.sample_rate
-        num_channels = audio_file.nchannels
-
-        # Convert raw memory buffer to a standard 16-bit integer array
-        pcm_data = np.frombuffer(audio_file.samples, dtype=np.int16)
-
-        # 2. Convert to Mono if Stereo
-        # openSMILE speech features (like pitch/formants) expect a single channel
-        if num_channels > 1:
-            pcm_data = pcm_data.reshape(-1, num_channels)
-            pcm_data = pcm_data.mean(axis=1)  # Average left and right channels
-
-        # 3. Normalize to floating-point values between -1.0 and 1.0
-        # openSMILE expects standard normalized float32/64 audio signals
-        signal = pcm_data.astype(np.float32) / 32768.0
-        return signal, sampling_rate
-
     def analyzeFile(self, path) -> AudioFeatures:
         if (path.endswith('.wav')):
             samples, sampling_rate, audio_length = load_pcm_from_wave(path)
@@ -94,7 +73,7 @@ class AudioFeatureExtractor:
         elif (path.endswith('.mp3')):
 
             start_time = time.perf_counter()
-            pcm_data, sampling_rate = self.convertMp3ToPcm(path)
+            pcm_data, sampling_rate = convertMp3ToPcm(path)
             elapsed_time = time.perf_counter() - start_time
             # print(f"MP3 convertion time: {elapsed_time:.4f} seconds.")
 
@@ -143,9 +122,6 @@ class AudioFeatureExtractor:
             F1=SignalTimeSeries(x=t_filtered, y=f1[valid_mask]),
             F2=SignalTimeSeries(x=t_filtered, y=f2[valid_mask]),
             F3=SignalTimeSeries(x=t_filtered, y=f3[valid_mask]),
-
-            F2_F1=SignalTimeSeries(x=t_filtered, y=f2[valid_mask] / f1[valid_mask]),
-            F3_F1=SignalTimeSeries(x=t_filtered, y=f3[valid_mask] / f1[valid_mask]),
 
             loudness=SignalTimeSeries(x=t_filtered, y=loudness_raw[valid_mask]),
 
@@ -489,3 +465,23 @@ def calculate_target_error(vector, target):
 
     # Simple subtraction replaces np.clip
     return vector - target
+
+def convertMp3ToPcm(mp3_path):
+    # 1. Decode MP3 to raw PCM using miniaudio
+    audio_file = miniaudio.decode_file(mp3_path)
+    sampling_rate = audio_file.sample_rate
+    num_channels = audio_file.nchannels
+
+    # Convert raw memory buffer to a standard 16-bit integer array
+    pcm_data = np.frombuffer(audio_file.samples, dtype=np.int16)
+
+    # 2. Convert to Mono if Stereo
+    # openSMILE speech features (like pitch/formants) expect a single channel
+    if num_channels > 1:
+        pcm_data = pcm_data.reshape(-1, num_channels)
+        pcm_data = pcm_data.mean(axis=1)  # Average left and right channels
+
+    # 3. Normalize to floating-point values between -1.0 and 1.0
+    # openSMILE expects standard normalized float32/64 audio signals
+    signal = pcm_data.astype(np.float32) / 32768.0
+    return signal, sampling_rate

@@ -26,12 +26,6 @@ class TargetConfig:
     f1_pitch_min: float = 1.0
     f1_pitch_max: float = 15.0
 
-    # Formant Ratios
-    f3_f1_min: float = 1.0
-    f3_f1_max: float = 9.0
-    f2_f1_min: float = 1.0
-    f2_f1_max: float = 5.0
-
     # Advanced Metrics
     size_min: float = -500.0
     size_max: float = 1000.0
