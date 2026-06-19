@@ -5,8 +5,6 @@ outliers_m = 5.
 # Colours
 loudness      = "#00ffffFF"
 pitch         = "#ff00ffAA"
-ratio_f2_f1   = "#37ff144b"
-ratio_f3_f1   = "#ffd9007c"
 f1            = "#00bfff6e"
 f2            = "#ff7f5073"
 f3            = "#ba55d377"

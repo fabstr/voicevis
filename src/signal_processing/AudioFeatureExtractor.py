@@ -144,12 +144,6 @@ class AudioFeatureExtractor:
         result.slopes = SignalTimeSeries(x=t_filtered, y=matched_slopes)
 
         if len(t_filtered) > 0:
-            print('len(t_filtered) = ', len(t_filtered))
-
-            # ... [The rest of your BW calculations remain unchanged here] ...
-
-        if len(t_filtered) > 0:
-            print('len(t_filtered) = ', len(t_filtered))
             # 4. Handle Outliers (Note: reject_outliers should now accept/return SignalTimeSeries)
             # result.pitch = reject_outliers(result.pitch)
 
@@ -231,7 +225,7 @@ class AudioFeatureExtractor:
         return result
 
     def recalculate_size(self):
-        if self.cachedResults is None:
+        if self.cachedResults is None or self.target_config is None:
             return None
 
         f1_min = self.target_config.f1_pitch_min
@@ -485,3 +479,4 @@ def convertMp3ToPcm(mp3_path):
     # openSMILE expects standard normalized float32/64 audio signals
     signal = pcm_data.astype(np.float32) / 32768.0
     return signal, sampling_rate
+
