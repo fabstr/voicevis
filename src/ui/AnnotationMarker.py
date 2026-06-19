@@ -1,6 +1,5 @@
 import os
 import json
-from PyQt6 import QtWidgets, QtCore
 import pyqtgraph as pg
 
 

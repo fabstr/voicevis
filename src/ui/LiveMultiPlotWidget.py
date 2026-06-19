@@ -28,6 +28,9 @@ from utils import save_to_temp_wav
 class LiveMultiPlotWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
 
+
+    #################### Init ####################
+
     def __init__(self):
         super().__init__()
 
@@ -383,51 +386,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
 
 
-    def browse_file(self):
-        file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "Select Audio or Annotation File",
-            "",
-            "Supported Files (*.wav *.mp3 *.json);;Audio Files (*.wav *.mp3);;Annotations (*.json);;All Files (*)"
-        )
-
-        if file_name:
-            if file_name.lower().endswith('.json'):
-                self.load_annotations_file(file_name)
-            else:
-                self.clear_annotations()
-                self.file_path = file_name
-                self.file_loaded_signal.emit(file_name)
-                self.selectAnalysisFile(file_name)
-
-    def selectAnalysisFile(self, file_name):
-        # 1. Setup and show the loading dialog
-        self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio file...", None, 0, 0, self)
-        self.loading_dialog.setWindowTitle("Please Wait")
-        self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
-        self.loading_dialog.setMinimumDuration(0)  # Ensure it shows immediately
-        self.loading_dialog.show()
-
-        # 2. Setup the worker thread
-        self.worker = AnalysisWorker(self.audioFeatureExtractor, file_name)
-
-        # Connect signals to slots
-        self.worker.result_ready.connect(self.on_analysis_finished)
-        self.worker.error_occurred.connect(self.on_analysis_error)
-        self.worker.finished.connect(self.loading_dialog.close)
-
-        # 3. Start the background thread
-        self.worker.start()
-
-    def on_analysis_finished(self, results):
-        """Called automatically when the worker thread finishes successfully."""
-        self.analysedAudioFeatures = results
-        self.current_playback_time = 0
-        self.update_plots()
-
-    def on_analysis_error(self, error_msg):
-        """Called automatically if the worker thread encounters an error."""
-        QtWidgets.QMessageBox.critical(self, "Analysis Error", f"An error occurred during analysis:\n{error_msg}")
+    #################### File loading/saving ####################
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -446,31 +405,24 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.file_path = file_path
                 self.file_loaded_signal.emit(file_path)
                 self.clear_annotations()
-                self.selectAnalysisFile(file_path)
+                self.select_analysis_file(file_path)
 
-    def keyPressEvent(self, event):
-        # Check if the pressed key is the Spacebar
-        if event.key() == QtCore.Qt.Key.Key_Space:
-            if self.is_playing:
-                # FIXED: Route through stop_playback to safely stop the worker thread and change the button icon
-                self.stop_playback()
+    def browse_file(self):
+        file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Audio or Annotation File",
+            "",
+            "Supported Files (*.wav *.mp3 *.json);;Audio Files (*.wav *.mp3);;Annotations (*.json);;All Files (*)"
+        )
+
+        if file_name:
+            if file_name.lower().endswith('.json'):
+                self.load_annotations_file(file_name)
             else:
-                if self.file_path:
-                    self.seek_and_play()
-
-            event.accept()  # Tell Qt we handled this key press
-        else:
-            # Pass any other keys (like arrows, etc.) back to the standard Qt handler
-            super().keyPressEvent(event)
-
-    def clear_annotations(self):
-        """Removes all current annotations from the plots and memory."""
-        for ann in self.annotations:
-            marker = ann.get('marker')
-            plot_name = ann.get('plot')
-            if marker:
-                self.plots[plot_name]['plot'].removeItem(marker)
-        self.annotations.clear()
+                self.clear_annotations()
+                self.file_path = file_name
+                self.file_loaded_signal.emit(file_name)
+                self.select_analysis_file(file_name)
 
     def load_annotations_file(self, json_file_path):
         """Parses a JSON annotation file, loads the linked audio, and redraws markers."""
@@ -493,7 +445,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.clear_annotations()
             self.file_path = active_audio_path
             self.file_loaded_signal.emit(self.file_path)
-            self.selectAnalysisFile(active_audio_path)
+            self.select_analysis_file(active_audio_path)
 
             # 3. Parse annotations
             for annotation in annotations:
@@ -532,6 +484,76 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
                                            f"An error occurred while loading annotations:\n{str(e)}")
+
+    def save_audio(self):
+        """Saves the currently loaded/recorded audio to a permanent WAV file."""
+        if not hasattr(self, 'file_path') or not self.file_path or not os.path.exists(self.file_path):
+            QtWidgets.QMessageBox.warning(self, "No Audio", "There is no audio currently loaded or recorded to save.")
+            return
+
+        # Determine a default save name based on the current file path
+        base_path, _ = os.path.splitext(self.file_path)
+        default_save_path = f"{base_path}_saved.wav"
+
+        # Open a save file dialog
+        save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Audio As",
+            default_save_path,
+            "WAV Files (*.wav);;All Files (*)"
+        )
+
+        if save_path:
+            try:
+                # Copy the temporary/current file to the new permanent destination
+                shutil.copy2(self.file_path, save_path)
+                print(f"Successfully saved audio to: {save_path}")
+
+                # Update the application's file path to point to the new permanent file
+                # This ensures future annotations save alongside the permanent file, not the temp one.
+                self.file_path = save_path
+                self.file_loaded_signal.emit(self.file_path)
+
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Save Error",
+                                               f"An error occurred while saving the audio:\n{str(e)}")
+
+
+
+    #################### File analysis ####################
+
+    def select_analysis_file(self, file_name):
+        # 1. Setup and show the loading dialog
+        self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio file...", None, 0, 0, self)
+        self.loading_dialog.setWindowTitle("Please Wait")
+        self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+        self.loading_dialog.setMinimumDuration(0)  # Ensure it shows immediately
+        self.loading_dialog.show()
+
+        # 2. Setup the worker thread
+        self.worker = AnalysisWorker(self.audioFeatureExtractor, file_name)
+
+        # Connect signals to slots
+        self.worker.result_ready.connect(self.on_analysis_finished)
+        self.worker.error_occurred.connect(self.on_analysis_error)
+        self.worker.finished.connect(self.loading_dialog.close)
+
+        # 3. Start the background thread
+        self.worker.start()
+
+    def on_analysis_finished(self, results):
+        """Called automatically when the worker thread finishes successfully."""
+        self.analysedAudioFeatures = results
+        self.current_playback_time = 0
+        self.update_plots()
+
+    def on_analysis_error(self, error_msg):
+        """Called automatically if the worker thread encounters an error."""
+        QtWidgets.QMessageBox.critical(self, "Analysis Error", f"An error occurred during analysis:\n{error_msg}")
+
+
+
+    #################### Record, playback ####################
 
     def handle_record_stop(self):
         if self.is_playing:
@@ -615,8 +637,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.update_playhead()
 
         # Perform analysis
-        self.selectAnalysisFile(self.file_path)
-
+        self.select_analysis_file(self.file_path)
 
     def read_audio_chunk(self):
         """Safely slices new audio bytes directly from RAM without touching the buffer cursor."""
@@ -673,131 +694,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         else:
             self.stop_playback()
 
-    def on_mouse_clicked(self, event, plot_widget, plot_name):
-        # Check if the click was a left-click
-        if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            pos = event.scenePos()  # The pixel coordinates of the click
+    def stop_playback(self):
+        self.is_playing = False
+        self.playback_btn.setIcon(self.play_icon)  # FIXED: Ensured icon always goes to Play
 
-            # We don't need to guess the plot anymore; we just use plot_widget!
-            mouse_point = plot_widget.plotItem.vb.mapSceneToView(pos)
+        if hasattr(self, 'play_worker'):
+            self.play_worker.stop_backend()
 
-            # The X and Y coordinates
-            target_time = mouse_point.x()
-            target_y = mouse_point.y()
-
-            HIT_RADIUS_PIXELS = 15  # Generous clickable area
-            clicked_marker = None
-
-            for ann in self.annotations:
-                if ann['plot'] == plot_name:
-                    marker = ann['marker']
-
-                    # Map the marker's underlying data coordinates back to screen pixels
-                    marker_pt = QtCore.QPointF(marker.x_val, marker.y_val)
-                    scene_pt = plot_widget.plotItem.vb.mapViewToScene(marker_pt)
-
-                    if scene_pt:
-                        # Calculate the physical pixel distance between the mouse and the star
-                        dist = ((scene_pt.x() - pos.x()) ** 2 + (scene_pt.y() - pos.y()) ** 2) ** 0.5
-                        if dist <= HIT_RADIUS_PIXELS:
-                            clicked_marker = marker
-                            break
-
-            if clicked_marker:
-                self.add_annotation(
-                    plot_name, plot_widget,
-                    clicked_marker.x_val, clicked_marker.y_val,
-                    existing_marker=clicked_marker
-                )
-            else:
-                # if a double click, handle new annotations
-                if event.double():
-                    self.add_annotation(plot_name, plot_widget, target_time, target_y)
-
-                # if a single click, update current playback time and handle playback
-                else:
-                    self.current_playback_time = target_time
-
-                    if self.is_playing:
-                        self.seek_and_play()
-
-                    self.update_playhead()
-
-    def add_annotation(self, plot_name, plot, target_time, target_y, existing_marker=None):
-        # FIXED: Route cleanly through stop_playback() to keep states and UI synced
-        if self.is_playing:
-            self.stop_playback()
-            self.paused_time = time.time() - self.playback_start_time
-
-        # Setup the Custom Dialog Window
-        dialog = QtWidgets.QDialog(self)
-        title = "Edit Annotation" if existing_marker else "New Annotation"
-        dialog.setWindowTitle(f"{title} - {plot_name} @ {target_time:.2f}s")
-        dialog.setMinimumWidth(400)
-
-        layout = QtWidgets.QVBoxLayout(dialog)
-
-        # Multi-row text box
-        text_edit = QtWidgets.QTextEdit(dialog)
-        if existing_marker:
-            text_edit.setPlainText(existing_marker.text_val)
-        layout.addWidget(text_edit)
-
-        # Setup Buttons
-        btn_layout = QtWidgets.QHBoxLayout()
-        save_btn = QtWidgets.QPushButton("Save")
-        cancel_btn = QtWidgets.QPushButton("Cancel")
-        btn_layout.addWidget(save_btn)
-
-        # Only show the Delete button if we are editing an existing annotation
-        if existing_marker:
-            delete_btn = QtWidgets.QPushButton("Delete")
-            btn_layout.addWidget(delete_btn)
-
-            def on_delete():
-                # Remove the visual symbol from the graph
-                plot.removeItem(existing_marker)
-                # Remove the dictionary from our master list
-                self.annotations = [a for a in self.annotations if a.get('marker') != existing_marker]
-                dialog.accept()
-
-            delete_btn.clicked.connect(on_delete)
-
-        btn_layout.addWidget(cancel_btn)
-        layout.addLayout(btn_layout)
-
-        # Save Logic
-        def on_save():
-            new_text = text_edit.toPlainText().strip()
-            if new_text:
-                if existing_marker:
-                    # Update existing marker and dict
-                    existing_marker.text_val = new_text
-                    existing_marker.setToolTip(new_text)
-                    for ann in self.annotations:
-                        if ann.get('marker') == existing_marker:
-                            ann['text'] = new_text
-                            break
-                else:
-                    # Create new marker
-                    marker = AnnotationMarker(target_time, target_y, new_text, plot_name, plot, self)
-                    plot.addItem(marker)
-
-                    # Store the complete dict
-                    self.annotations.append({
-                        "time": target_time,
-                        "y": target_y,
-                        "text": new_text,
-                        "plot": plot_name,
-                        "marker": marker  # Keeping the object reference makes deletion easy
-                    })
-            dialog.accept()
-
-        # Connect buttons
-        save_btn.clicked.connect(on_save)
-        cancel_btn.clicked.connect(dialog.reject)
-
-        dialog.exec()
+        self.timer.stop()
 
     def seek_and_play(self):
         target_time = max(0.0, self.current_playback_time)
@@ -817,101 +721,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.is_playing = True
         self.playback_btn.setIcon(self.pause_icon)  # FIXED: Unified explicit icon setting here
         self.timer.start()
-
-    def stop_playback(self):
-        self.is_playing = False
-        self.playback_btn.setIcon(self.play_icon)  # FIXED: Ensured icon always goes to Play
-
-        if hasattr(self, 'play_worker'):
-            self.play_worker.stop_backend()
-
-        self.timer.stop()
-
-    def update_plots(self):
-        for plot_name, plot_container in self.plots.items():
-            for curve_name, curve in plot_container['curves'].items():
-                # Ensure the required feature exists in our AudioFeatures result object
-                if not hasattr(self.analysedAudioFeatures, curve['analysisResult']):
-                    continue
-
-                # Retrieve the data object (e.g., a SignalTimeSeries or BandwidthTimeSeries instance)
-                data = getattr(self.analysedAudioFeatures, curve['analysisResult'])
-
-                # Guard against unexpected types
-                if not hasattr(data, 'x') or not hasattr(data, 'y'):
-                    continue
-
-                if len(data.x) != len(data.y):
-                    print(f"Mismatch in length for {plot_name}.{curve_name}")
-                else:
-                    if 'has_bw' in curve:
-                        y_arr = np.array(data.y, dtype=float)
-                        x_arr = np.array(data.x, dtype=float)
-
-                        if isinstance(data, BandwidthTimeSeries) and len(data.BW) == len(y_arr):
-                            bw_arr = np.array(data.BW, dtype=float)
-                        else:
-                            bw_arr = np.zeros_like(y_arr)
-
-                        new_upper = y_arr + (bw_arr / 2)
-                        new_lower = y_arr - (bw_arr / 2)
-
-                        # Assuming an analysis step of ~50-100ms, any gap > 0.15s means silence.
-                        # Adjust this threshold if your frame rate changes!
-                        gap_threshold = 0.15
-
-                        if len(x_arr) > 1:
-                            # Find indices where the time difference exceeds our threshold
-                            gaps = np.where(np.diff(x_arr) > gap_threshold)[0] + 1
-
-                            if len(gaps) > 0:
-                                # Insert NaN at these indices to tell PyQtGraph to stop drawing
-                                x_arr = np.insert(x_arr, gaps, np.nan)
-                                new_upper = np.insert(new_upper, gaps, np.nan)
-                                new_lower = np.insert(new_lower, gaps, np.nan)
-
-                        # Set data coordinates directly on the individual curves
-                        curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
-                        curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
-                    else:
-                        if 'colorSource' in curve:
-                            # 1. Fetch the Z-axis data (Weight / slopes)
-                            z_feature = curve['colorSource']
-                            if hasattr(self.analysedAudioFeatures, z_feature):
-                                z_data = getattr(self.analysedAudioFeatures, z_feature)
-
-                                # 2. Proceed only if we have data to map
-                                if len(z_data.x) > 0 and len(data.x) > 0:
-                                    # Interpolate Z to match Y's exact timestamps
-                                    z_interp = np.interp(data.x, z_data.x, z_data.y)
-
-                                    # --- [UPDATED] Hard limits for the colormap ---
-                                    z_min = 0.0
-                                    z_max = 4e-7
-
-                                    # Clip values to ensure they don't exceed the bounds
-                                    z_clipped = np.clip(z_interp, z_min, z_max)
-
-                                    # Normalize Z to a 0.0 - 1.0 scale based strictly on the hard limits
-                                    z_norm = (z_clipped - z_min) / (z_max - z_min)
-                                    # ----------------------------------------------
-
-                                    # 3. Apply a scientific colormap (Viridis)
-                                    cmap = pg.colormap.get('viridis')
-                                    colors = cmap.map(z_norm)  # Returns RGBA tuples/arrays
-
-                                    # Generate PyQTGraph brushes
-                                    brushes = [pg.mkBrush(tuple(c)) for c in colors]
-
-                                    # Draw with dynamic colors
-                                    curve['curve'].setData(x=data.x, y=data.y, symbolBrush=brushes)
-                                else:
-                                    curve['curve'].setData(x=data.x, y=data.y)
-                        else:
-                            # Standard uniform color drawing
-                            curve['curve'].setData(x=data.x, y=data.y)
-
-        self.update_playhead()
 
     def update_playhead(self):
         if self.is_playing:
@@ -936,34 +745,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 min_x = max(0.0, self.current_playback_time - view_window_seconds)
                 plot['plot'].setXRange(min_x, max(view_window_seconds, self.current_playback_time), padding=0)
 
-    def save_annotations(self):
-        """Saves the self.annotations list of AnnotationMarker objects to a JSON file."""
-        if not hasattr(self, 'annotations') or not self.annotations:
-            QtWidgets.QMessageBox.warning(self, "No Annotations", "There are no annotations to save yet.")
-            return
 
-        # Determine Default Save Path
-        default_save_path = ""
-        if hasattr(self, 'file_path') and self.file_path:
-            base_path, _ = os.path.splitext(self.file_path)
-            default_save_path = f"{base_path}.json"  # Changed to .json
 
-        # Open a save file dialog
-        save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "Save Annotations",
-            default_save_path,
-            "JSON Files (*.json);;All Files (*)"  # Changed filter
-        )
-
-        if save_path and self.file_path is not None:
-            try:
-                markers = [ann['marker'] for ann in self.annotations if 'marker' in ann]
-                AnnotationMarker.save_to_file(save_path, markers, self.file_path)
-                print(f"Successfully saved annotations to: {save_path}")
-
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{str(e)}")
+    #################### Misc plot stuff ####################
 
     def handle_symbol_size_change(self, value):
         """
@@ -1093,6 +877,96 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     action_key = (plot_key, curve_key)
                     if action_key in self.menu_toggle_actions['bandwidths']:
                         self.menu_toggle_actions['bandwidths'][action_key].setChecked(True)
+
+    def update_plots(self):
+        for plot_name, plot_container in self.plots.items():
+            for curve_name, curve in plot_container['curves'].items():
+                # Ensure the required feature exists in our AudioFeatures result object
+                if not hasattr(self.analysedAudioFeatures, curve['analysisResult']):
+                    continue
+
+                # Retrieve the data object (e.g., a SignalTimeSeries or BandwidthTimeSeries instance)
+                data = getattr(self.analysedAudioFeatures, curve['analysisResult'])
+
+                # Guard against unexpected types
+                if not hasattr(data, 'x') or not hasattr(data, 'y'):
+                    continue
+
+                if len(data.x) != len(data.y):
+                    print(f"Mismatch in length for {plot_name}.{curve_name}")
+                else:
+                    if 'has_bw' in curve:
+                        y_arr = np.array(data.y, dtype=float)
+                        x_arr = np.array(data.x, dtype=float)
+
+                        if isinstance(data, BandwidthTimeSeries) and len(data.BW) == len(y_arr):
+                            bw_arr = np.array(data.BW, dtype=float)
+                        else:
+                            bw_arr = np.zeros_like(y_arr)
+
+                        new_upper = y_arr + (bw_arr / 2)
+                        new_lower = y_arr - (bw_arr / 2)
+
+                        # Assuming an analysis step of ~50-100ms, any gap > 0.15s means silence.
+                        # Adjust this threshold if your frame rate changes!
+                        gap_threshold = 0.15
+
+                        if len(x_arr) > 1:
+                            # Find indices where the time difference exceeds our threshold
+                            gaps = np.where(np.diff(x_arr) > gap_threshold)[0] + 1
+
+                            if len(gaps) > 0:
+                                # Insert NaN at these indices to tell PyQtGraph to stop drawing
+                                x_arr = np.insert(x_arr, gaps, np.nan)
+                                new_upper = np.insert(new_upper, gaps, np.nan)
+                                new_lower = np.insert(new_lower, gaps, np.nan)
+
+                        # Set data coordinates directly on the individual curves
+                        curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
+                        curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
+                    else:
+                        if 'colorSource' in curve:
+                            # 1. Fetch the Z-axis data (Weight / slopes)
+                            z_feature = curve['colorSource']
+                            if hasattr(self.analysedAudioFeatures, z_feature):
+                                z_data = getattr(self.analysedAudioFeatures, z_feature)
+
+                                # 2. Proceed only if we have data to map
+                                if len(z_data.x) > 0 and len(data.x) > 0:
+                                    # Interpolate Z to match Y's exact timestamps
+                                    z_interp = np.interp(data.x, z_data.x, z_data.y)
+
+                                    # --- [UPDATED] Hard limits for the colormap ---
+                                    z_min = 0.0
+                                    z_max = 4e-7
+
+                                    # Clip values to ensure they don't exceed the bounds
+                                    z_clipped = np.clip(z_interp, z_min, z_max)
+
+                                    # Normalize Z to a 0.0 - 1.0 scale based strictly on the hard limits
+                                    z_norm = (z_clipped - z_min) / (z_max - z_min)
+                                    # ----------------------------------------------
+
+                                    # 3. Apply a scientific colormap (Viridis)
+                                    cmap = pg.colormap.get('viridis')
+                                    colors = cmap.map(z_norm)  # Returns RGBA tuples/arrays
+
+                                    # Generate PyQTGraph brushes
+                                    brushes = [pg.mkBrush(tuple(c)) for c in colors]
+
+                                    # Draw with dynamic colors
+                                    curve['curve'].setData(x=data.x, y=data.y, symbolBrush=brushes)
+                                else:
+                                    curve['curve'].setData(x=data.x, y=data.y)
+                        else:
+                            # Standard uniform color drawing
+                            curve['curve'].setData(x=data.x, y=data.y)
+
+        self.update_playhead()
+
+
+
+    #################### Targets ####################
 
     def open_targets_dialog(self):
         """Displays a dialog box allowing the user to configure visual targets."""
@@ -1268,38 +1142,196 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Load Error",
                                            f"An error occurred while loading targets:\n{str(e)}")
 
-    def save_audio(self):
-        """Saves the currently loaded/recorded audio to a permanent WAV file."""
-        if not hasattr(self, 'file_path') or not self.file_path or not os.path.exists(self.file_path):
-            QtWidgets.QMessageBox.warning(self, "No Audio", "There is no audio currently loaded or recorded to save.")
+
+
+    #################### Mouse & keyboard actions ####################
+
+    def keyPressEvent(self, event):
+        # Check if the pressed key is the Spacebar
+        if event.key() == QtCore.Qt.Key.Key_Space:
+            if self.is_playing:
+                # FIXED: Route through stop_playback to safely stop the worker thread and change the button icon
+                self.stop_playback()
+            else:
+                if self.file_path:
+                    self.seek_and_play()
+
+            event.accept()  # Tell Qt we handled this key press
+        else:
+            # Pass any other keys (like arrows, etc.) back to the standard Qt handler
+            super().keyPressEvent(event)
+
+    def on_mouse_clicked(self, event, plot_widget, plot_name):
+        # Check if the click was a left-click
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            pos = event.scenePos()  # The pixel coordinates of the click
+
+            # We don't need to guess the plot anymore; we just use plot_widget!
+            mouse_point = plot_widget.plotItem.vb.mapSceneToView(pos)
+
+            # The X and Y coordinates
+            target_time = mouse_point.x()
+            target_y = mouse_point.y()
+
+            HIT_RADIUS_PIXELS = 15  # Generous clickable area
+            clicked_marker = None
+
+            for ann in self.annotations:
+                if ann['plot'] == plot_name:
+                    marker = ann['marker']
+
+                    # Map the marker's underlying data coordinates back to screen pixels
+                    marker_pt = QtCore.QPointF(marker.x_val, marker.y_val)
+                    scene_pt = plot_widget.plotItem.vb.mapViewToScene(marker_pt)
+
+                    if scene_pt:
+                        # Calculate the physical pixel distance between the mouse and the star
+                        dist = ((scene_pt.x() - pos.x()) ** 2 + (scene_pt.y() - pos.y()) ** 2) ** 0.5
+                        if dist <= HIT_RADIUS_PIXELS:
+                            clicked_marker = marker
+                            break
+
+            if clicked_marker:
+                self.add_annotation(
+                    plot_name, plot_widget,
+                    clicked_marker.x_val, clicked_marker.y_val,
+                    existing_marker=clicked_marker
+                )
+            else:
+                # if a double click, handle new annotations
+                if event.double():
+                    self.add_annotation(plot_name, plot_widget, target_time, target_y)
+
+                # if a single click, update current playback time and handle playback
+                else:
+                    self.current_playback_time = target_time
+
+                    if self.is_playing:
+                        self.seek_and_play()
+
+                    self.update_playhead()
+
+
+
+    #################### Annotations  ####################
+
+    def add_annotation(self, plot_name, plot, target_time, target_y, existing_marker=None):
+        # FIXED: Route cleanly through stop_playback() to keep states and UI synced
+        if self.is_playing:
+            self.stop_playback()
+            self.paused_time = time.time() - self.playback_start_time
+
+        # Setup the Custom Dialog Window
+        dialog = QtWidgets.QDialog(self)
+        title = "Edit Annotation" if existing_marker else "New Annotation"
+        dialog.setWindowTitle(f"{title} - {plot_name} @ {target_time:.2f}s")
+        dialog.setMinimumWidth(400)
+
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        # Multi-row text box
+        text_edit = QtWidgets.QTextEdit(dialog)
+        if existing_marker:
+            text_edit.setPlainText(existing_marker.text_val)
+        layout.addWidget(text_edit)
+
+        # Setup Buttons
+        btn_layout = QtWidgets.QHBoxLayout()
+        save_btn = QtWidgets.QPushButton("Save")
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        btn_layout.addWidget(save_btn)
+
+        # Only show the Delete button if we are editing an existing annotation
+        if existing_marker:
+            delete_btn = QtWidgets.QPushButton("Delete")
+            btn_layout.addWidget(delete_btn)
+
+            def on_delete():
+                # Remove the visual symbol from the graph
+                plot.removeItem(existing_marker)
+                # Remove the dictionary from our master list
+                self.annotations = [a for a in self.annotations if a.get('marker') != existing_marker]
+                dialog.accept()
+
+            delete_btn.clicked.connect(on_delete)
+
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        # Save Logic
+        def on_save():
+            new_text = text_edit.toPlainText().strip()
+            if new_text:
+                if existing_marker:
+                    # Update existing marker and dict
+                    existing_marker.text_val = new_text
+                    existing_marker.setToolTip(new_text)
+                    for ann in self.annotations:
+                        if ann.get('marker') == existing_marker:
+                            ann['text'] = new_text
+                            break
+                else:
+                    # Create new marker
+                    marker = AnnotationMarker(target_time, target_y, new_text, plot_name, plot, self)
+                    plot.addItem(marker)
+
+                    # Store the complete dict
+                    self.annotations.append({
+                        "time": target_time,
+                        "y": target_y,
+                        "text": new_text,
+                        "plot": plot_name,
+                        "marker": marker  # Keeping the object reference makes deletion easy
+                    })
+            dialog.accept()
+
+        # Connect buttons
+        save_btn.clicked.connect(on_save)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        dialog.exec()
+
+    def clear_annotations(self):
+        """Removes all current annotations from the plots and memory."""
+        for ann in self.annotations:
+            marker = ann.get('marker')
+            plot_name = ann.get('plot')
+            if marker:
+                self.plots[plot_name]['plot'].removeItem(marker)
+        self.annotations.clear()
+
+    def save_annotations(self):
+        """Saves the self.annotations list of AnnotationMarker objects to a JSON file."""
+        if not hasattr(self, 'annotations') or not self.annotations:
+            QtWidgets.QMessageBox.warning(self, "No Annotations", "There are no annotations to save yet.")
             return
 
-        # Determine a default save name based on the current file path
-        base_path, _ = os.path.splitext(self.file_path)
-        default_save_path = f"{base_path}_saved.wav"
+        # Determine Default Save Path
+        default_save_path = ""
+        if hasattr(self, 'file_path') and self.file_path:
+            base_path, _ = os.path.splitext(self.file_path)
+            default_save_path = f"{base_path}.json"  # Changed to .json
 
         # Open a save file dialog
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
-            "Save Audio As",
+            "Save Annotations",
             default_save_path,
-            "WAV Files (*.wav);;All Files (*)"
+            "JSON Files (*.json);;All Files (*)"  # Changed filter
         )
 
-        if save_path:
+        if save_path and self.file_path is not None:
             try:
-                # Copy the temporary/current file to the new permanent destination
-                shutil.copy2(self.file_path, save_path)
-                print(f"Successfully saved audio to: {save_path}")
-
-                # Update the application's file path to point to the new permanent file
-                # This ensures future annotations save alongside the permanent file, not the temp one.
-                self.file_path = save_path
-                self.file_loaded_signal.emit(self.file_path)
+                markers = [ann['marker'] for ann in self.annotations if 'marker' in ann]
+                AnnotationMarker.save_to_file(save_path, markers, self.file_path)
+                print(f"Successfully saved annotations to: {save_path}")
 
             except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Save Error",
-                                               f"An error occurred while saving the audio:\n{str(e)}")
+                QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{str(e)}")
+
+
+
+    #################### Hwlp  ####################
 
     def show_help_window(self):
         # Create the window only if it doesn't exist yet
@@ -1310,6 +1342,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.help_window.show()
         self.help_window.raise_()
         self.help_window.activateWindow()
+
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

@@ -98,7 +98,7 @@ class HeadlessPlotExporter(QtCore.QObject):
         QtWidgets.QApplication.processEvents()
 
         # Trigger your background processing pipeline
-        self.widget.selectAnalysisFile(file_path)
+        self.widget.select_analysis_file(file_path)
 
         # Connect the worker's completion signal straight to our image exporter
         self.widget.worker.result_ready.connect(self.export_current_plots, QtCore.Qt.ConnectionType.UniqueConnection)
