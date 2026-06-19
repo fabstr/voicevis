@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 
+from ui.LiveMultiPlotWidget import LiveMultiPlotWidget
+
 
 def generate_multi_tone(frequencies, db_weights, duration, sample_rate=16000):
     """Generates mixed frequencies with explicit dB relative gains."""
@@ -21,3 +23,26 @@ def soft_isch_aaa():
     sample_rate = 44800
     pcm_data, sr = generate_multi_tone(freqs, dbs, duration, sample_rate)
     return pcm_data, sr, duration
+
+
+@pytest.fixture
+def mock_dependencies(mocker):
+    """
+    Mocks out the hardware-level audio sources, external threads, and
+    bypasses the UI plot generation by providing an empty spec.
+    """
+    mocker.patch('ui.LiveMultiPlotWidget.QMediaDevices')
+    mocker.patch('ui.LiveMultiPlotWidget.QAudioSource')
+    mocker.patch('ui.LiveMultiPlotWidget.AudioFeatureExtractor')
+    mocker.patch('ui.LiveMultiPlotWidget.RealTimeAnalysisWorker')
+    mocker.patch('ui.LiveMultiPlotWidget.spec', {})  # Empty dict prevents C++ UI crashes
+
+
+@pytest.fixture
+def widget(qtbot, mock_dependencies):
+    """
+    Uses pytest-qt's qtbot to safely initialize the PyQt widget.
+    """
+    w = LiveMultiPlotWidget()
+    qtbot.addWidget(w)
+    return w

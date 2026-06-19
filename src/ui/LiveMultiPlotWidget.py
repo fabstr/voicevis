@@ -22,8 +22,7 @@ from ui.HelpWindow import HelpWindow
 from ui.workers.AnalysisWorker import AnalysisWorker
 from ui.workers.PlaybackWorker import PlaybackWorker
 from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
-from utils import save_to_file, load_from_file, save_to_temp_wav
-
+from utils import save_to_temp_wav
 
 
 class LiveMultiPlotWidget(QtWidgets.QWidget):
@@ -389,14 +388,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self,
             "Select Audio or Annotation File",
             "",
-            "Supported Files (*.wav *.mp3 *.txt);;Audio Files (*.wav *.mp3);;Annotations (*.txt);;All Files (*)"
+            "Supported Files (*.wav *.mp3 *.json);;Audio Files (*.wav *.mp3);;Annotations (*.json);;All Files (*)"
         )
 
         if file_name:
-            if file_name.lower().endswith('.txt'):
+            if file_name.lower().endswith('.json'):
                 self.load_annotations_file(file_name)
             else:
-                self.clear_annotations()  # Clear old annotations before loading a new raw audio file
+                self.clear_annotations()
                 self.file_path = file_name
                 self.file_loaded_signal.emit(file_name)
                 self.selectAnalysisFile(file_name)
@@ -441,7 +440,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         if urls:
             file_path = urls[0].toLocalFile()
 
-            if file_path.lower().endswith('.txt'):
+            if file_path.lower().endswith('.json'):
                 self.load_annotations_file(file_path)
             elif file_path.lower().endswith(('.wav', '.mp3')):
                 self.file_path = file_path
@@ -473,10 +472,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.plots[plot_name]['plot'].removeItem(marker)
         self.annotations.clear()
 
-    def load_annotations_file(self, txt_file_path):
-        """Parses an annotation file, loads the linked audio, and redraws markers."""
+    def load_annotations_file(self, json_file_path):
+        """Parses a JSON annotation file, loads the linked audio, and redraws markers."""
         try:
-            active_audio_path, annotations, original_audio_path, fallback_audio_path = load_from_file(txt_file_path)
+            # 1. Use the static method from AnnotationMarker
+            active_audio_path, annotations, original_audio_path, fallback_audio_path = AnnotationMarker.load_from_file(json_file_path)
 
             if active_audio_path is None:
                 QtWidgets.QMessageBox.warning(
@@ -495,7 +495,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.file_loaded_signal.emit(self.file_path)
             self.selectAnalysisFile(active_audio_path)
 
-            # 3. Parse annotations (skip headers: lines 0, 1, and 2)
+            # 3. Parse annotations
             for annotation in annotations:
                 plot_widget = None
                 target_plot_key = None
@@ -937,29 +937,29 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 plot['plot'].setXRange(min_x, max(view_window_seconds, self.current_playback_time), padding=0)
 
     def save_annotations(self):
-        """Saves the self.annotations list of AnnotationMarker objects to a text file."""
+        """Saves the self.annotations list of AnnotationMarker objects to a JSON file."""
         if not hasattr(self, 'annotations') or not self.annotations:
             QtWidgets.QMessageBox.warning(self, "No Annotations", "There are no annotations to save yet.")
             return
 
-        # --- [NEW] Determine Default Save Path ---
+        # Determine Default Save Path
         default_save_path = ""
         if hasattr(self, 'file_path') and self.file_path:
-            # os.path.splitext splits "folder/file.wav" into ("folder/file", ".wav")
             base_path, _ = os.path.splitext(self.file_path)
-            default_save_path = f"{base_path}.txt"
+            default_save_path = f"{base_path}.json"  # Changed to .json
 
-        # Open a save file dialog, using the default_save_path
+        # Open a save file dialog
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Save Annotations",
-            default_save_path,  # Now points to the same folder and base filename
-            "Text Files (*.txt);;All Files (*)"
+            default_save_path,
+            "JSON Files (*.json);;All Files (*)"  # Changed filter
         )
 
         if save_path and self.file_path is not None:
             try:
-                save_to_file(save_path, self.annotations, self.file_path)
+                markers = [ann['marker'] for ann in self.annotations if 'marker' in ann]
+                AnnotationMarker.save_to_file(save_path, markers, self.file_path)
                 print(f"Successfully saved annotations to: {save_path}")
 
             except Exception as e:

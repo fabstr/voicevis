@@ -6,7 +6,7 @@ import miniaudio
 import numpy as np
 import pytest
 
-from audio_fixtures import soft_isch_aaa
+from conftest import soft_isch_aaa
 
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor
 from signal_processing.TargetConfig import TargetConfig
