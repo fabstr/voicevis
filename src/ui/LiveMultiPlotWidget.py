@@ -885,12 +885,16 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                                     # Interpolate Z to match Y's exact timestamps
                                     z_interp = np.interp(data.x, z_data.x, z_data.y)
 
-                                    # Normalize Z to a 0.0 - 1.0 scale for the colormap
-                                    z_min, z_max = np.nanmin(z_interp), np.nanmax(z_interp)
-                                    if z_max > z_min:
-                                        z_norm = (z_interp - z_min) / (z_max - z_min)
-                                    else:
-                                        z_norm = np.zeros_like(z_interp)
+                                    # --- [UPDATED] Hard limits for the colormap ---
+                                    z_min = 0.0
+                                    z_max = 4e-7
+
+                                    # Clip values to ensure they don't exceed the bounds
+                                    z_clipped = np.clip(z_interp, z_min, z_max)
+
+                                    # Normalize Z to a 0.0 - 1.0 scale based strictly on the hard limits
+                                    z_norm = (z_clipped - z_min) / (z_max - z_min)
+                                    # ----------------------------------------------
 
                                     # 3. Apply a scientific colormap (Viridis)
                                     cmap = pg.colormap.get('viridis')
