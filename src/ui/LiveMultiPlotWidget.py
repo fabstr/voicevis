@@ -534,35 +534,41 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.record_stop()
 
     def record_start(self):
-            # --- UI Updates ---
-            self.record_stop_btn.setIcon(self.stop_icon)
-            self.record_stop_btn.setToolTip("Stop Recording")  # Use tooltip instead of text
+        # --- UI Updates ---
+        self.record_stop_btn.setIcon(self.stop_icon)
+        self.record_stop_btn.setToolTip("Stop Recording")
 
-            # Clear the analysed features
-            self.analysedAudioFeatures = AudioFeatures()
-            self.clear_annotations()
+        # Clear the queue from previous runs
+        while not self.audio_queue.empty():
+            self.audio_queue.get()
 
-            # 2. Setup background worker (Clear queue from previous runs)
-            while not self.audio_queue.empty():
-                self.audio_queue.get()
+        # [NEW] Save the offset so we can shift live data points later
+        self.recording_start_offset = self.current_playback_time
 
-            self.rt_worker = RealTimeAnalysisWorker(self.audioFeatureExtractor, self.audio_queue, self.sampling_rate)
-            self.rt_worker.new_data_point.connect(self.append_live_data)
-            self.rt_worker.start()
+        self.rt_worker = RealTimeAnalysisWorker(self.audioFeatureExtractor, self.audio_queue, self.sampling_rate)
+        self.rt_worker.new_data_point.connect(self.append_live_data)
+        self.rt_worker.start()
 
-            # 3. Audio Recording Logic
-            self.audio_data.clear()
-            self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
+        # --- Audio Recording Logic (Insert / Overwrite) ---
+        target_byte_pos = int(self.current_playback_time * self.sampling_rate) * 2
 
-            # Track exactly where we are in the byte array to avoid the Cursor Trap
-            self.last_read_pos = 0
+        # Only pad if we are recording past the current end of the file
+        if target_byte_pos > self.audio_data.size():
+            padding_size = target_byte_pos - self.audio_data.size()
+            self.audio_data.append(QByteArray(padding_size, b'\x00'))
 
-            self.audio_source.start(self.audio_buffer)
-            self.poll_timer.start()  # Start the data harvester
+        self.audio_buffer.close()
+        self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
 
-            self.timer.start()
+        # Seek the buffer write-cursor to the playhead
+        self.audio_buffer.seek(target_byte_pos)
+        self.last_read_pos = target_byte_pos
 
-            print("Real-time recording started...")
+        self.audio_source.start(self.audio_buffer)
+        self.poll_timer.start()
+        self.timer.start()
+
+        print(f"Real-time recording started at {self.current_playback_time:.2f}s...")
 
     def record_stop(self):
         # --- UI Updates ---
@@ -608,16 +614,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.select_analysis_file(self.file_path)
 
     def read_audio_chunk(self):
-        """Safely slices new audio bytes directly from RAM without touching the buffer cursor."""
-        current_size = self.audio_data.size()
+        """Safely slices new audio bytes using the buffer's write cursor."""
+        current_pos = self.audio_buffer.pos()
 
-        # If the array has grown since we last checked...
-        if current_size > self.last_read_pos:
-            # Extract just the new bytes using .mid(start_position, length)
-            new_bytes = self.audio_data.mid(self.last_read_pos, current_size - self.last_read_pos).data()
-
-            # Update our tracker so we don't read these bytes again
-            self.last_read_pos = current_size
+        # If the recording cursor has moved forward...
+        if current_pos > self.last_read_pos:
+            new_bytes = self.audio_data.mid(self.last_read_pos, current_pos - self.last_read_pos).data()
+            self.last_read_pos = current_pos
 
             if new_bytes:
                 self.audio_queue.put(new_bytes)
@@ -626,9 +629,16 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         """Dispatches an incoming streaming FeatureSnapshot directly into
         the active plotting controllers for incremental drawing.
         """
+        # --- NEW: Shift the live data point's time to match the playhead ---
+        # Update 'time' to match whatever your actual timestamp property is named!
+        if hasattr(latest_point, 'time'):
+            latest_point.time += self.recording_start_offset
+        elif hasattr(latest_point, 'timestamp'):
+            latest_point.timestamp += self.recording_start_offset
+
         for plot_name, controller in self.plot_controllers.items():
             for curve_name in controller.curves.keys():
-                # Route the snapshot data down into the controller
+                # Route the shifted snapshot data down into the controller
                 controller.append_curve_point(
                     curve_name=curve_name,
                     snapshot=latest_point,
@@ -685,14 +695,16 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if self.current_playback_time > self.analysedAudioFeatures.length_seconds:
                 self.stop_playback()
                 self.current_playback_time = 0
+
         elif self.is_recording:
-            # Calculate time based on raw bytes recorded (16-bit Mono = 2 bytes per sample)
-            self.current_playback_time = self.audio_data.size() / (2 * self.sampling_rate)
+            # Calculate time based on the buffer's write cursor, NOT the total array size
+            self.current_playback_time = self.audio_buffer.pos() / (2 * self.sampling_rate)
 
-            # Update the max length so playback works correctly later even with trailing silence
-            self.analysedAudioFeatures.length_seconds = self.current_playback_time
+            # Keep the max length accurate if we happen to record past the old end of the file
+            total_duration = self.audio_data.size() / (2 * self.sampling_rate)
+            self.analysedAudioFeatures.length_seconds = max(self.analysedAudioFeatures.length_seconds, total_duration)
 
-        # --- Updated Loop utilizing the new PlotController setter ---
+        # --- Sync with Controllers ---
         for plot_name, controller in self.plot_controllers.items():
             controller.set_playhead_value(self.current_playback_time)
 
@@ -917,16 +929,42 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     #################### Mouse & keyboard actions ####################
 
     def keyPressEvent(self, event):
-        # Check if the pressed key is the Spacebar
-        if event.key() == QtCore.Qt.Key.Key_Space:
-            if self.is_playing:
-                # FIXED: Route through stop_playback to safely stop the worker thread and change the button icon
+        key = event.key()
+
+        # --- Spacebar Logic ---
+        if key == QtCore.Qt.Key.Key_Space:
+            if self.is_recording:
+                # If recording and space is pressed -> stop recording
+                self.is_recording = False
+                self.record_stop()
+            elif self.is_playing:
+                # If playing and space is pressed -> stop playback
                 self.stop_playback()
             else:
-                if self.file_path:
+                # If not playing (and not recording) and space is pressed -> start playback
+                if self.file_path:  # Safety check to ensure there's audio to play
                     self.seek_and_play()
 
-            event.accept()  # Tell Qt we handled this key press
+            event.accept()
+
+        # --- "R" Key Logic ---
+        elif key == QtCore.Qt.Key.Key_R:
+            if self.is_recording:
+                # If recording and "R" is pressed -> stop recording
+                self.is_recording = False
+                self.record_stop()
+            else:
+                # If not recording and "R" is pressed -> start recording
+                if self.is_playing:
+                    # Guarantee recording and playback are never active at the same time
+                    self.stop_playback()
+
+                self.is_recording = True
+                self.record_start()
+
+            event.accept()
+
+        # --- Unhandled Keys ---
         else:
             # Pass any other keys (like arrows, etc.) back to the standard Qt handler
             super().keyPressEvent(event)
@@ -941,6 +979,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             # The X and Y coordinates
             target_time = mouse_point.x()
+            if target_time < 0:
+                target_time = 0
+
             target_y = mouse_point.y()
 
             HIT_RADIUS_PIXELS = 15  # Generous clickable area
