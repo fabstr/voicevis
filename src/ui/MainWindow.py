@@ -22,53 +22,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.resize(800, 900)
 
         # --- DOCK WIDGET SETUP ---
-        # Allow docks to be tabbed together and animate their snapping
         self.setDockOptions(
             QtWidgets.QMainWindow.DockOption.AllowTabbedDocks |
             QtWidgets.QMainWindow.DockOption.AnimatedDocks
         )
-        # Force the dock tabs to appear at the top (imitating a QTabWidget)
         self.setTabPosition(QtCore.Qt.DockWidgetArea.AllDockWidgetAreas,
                             QtWidgets.QTabWidget.TabPosition.North)
 
-        # Hide the central widget entirely. This allows our dock widgets
-        # to consume the entire window area without borders.
         dummy_central = QtWidgets.QWidget()
         self.setCentralWidget(dummy_central)
         dummy_central.hide()
 
         self.dock_widgets = []
-
-        # --- TOOLBAR & ADD BUTTON ---
-        # Because we aren't using QTabWidget, we place the "+" button in a toolbar.
-        self.toolbar = QtWidgets.QToolBar("Session Controls")
-        self.toolbar.setMovable(False)
-        self.addToolBar(QtCore.Qt.ToolBarArea.TopToolBarArea, self.toolbar)
-
-        self.add_tab_btn = QtWidgets.QPushButton(" New Session")
-        self.add_tab_btn.setIcon(qta.icon('fa5s.plus'))
-        self.add_tab_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-
-        # Styling adjusted: negative margins removed as they are no longer
-        # needed for corner-widget fitting.
-        self.add_tab_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                padding: 6px;
-                margin: 2px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: rgba(128, 128, 128, 0.2);
-                border-radius: 4px;
-            }
-            QPushButton:pressed {
-                background-color: rgba(128, 128, 128, 0.4);
-            }
-        """)
-        self.add_tab_btn.clicked.connect(self.add_new_session)
-        self.toolbar.addWidget(self.add_tab_btn)
 
         # Start with one default session
         self.add_new_session()
@@ -78,9 +43,14 @@ class MainWindow(QtWidgets.QMainWindow):
         session_num = len(self.dock_widgets) + 1
         tab_name = f"Session {session_num}"
 
+        new_session.new_session_signal.connect(self.add_new_session)
+
         # Create our custom dock widget
         dock = SessionDockWidget(tab_name, self)
         dock.setWidget(new_session)
+
+        # --- NEW: Connect the widget's close signal to the dock's close slot ---
+        new_session.close_session_signal.connect(dock.close)
 
         # Adding the window icon here automatically places it in the Tab
         dock.setWindowIcon(qta.icon('fa5s.file-audio'))
@@ -134,5 +104,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if dock in self.dock_widgets:
             self.dock_widgets.remove(dock)
         dock.deleteLater()
+
+        if len(self.dock_widgets) == 0:
+            sys.exit(0)
 
 

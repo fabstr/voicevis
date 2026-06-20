@@ -28,6 +28,8 @@ from utils import save_to_temp_wav
 
 class LiveMultiPlotWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
+    new_session_signal = QtCore.pyqtSignal()
+    close_session_signal = QtCore.pyqtSignal()
 
 
     #################### Init ####################
@@ -99,11 +101,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- File Menu ---
         file_menu = self.menu_bar.addMenu("&File")
+
+        # --- NEW: Add the New Session action ---
+        file_menu.addAction("&New", "Ctrl+N", self.new_session_signal.emit)
         file_menu.addAction("&Open", "Ctrl+O", self.browse_file)
         file_menu.addAction("&Save Annotations", "Ctrl+S", self.save_annotations)
         file_menu.addAction("Save &Audio As...", "Ctrl+Shift+S", self.save_audio)
         file_menu.addSeparator()
-        file_menu.addAction("&Close", "Ctrl+W", self.close)
+        file_menu.addAction("&Close", "Ctrl+W", self.close_session_signal.emit)
 
         # --- Targets Menu [NEW] ---
         targets_menu = self.menu_bar.addMenu("&Targets")
