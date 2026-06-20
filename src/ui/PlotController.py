@@ -7,6 +7,23 @@ from signal_processing.TargetConfig import TargetConfig
 from ui import AnnotationMarker
 
 
+class TimeAxisItem(pg.AxisItem):
+    """Custom AxisItem to format raw seconds into mm:ss.xxx string format."""
+
+    def tickStrings(self, values, scale, spacing):
+        strings = []
+        for v in values:
+            # Handle potential negative values safely by treating them as 0
+            val = max(0.0, float(v))
+            minutes = int(val // 60)
+            seconds = val % 60
+
+            # 06.3f ensures a total length of 6 characters:
+            # 2 for seconds, 1 for the decimal, 2 for hundreds (e.g., 05.12)
+            strings.append(f"{minutes:02d}:{seconds:06.2f}")
+        return strings
+
+
 class PlotController(QtCore.QObject):
     """Encapsulates the creation, configuration, structural layout, and
     dynamic updating of a single pyqtgraph plot and its target bounds.
@@ -19,8 +36,12 @@ class PlotController(QtCore.QObject):
         self.plot_name = plot_name
         self.spec = plot_spec
 
-        # 1. Initialize Core Widget
-        self.widget = pg.PlotWidget(title=self.spec['title'])
+        # 1. Initialize Core Widget with Custom Time Axis
+        time_axis = TimeAxisItem(orientation='bottom')
+        self.widget = pg.PlotWidget(
+            title=self.spec['title'],
+            axisItems={'bottom': time_axis}
+        )
 
         # Create the playhead early so apply_theme can configure it
         self.playhead = pg.InfiniteLine(angle=90, movable=False)
@@ -301,7 +322,7 @@ class PlotController(QtCore.QObject):
             # 1. Handle standard ScatterPlotItems
             if isinstance(item, pg.ScatterPlotItem):
                 # Safeguard annotation markers using the class type passed down
-                if isinstance(item, ui.AnnotationMarker):
+                if isinstance(item, AnnotationMarker):
                     continue
 
                 item.setSize(target_size)

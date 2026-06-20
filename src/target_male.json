@@ -50,8 +50,8 @@
         },
         {
             "name": "size",
-            "min": 0.0,
-            "max": 2.5e-06,
+            "min": -5.0,
+            "max": 5.0,
             "enabled": true
         },
         {

@@ -50,9 +50,9 @@
         },
         {
             "name": "size",
-            "min": -500.0,
-            "max": 1000.0,
-            "enabled": false
+            "min": -5.0,
+            "max": 0.0,
+            "enabled": true
         },
         {
             "name": "weight",

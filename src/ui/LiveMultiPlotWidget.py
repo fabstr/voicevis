@@ -513,6 +513,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.analysedAudioFeatures = results
         self.current_playback_time = 0
         self.update_plots()
+        self.handle_reset_zoom()
 
     def on_analysis_error(self, error_msg):
         """Called automatically if the worker thread encounters an error."""
