@@ -51,13 +51,13 @@
         {
             "name": "size",
             "min": -5.0,
-            "max": 1.0,
+            "max": 0.0,
             "enabled": true
         },
         {
             "name": "weight",
             "min": 0.0,
-            "max": 4e-07,
+            "max": 2.5e-07,
             "enabled": true
         }
     ]

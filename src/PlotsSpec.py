@@ -16,19 +16,9 @@ weight        = "#c71585"
 size          = "#32cd32"
 
 
-white         = "#FFFFFFFF"
+white         = "#88888888"
 
-
-target_loudness = "#88888844"
-target_pitch    = "#88888844"
-target_f1       = "#88888844"
-target_f2       = "#88888844"
-target_f3       = "#88888844"
-target_ratio_f3 = "#88888844"
-target_ratio_f2 = "#88888844"
-target_weight   = "#88888844"
-target_white    = "#88888844"
-
+target_band = "#88888833"
 
 spec = {
     'Loudness': {
@@ -46,7 +36,7 @@ spec = {
             }
         },
         'targets': {
-            'Loudness': {'colour': target_loudness}
+            'Loudness': {'colour': target_band}
         },
         'linkX': None
     },
@@ -59,18 +49,18 @@ spec = {
         'curves': {
             'pitch': {
                 'size': defaultSize,
-                'colour': white,
+                'colour': pitch,
                 'analysisResult': 'pitch',
             },
             'Pitch_BW': {
                 'size': defaultSize,
-                'colour': pitch,
+                'colour': white,
                 'analysisResult': 'Pitch_BW',
                 'BW': True
             }
         },
         'targets': {
-            'Pitch': {'colour': target_pitch}
+            'Pitch': {'colour': target_band}
         },
         'linkX': 'Loudness'
     },
@@ -83,43 +73,43 @@ spec = {
         'curves': {
             'F1': {
                 'size': defaultSize,
-                'colour': white,
+                'colour': f1,
                 'analysisResult': 'F1'
             },
             'F2': {
                 'symbol': 'o',
                 'size': defaultSize,
-                'colour': white,
+                'colour': f2,
                 'analysisResult': 'F2'
             },
             'F3': {
                 'size': defaultSize,
-                'colour': white,
+                'colour': f3,
                 'analysisResult': 'F3'
             },
             'F1_IBW': {
                 'size': defaultSize,
-                'colour': f1,
+                'colour': white,
                 'analysisResult': 'F1_IBW',
                 'BW': True
             },
             'F2_IBW': {
                 'size': defaultSize,
-                'colour': f2,
+                'colour': white,
                 'analysisResult': 'F2_IBW',
                 'BW': True
             },
             'F3_IBW': {
                 'size': defaultSize,
-                'colour': f3,
+                'colour': white,
                 'analysisResult': 'F3_IBW',
                 'BW': True
             }
         },
         'targets': {
-            'F1': {'colour': target_f1},
-            'F2': {'colour': target_f2},
-            'F3': {'colour': target_f3}
+            'F1': {'colour': target_band},
+            'F2': {'colour': target_band},
+            'F3': {'colour': target_band}
         },
         'linkX': 'Loudness'
     },
@@ -132,18 +122,18 @@ spec = {
         'curves': {
             'F3_Pitch': {
                 'size': defaultSize,
-                'colour': white,
+                'colour': f3_pitch,
                 'analysisResult': 'F3_Pitch'
             },
             "F3_Pitch_BW": {
                 'size': defaultSize,
-                'colour': f3_pitch,
+                'colour': white,
                 'analysisResult': 'F3_Pitch_BW',
                 'BW': True
             },
         },
         'targets': {
-            'F3_Pitch': {'colour': target_white}
+            'F3_Pitch': {'colour': target_band}
         },
         'linkX': 'Loudness'
     },
@@ -156,18 +146,18 @@ spec = {
         'curves': {
             'F2_Pitch': {
                 'size': defaultSize,
-                'colour': white,
+                'colour': f2_pitch,
                 'analysisResult': 'F2_Pitch'
             },
             "F2_Pitch_BW": {
                 'size': defaultSize,
-                'colour': f2_pitch,
+                'colour': white,
                 'analysisResult': 'F2_Pitch_BW',
                 'BW': True
             },
         },
         'targets': {
-            'F2_Pitch': {'colour': target_white}
+            'F2_Pitch': {'colour': target_band}
         },
         'linkX': 'Loudness'
     },
@@ -180,18 +170,18 @@ spec = {
         'curves': {
             'F1_Pitch': {
                 'size': defaultSize,
-                'colour': white,
+                'colour': f1_pitch,
                 'analysisResult': 'F1_Pitch'
             },
             "F1_Pitch_BW": {
                 'size': defaultSize,
-                'colour': f1_pitch,
+                'colour': white,
                 'analysisResult': 'F1_Pitch_BW',
                 'BW': True
             },
         },
         'targets': {
-            'F1_Pitch': {'colour': target_white}
+            'F1_Pitch': {'colour': target_band}
         },
         'linkX': 'Loudness'
     },
@@ -208,7 +198,7 @@ spec = {
             }
         },
         'targets': {
-            'Size': {'colour': target_weight}
+            'Size': {'colour': target_band}
         },
         'linkX': 'Loudness',
     },
@@ -225,7 +215,7 @@ spec = {
             }
         },
         'targets': {
-            'Weight': {'colour': target_weight}
+            'Weight': {'colour': target_band}
         },
         'linkX': 'Loudness',
     },
@@ -243,7 +233,7 @@ spec = {
             }
         },
         'targets': {
-            'Size': {'colour': target_weight}
+            'Size': {'colour': target_band}
         },
         'linkX': 'Loudness',
     }

@@ -234,9 +234,9 @@ class AudioFeatureExtractor:
         f3_bounds = self.target_config.get_bounds("f3_pitch")
 
         # Provide safe code fallbacks if the profile keys don't match up cleanly
-        f1_min, f1_max, _ = f1_bounds if f1_bounds else (1.0, 15.0)
-        f2_min, f2_max, _ = f2_bounds if f2_bounds else (1.0, 30.0)
-        f3_min, f3_max, _ = f3_bounds if f3_bounds else (1.0, 50.0)
+        f1_min, f1_max, _ = f1_bounds if f1_bounds else (1.0, 15.0, False)
+        f2_min, f2_max, _ = f2_bounds if f2_bounds else (1.0, 30.0, False)
+        f3_min, f3_max, _ = f3_bounds if f3_bounds else (1.0, 50.0, False)
 
         size_y = calculate_size(results.F1_Pitch_BW.y,
                                 results.F2_Pitch_BW.y,

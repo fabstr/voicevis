@@ -220,25 +220,30 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def setupControlButtons(self):
         top_buttons_layout = QtWidgets.QHBoxLayout()
 
-        # Pre-load QtAwesome icons
-        self.record_icon = qta.icon('fa5s.microphone')
-        # self.stop_icon = qta.icon('fa5s.mirophone-slash')
-        self.stop_icon = qta.icon('fa5s.stop')  # Or 'fa5s.stop'
-        self.play_icon = qta.icon('fa5s.play')
-        self.pause_icon = qta.icon('fa5s.pause')
-        self.save_icon = qta.icon('fa5s.save')
+        # 1. Fetch active theme colors dynamically from the palette
+        palette = self.palette()
+        icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
+        # Optional: You can also define an active/hover color if needed
+        # active_color = palette.color(QtGui.QPalette.ColorRole.Highlight)
+
+        # 2. Pass the dynamic color to QtAwesome icons
+        self.record_icon = qta.icon('fa5s.microphone', color=icon_color)
+        self.stop_icon = qta.icon('fa5s.stop', color=icon_color)
+        self.play_icon = qta.icon('fa5s.play', color=icon_color)
+        self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
+        self.save_icon = qta.icon('fa5s.save', color=icon_color)
 
         # Record Button
         self.record_stop_btn = QtWidgets.QPushButton()
-        self.record_stop_btn.setFixedSize(40, 40)  # Harmonized size
+        self.record_stop_btn.setFixedSize(40, 40)
         self.record_stop_btn.setIcon(self.record_icon)
         self.record_stop_btn.setIconSize(QtCore.QSize(20, 20))
-        self.record_stop_btn.setToolTip("Record")  # Added Tooltip
+        self.record_stop_btn.setToolTip("Record")
         self.record_stop_btn.clicked.connect(self.handle_record_stop)
 
         # Playback Button
         self.playback_btn = QtWidgets.QPushButton()
-        self.playback_btn.setFixedSize(40, 40)  # Harmonized size
+        self.playback_btn.setFixedSize(40, 40)
         self.playback_btn.setIcon(self.play_icon)
         self.playback_btn.setIconSize(QtCore.QSize(20, 20))
         self.playback_btn.setToolTip("Play/Pause")
@@ -246,7 +251,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # Save Button
         self.save_btn = QtWidgets.QPushButton()
-        self.save_btn.setFixedSize(40, 40)  # Harmonized size
+        self.save_btn.setFixedSize(40, 40)
         self.save_btn.setIcon(self.save_icon)
         self.save_btn.setIconSize(QtCore.QSize(20, 20))
         self.save_btn.setToolTip("Save Annotations")
@@ -257,25 +262,19 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         top_buttons_layout.addWidget(self.save_btn)
 
         ################ Plot item size slider
-        # Label for the slider
         self.size_label = QtWidgets.QLabel("Point Size:")
         top_buttons_layout.addWidget(self.size_label)
 
-        # The Slider
         self.size_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.size_slider.setMinimum(1)
         self.size_slider.setMaximum(5)
-        self.size_slider.setValue(defaultSize)  # Default initial size
+        self.size_slider.setValue(defaultSize)
         self.size_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
         self.size_slider.setTickInterval(1)
-        self.size_slider.setFixedWidth(120)  # Keeps it looking clean
+        self.size_slider.setFixedWidth(120)
 
-        # Connect to the callback function
         self.size_slider.valueChanged.connect(self.handle_symbol_size_change)
         top_buttons_layout.addWidget(self.size_slider)
-
-        # Push everything to the left side of the window
-        top_buttons_layout.addStretch()
 
         top_buttons_layout.addStretch()
         self.layout.addLayout(top_buttons_layout)
@@ -326,6 +325,38 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         if hasattr(QtGui.QGuiApplication.styleHints(), 'setColorScheme'):
             QtGui.QGuiApplication.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Dark)
 
+    def changeEvent(self, event):
+        # Detect when the application theme or palette changes
+        if event.type() == QtCore.QEvent.Type.PaletteChange:
+            # 1. Fetch the new color from the updated palette
+            palette = self.palette()
+            icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
+
+            # 2. Re-render and cache all base icons with the new color
+            self.record_icon = qta.icon('fa5s.microphone', color=icon_color)
+            self.stop_icon = qta.icon('fa5s.stop', color=icon_color)
+            self.play_icon = qta.icon('fa5s.play', color=icon_color)
+            self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
+            self.save_icon = qta.icon('fa5s.save', color=icon_color)
+
+            # 3. Safely update Record/Stop button based on its current state
+            # (Using tooltip inspection as a safe fallback strategy)
+            if "Record" in self.record_stop_btn.toolTip():
+                self.record_stop_btn.setIcon(self.record_icon)
+            else:
+                self.record_stop_btn.setIcon(self.stop_icon)
+
+            # 4. Safely update Play/Pause button based on its current state
+            if "Play" in self.playback_btn.toolTip():
+                self.playback_btn.setIcon(self.play_icon)
+            else:
+                self.playback_btn.setIcon(self.pause_icon)
+
+            # 5. Update static buttons
+            self.save_btn.setIcon(self.save_icon)
+
+        # Always call the parent class implementation to maintain native behaviors
+        super().changeEvent(event)
 
     #################### File loading/saving ####################
 
@@ -634,6 +665,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def seek_and_play(self):
         target_time = max(0.0, self.current_playback_time)
+        if self.analysedAudioFeatures.sample_rate is None:
+            raise "NEEEJ"
         seek_frame = int(target_time * self.analysedAudioFeatures.sample_rate)
 
         # Clear old worker if running
