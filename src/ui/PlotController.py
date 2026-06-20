@@ -308,3 +308,11 @@ class PlotController(QtCore.QObject):
         else:
             # Fallback to pure auto-scaling for both axes if no specs exist
             self.widget.autoRange()
+
+    def set_playhead_value(self, value: float):
+        """Updates the vertical playhead line's X position on the canvas.
+
+        Args:
+            value (float): The target playback time in seconds.
+        """
+        self.playhead.setValue(value)

@@ -11,6 +11,7 @@ import pyqtgraph as pg
 import qtawesome as qta
 
 import numpy as np
+from numpy.f2py.auxfuncs import throw_error
 
 from PlotsSpec import spec, defaultSize, default_stretch
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
@@ -657,23 +658,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.stop_playback()
                 self.current_playback_time = 0
         elif self.is_recording:
-            # Calculate time based on raw bytes recorded
-            # 16-bit Mono = 2 bytes per sample
+            # Calculate time based on raw bytes recorded (16-bit Mono = 2 bytes per sample)
             self.current_playback_time = self.audio_data.size() / (2 * self.sampling_rate)
 
             # Update the max length so playback works correctly later even with trailing silence
             self.analysedAudioFeatures.length_seconds = self.current_playback_time
 
-        # Move the vertical lines to the new X position
-        for plot_name, plot in self.plots.items():
-            plot['playhead'].setValue(self.current_playback_time)
+        # --- Updated Loop utilizing the new PlotController setter ---
+        for plot_name, controller in self.plot_controllers.items():
+            controller.set_playhead_value(self.current_playback_time)
 
             if self.is_recording:
                 view_window_seconds = 10.0
                 min_x = max(0.0, self.current_playback_time - view_window_seconds)
-                plot['plot'].setXRange(min_x, max(view_window_seconds, self.current_playback_time), padding=0)
-
-
+                controller.widget.setXRange(min_x, max(view_window_seconds, self.current_playback_time), padding=0)
 
     #################### Misc plot stuff ####################
 
@@ -885,7 +883,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
                                            f"An error occurred while loading targets:\n{str(e)}")
-
+            raise e
 
 
     #################### Mouse & keyboard actions ####################
@@ -1040,8 +1038,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         for ann in self.annotations:
             marker = ann.get('marker')
             plot_name = ann.get('plot')
-            if marker:
-                self.plots[plot_name]['plot'].removeItem(marker)
+
+            # Route removal through the controller's underlying widget pipeline
+            if marker and plot_name in self.plot_controllers:
+                self.plot_controllers[plot_name].widget.removeItem(marker)
         self.annotations.clear()
 
     def save_annotations(self):
