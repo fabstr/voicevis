@@ -8,56 +8,56 @@
         },
         {
             "name": "pitch",
-            "min": 170.0,
-            "max": 250.0,
+            "min": 150.0,
+            "max": 300.0,
             "enabled": true
         },
         {
             "name": "f1",
-            "min": 300.0,
-            "max": 500.0,
-            "enabled": false
+            "min": 350.0,
+            "max": 450.0,
+            "enabled": true
         },
         {
             "name": "f2",
-            "min": 1300.0,
+            "min": 1350.0,
             "max": 1700.0,
-            "enabled": false
+            "enabled": true
         },
         {
             "name": "f3",
-            "min": 2550.0,
-            "max": 2750.0,
-            "enabled": false
+            "min": 2600.0,
+            "max": 3050.0,
+            "enabled": true
         },
         {
             "name": "f3_pitch",
-            "min": 12.95,
-            "max": 15.92,
+            "min": 11.0,
+            "max": 13.0,
             "enabled": true
         },
         {
             "name": "f2_pitch",
-            "min": 7.92,
-            "max": 9.56,
+            "min": 6.2,
+            "max": 10.8,
             "enabled": true
         },
         {
             "name": "f1_pitch",
-            "min": 2.38,
-            "max": 3.27,
+            "min": 1.8,
+            "max": 4.4,
             "enabled": true
         },
         {
             "name": "size",
-            "min": -5.0,
-            "max": 0.0,
-            "enabled": true
+            "min": -500.0,
+            "max": 1000.0,
+            "enabled": false
         },
         {
             "name": "weight",
             "min": 0.0,
-            "max": 2.5e-07,
+            "max": 2e-07,
             "enabled": true
         }
     ]
