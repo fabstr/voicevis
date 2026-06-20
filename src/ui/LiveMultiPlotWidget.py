@@ -245,6 +245,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.record_stop_btn.setIconSize(QtCore.QSize(20, 20))
         self.record_stop_btn.setToolTip("Record")
         self.record_stop_btn.clicked.connect(self.handle_record_stop)
+        top_buttons_layout.addWidget(self.record_stop_btn)
 
         # Playback Button
         self.playback_btn = QtWidgets.QPushButton()
@@ -253,18 +254,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playback_btn.setIconSize(QtCore.QSize(20, 20))
         self.playback_btn.setToolTip("Play/Pause")
         self.playback_btn.clicked.connect(self.handle_playback)
-
-        # Save Button
-        self.save_btn = QtWidgets.QPushButton()
-        self.save_btn.setFixedSize(40, 40)
-        self.save_btn.setIcon(self.save_icon)
-        self.save_btn.setIconSize(QtCore.QSize(20, 20))
-        self.save_btn.setToolTip("Save Annotations")
-        self.save_btn.clicked.connect(self.save_annotations)
-
-        top_buttons_layout.addWidget(self.record_stop_btn)
         top_buttons_layout.addWidget(self.playback_btn)
-        top_buttons_layout.addWidget(self.save_btn)
 
         ################ Plot item size slider
         self.size_label = QtWidgets.QLabel("Point Size:")

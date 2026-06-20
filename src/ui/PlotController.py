@@ -125,9 +125,13 @@ class PlotController(QtCore.QObject):
                 self.widget.addItem(fill_item)
                 fill_item.setZValue(-10)
             else:
+                # A semi-transparent medium-grey pen (RGBA) to define boundaries on ANY background
+                edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
+
                 self.curves[name]['curve'] = self.widget.plot(
                     [], symbol="o", pen=None,
-                    symbolBrush=curve_spec['colour'], symbolPen=None,
+                    symbolBrush=curve_spec['colour'],
+                    symbolPen=edge_pen,  # <-- Applied globally here
                     symbolSize=curve_spec['size']
                 )
                 if 'colorSource' in curve_spec:
@@ -186,6 +190,7 @@ class PlotController(QtCore.QObject):
             curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
             curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
 
+
         elif 'colorSource' in curve and audio_features_ctx:
             z_feature = curve['colorSource']
             if hasattr(audio_features_ctx, z_feature):
@@ -193,15 +198,32 @@ class PlotController(QtCore.QObject):
                 if len(z_data.x) > 0 and len(x_arr) > 0:
                     z_interp = np.interp(x_arr, z_data.x, z_data.y)
                     z_clipped = np.clip(z_interp, 0.0, 4e-7)
-                    z_norm = (z_clipped - 0.0) / (4e-7 - 0.0)
+
+                    # 1. Standard normalization (0.0 to 1.0)
+
+                    z_norm = (z_clipped - 0.0) / (6e-7 - 0.0)
+
+                    # 2. THE RESTRICTED RANGE TECHNIQUE
+                    z_restricted = 0.1 + (z_norm * 0.90)
 
                     cmap = pg.colormap.get('viridis')
-                    colors = cmap.map(z_norm)
+                    # Map using the restricted values so we never hit absolute ends of the colormap
+                    colors = cmap.map(z_restricted)
                     brushes = [pg.mkBrush(tuple(c)) for c in colors]
 
-                    curve['curve'].setData(x=x_arr, y=y_arr, symbolBrush=brushes)
-                    return
-            curve['curve'].setData(x=x_arr, y=y_arr)
+                    # 3. THE MARKER EDGE HACK
+                    # A semi-transparent medium-grey pen to define boundaries on ANY background
+                    edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
+
+                    # Apply both the restricted brushes and the edge pen
+                    curve['curve'].setData(
+                        x=x_arr,
+                        y=y_arr,
+                        symbolBrush=brushes,
+                        symbolPen=edge_pen
+                    )
+            else:
+                curve['curve'].setData(x=x_arr, y=y_arr)
         else:
             curve['curve'].setData(x=x_arr, y=y_arr)
 
