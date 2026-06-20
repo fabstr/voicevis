@@ -41,7 +41,7 @@ class AudioFeatureExtractor:
     #     F3bandwidth_sma3nz
     #     F3amplitudeLogRelF0_sma3nz
 
-    def __init__(self, targets: TargetConfig):
+    def __init__(self, targets: TargetConfig = TargetConfig()):
         self.smile = opensmile.Smile(
             feature_set=opensmile.FeatureSet.eGeMAPSv02,
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
@@ -129,19 +129,19 @@ class AudioFeatureExtractor:
             length_seconds=audio_length
         )
 
-        # Calculate spectral slopes (continuous)
-        t_slopes, slopes = calculate_spectral_slope(pcm_data, sampling_rate, nperseg=2048, noverlap=1024)
+        # Calculate Weight (i.e. spectral slopes (continuous))
+        t_weight, weight = calculate_spectral_slope(pcm_data, sampling_rate, nperseg=2048, noverlap=1024)
 
         # ------------------------------------------------------------------
         # CRITICAL FIX: Interpolate slopes to match the filtered timepoints
         # ------------------------------------------------------------------
-        if len(t_slopes) > 0 and len(t_filtered) > 0:
-            matched_slopes = np.interp(t_filtered, t_slopes, slopes)
+        if len(t_weight) > 0 and len(t_filtered) > 0:
+            matched_weight = np.interp(t_filtered, t_weight, weight)
         else:
-            matched_slopes = np.zeros_like(t_filtered)
+            matched_weight = np.zeros_like(t_filtered)
 
         # Now slopes perfectly matches the length and timeline of everything else
-        result.slopes = SignalTimeSeries(x=t_filtered, y=matched_slopes)
+        result.weight = SignalTimeSeries(x=t_filtered, y=matched_weight)
 
         if len(t_filtered) > 0:
             # 4. Handle Outliers (Note: reject_outliers should now accept/return SignalTimeSeries)
@@ -216,41 +216,40 @@ class AudioFeatureExtractor:
             # print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
 
             self.cachedResults = result
-            self.recalculate_size()
+            result.size = self.recalculate_size(result)
 
         else:
-            print("Silent/unvoiced frame skipped safely.")
+            # print("Silent/unvoiced frame skipped safely.")
             elapsed_time_bw = 0
 
         return result
 
-    def recalculate_size(self):
-        if self.cachedResults is None or self.target_config is None:
-            return None
+    def recalculate_size(self, results: AudioFeatures) -> SignalTimeSeries:
+        if self.target_config is None:
+            return SignalTimeSeries()
 
-        f1_min = self.target_config.f1_pitch_min
-        f1_max = self.target_config.f1_pitch_max
-        f2_min = self.target_config.f2_pitch_min
-        f2_max = self.target_config.f2_pitch_max
-        f3_min = self.target_config.f3_pitch_min
-        f3_max = self.target_config.f3_pitch_max
+        # Safely unpack the tuple bounds using the target list keys
+        f1_bounds = self.target_config.get_bounds("f1_pitch")
+        f2_bounds = self.target_config.get_bounds("f2_pitch")
+        f3_bounds = self.target_config.get_bounds("f3_pitch")
 
-        size_y = calculate_size(self.cachedResults.F1_Pitch_BW.y,
-                                self.cachedResults.F2_Pitch_BW.y,
-                                self.cachedResults.F3_Pitch_BW.y,
+        # Provide safe code fallbacks if the profile keys don't match up cleanly
+        f1_min, f1_max, _ = f1_bounds if f1_bounds else (1.0, 15.0)
+        f2_min, f2_max, _ = f2_bounds if f2_bounds else (1.0, 30.0)
+        f3_min, f3_max, _ = f3_bounds if f3_bounds else (1.0, 50.0)
+
+        size_y = calculate_size(results.F1_Pitch_BW.y,
+                                results.F2_Pitch_BW.y,
+                                results.F3_Pitch_BW.y,
                                 f1_min,
                                 f1_max,
                                 f2_min,
                                 f2_max,
                                 f3_min,
                                 f3_max)
-        self.cachedResults.size = SignalTimeSeries(x=self.cachedResults.F1_Pitch_BW.x, y=size_y)
 
-        if len(self.cachedResults.size.x) > 0:
-            size = np.interp(self.cachedResults.slopes.x, self.cachedResults.size.x, self.cachedResults.size.y)
-            self.size_vs_weight = SignalTimeSeries(x=self.cachedResults.slopes.x,
-                                                   y=size / self.cachedResults.slopes.y)
-        return self.cachedResults
+        size = SignalTimeSeries(x=results.F1_Pitch_BW.x, y=size_y)
+        return size
 
 def calculate_bw_and_cf(x_time, y_freq, y_mag, window_size=500, step_size=100):
     """Performs a sliding window analysis over 1D spectral arrays to compute

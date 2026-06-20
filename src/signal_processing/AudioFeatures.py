@@ -23,7 +23,7 @@ class AudioFeatures:
     Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
 
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    slopes: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     # Formants & Initial Bandwidths (IBW)
     F1: SignalTimeSeries = field(default_factory=SignalTimeSeries)
@@ -64,7 +64,7 @@ class FeatureSnapshot:
     F3: float
 
     # Spectral Slopes
-    slopes: float
+    weight: float
 
     # Formant to pitch ratios and BW
     F1_Pitch: Optional[float] = None

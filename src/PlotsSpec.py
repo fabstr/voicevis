@@ -1,27 +1,23 @@
-defaultSize = 1
+defaultSize = 2
 default_stretch = 2
 outliers_m = 5.
 
 # Colours
-loudness      = "#00ffffFF"
-pitch         = "#ff00ffAA"
-f1            = "#00bfff6e"
-f2            = "#ff7f5073"
-f3            = "#ba55d377"
-weight        = "#fc4b60FF"
-white         = "#FFFFFFFF"
-size          = "#00FF85FF"
+loudness      = "#008b8b"
+pitch         = "#e9aad8"
+f1            = "#dc143c"
+f2            = "#006400"
+f3            = "#ffd700"
 
-# Target Band Colours (Transparent '33' alpha channel)
-# target_loudness = "#00ffff33"
-# target_pitch    = "#ff00ff33"
-# target_f1       = "#00bfff33"
-# target_f2       = "#ff7f5033"
-# target_f3       = "#ba55d333"
-# target_ratio_f3 = "#ffd90033"
-# target_ratio_f2 = "#37ff1433"
-# target_weight   = "#fc4b6033"
-# target_white    = "#ffffff33"
+f1_pitch      = "#7588ff"
+f2_pitch      = "#ff8c00"
+f3_pitch      = "#9966cc"
+weight        = "#c71585"
+size          = "#32cd32"
+
+
+white         = "#FFFFFFFF"
+
 
 target_loudness = "#88888844"
 target_pitch    = "#88888844"
@@ -141,7 +137,7 @@ spec = {
             },
             "F3_Pitch_BW": {
                 'size': defaultSize,
-                'colour': f3,
+                'colour': f3_pitch,
                 'analysisResult': 'F3_Pitch_BW',
                 'BW': True
             },
@@ -165,7 +161,7 @@ spec = {
             },
             "F2_Pitch_BW": {
                 'size': defaultSize,
-                'colour': f2,
+                'colour': f2_pitch,
                 'analysisResult': 'F2_Pitch_BW',
                 'BW': True
             },
@@ -189,7 +185,7 @@ spec = {
             },
             "F1_Pitch_BW": {
                 'size': defaultSize,
-                'colour': f1,
+                'colour': f1_pitch,
                 'analysisResult': 'F1_Pitch_BW',
                 'BW': True
             },
@@ -205,7 +201,7 @@ spec = {
         'y_min': -15,
         'y_max': 25  ,
         'curves': {
-            'slopes': {
+            'size': {
                 'size': defaultSize+1,
                 'colour': size,
                 'analysisResult': 'size'
@@ -222,10 +218,10 @@ spec = {
         'y_min': 0,
         'y_max': 8.0e-7,
         'curves': {
-            'slopes': {
+            'weight': {
                 'size': defaultSize+1,
                 'colour': weight,
-                'analysisResult': 'slopes'
+                'analysisResult': 'weight'
             }
         },
         'targets': {
@@ -234,8 +230,8 @@ spec = {
         'linkX': 'Loudness',
     },
 
-    "Size_vs_Weight_Colored": {
-        'title': 'Fullness (size on y vs weight as colour)',
+    "Fullness": {
+        'title': 'Fullness',
         'y_min': -15,
         'y_max': 25,
         'curves': {
@@ -243,7 +239,7 @@ spec = {
                 'size': defaultSize + 2,
                 'colour': white,  # Fallback color
                 'analysisResult': 'size', # Y-axis
-                'colorSource': 'slopes'   # Z-axis (Color)
+                'colorSource': 'weight'   # Z-axis (Color)
             }
         },
         'targets': {

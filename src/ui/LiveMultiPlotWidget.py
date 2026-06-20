@@ -1,12 +1,10 @@
 import queue
-import shutil
 import sys
 import time
 import os
-import json
 import shutil
 
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
 from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import pyqtgraph as pg
@@ -19,6 +17,8 @@ from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, Targe
 from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
+from ui.PlotController import PlotController
+from ui.TargetConfigDialog import TargetConfigDialog
 from ui.workers.AnalysisWorker import AnalysisWorker
 from ui.workers.PlaybackWorker import PlaybackWorker
 from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
@@ -39,7 +39,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         self.annotations = []
         self.plots = {}
-        self.target_bands = {}
 
         self.is_recording = False
         self.is_playing = False
@@ -109,23 +108,27 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         targets_menu = self.menu_bar.addMenu("&Targets")
         targets_menu.addAction("Set Targets...", self.open_targets_dialog)
         targets_menu.addSeparator()
-        targets_menu.addAction("Female", lambda: self._load_targets_from_path("src/target_female.json"))
-        targets_menu.addAction("Male", lambda: self._load_targets_from_path("src/target_male.json"))
+        targets_menu.addAction("Female", lambda: self.load_targets_from_path("src/target_female.json"))
+        targets_menu.addAction("Male", lambda: self.load_targets_from_path("src/target_male.json"))
         targets_menu.addSeparator()
         targets_menu.addAction("Import targets...", self.import_targets)
         targets_menu.addAction("Export targets...", self.export_targets)
 
         # --- View Menu ---
-        view_menu = self.menu_bar.addMenu("&View")
+        plots_menu = self.menu_bar.addMenu("&Plots")
 
-        reset_zoom_action = view_menu.addAction("&Reset zoom")
+        reset_zoom_action = plots_menu.addAction("&Reset zoom")
         reset_zoom_action.triggered.connect(self.handle_reset_zoom)
 
         # New "Reset plots" Action
-        reset_plots_action = view_menu.addAction("Reset plots")
+        reset_plots_action = plots_menu.addAction("Reset plots")
         reset_plots_action.triggered.connect(self.handle_reset_plots)
 
-        view_menu.addSeparator()
+        # New "Reset plots" Action
+        show_all_plots_action = plots_menu.addAction("Show all plots")
+        show_all_plots_action.triggered.connect(self.show_all_plots)
+
+        plots_menu.addSeparator()
 
         # We keep track of the toggle actions in a dictionary so handle_reset_plots can re-check them
         self.menu_toggle_actions = {
@@ -136,7 +139,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # Grouping dynamically by Plot
         for plot_key, plot_spec in spec.items():
-            plot_submenu = view_menu.addMenu(plot_spec['title'])
+            plot_submenu = plots_menu.addMenu(plot_spec['title'])
 
             # 1. Action to Show/Hide the entire Plot panel
             is_visible = not plot_spec.get('hidden', False)
@@ -175,6 +178,33 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         self.handle_toggle_bandwidth(p_key, c_key, checked)
                     )
                     self.menu_toggle_actions['bandwidths'][(plot_key, curve_key)] = show_bw_action
+
+        # --- View Menu (Theme Settings) ---
+        view_menu = self.menu_bar.addMenu("&View")
+
+        # QActionGroup ensures only one option is checked at a time
+        self.theme_group = QtGui.QActionGroup(self)
+        self.theme_group.setExclusive(True)
+
+        self.action_os_default = QtGui.QAction("OS Default", self, checkable=True)
+        self.action_light = QtGui.QAction("Light Mode", self, checkable=True)
+        self.action_dark = QtGui.QAction("Dark Mode", self, checkable=True)
+
+        self.theme_group.addAction(self.action_os_default)
+        self.theme_group.addAction(self.action_light)
+        self.theme_group.addAction(self.action_dark)
+
+        # Connect actions to the logic
+        self.action_os_default.triggered.connect(self.set_theme_os_default)
+        self.action_light.triggered.connect(self.set_theme_light)
+        self.action_dark.triggered.connect(self.set_theme_dark)
+
+        view_menu.addAction(self.action_os_default)
+        view_menu.addAction(self.action_light)
+        view_menu.addAction(self.action_dark)
+
+        # Default to OS behavior on initialization
+        self.action_os_default.setChecked(True)
 
         # Build the Help Menu
         help_menu = self.menu_bar.addMenu("Help")
@@ -250,140 +280,50 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.layout.addLayout(top_buttons_layout)
 
     def setupPlots(self):
-        # Create a vertical splitter so users can drag boundaries up and down
         self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
-
-        # Keep track of stretch factors to apply them to the splitter later
         stretch_factors = []
+        self.plot_controllers = {}
 
         for plot_name, plot_spec in spec.items():
-            plot = pg.PlotWidget(title=plot_spec['title'])
-            plot.showGrid(x=True, y=True, alpha=0.3)
+            controller = PlotController(plot_name, plot_spec, self.on_mouse_clicked)
+            self.plot_controllers[plot_name] = controller
 
-            has_dynamic_colors = any('colorSource' in curve for curve in plot_spec['curves'].values())
+            # Target bands setup is fully delegated into the controller class now!
+            self.plot_splitter.addWidget(controller.widget)
 
-            if has_dynamic_colors:
-                # Disable clipping and downsampling to prevent brush array desync
-                plot.setClipToView(False)
-                plot.setDownsampling(auto=False)
-            else:
-                # Keep standard optimizations for normal plots
-                plot.setClipToView(True)
-                plot.setDownsampling(mode='peak', auto=True)
-
-            # Determine stretch factor
             stretch = plot_spec.get('stretch', default_stretch)
             stretch_factors.append(stretch)
 
-            # CRITICAL: Add the plot directly to the splitter instead of self.layout
-            self.plot_splitter.addWidget(plot)
+        # Secondary Pass: Cross-linking
+        for plot_name, plot_spec in spec.items():
+            if plot_spec.get('linkX') is not None:
+                target_plot_name = plot_spec['linkX']
+                if target_plot_name in self.plot_controllers:
+                    target_widget = self.plot_controllers[target_plot_name].widget
+                    self.plot_controllers[plot_name].widget.setXLink(target_widget)
 
-            mouseX = plot_spec.get('mouse_enabled_x', True)
-            mouseY = plot_spec.get('mouse_enabled_y', True)
-            plot.setMouseEnabled(x=mouseX, y=mouseY)
-
-            self.plots[plot_name] = {
-                'plot': plot,
-                'playhead': pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=2)),
-                'curves': {},
-            }
-
-            for curveName, curveSpec in plot_spec['curves'].items():
-                self.plots[plot_name]['curves'][curveName] = {}
-
-                if "BW" in curveSpec and curveSpec["BW"]:
-                    self.plots[plot_name]['curves'][curveName]['has_bw'] = True
-
-                    # 1. Define explicit bounding Curve Items (Not using .plot shortcut)
-                    # We use a solid but completely transparent alpha channel pen
-                    transparent_pen = pg.mkPen(color=(0, 0, 0, 0), width=1)
-
-                    min_curve = pg.PlotCurveItem([], pen=transparent_pen)
-                    max_curve = pg.PlotCurveItem([], pen=transparent_pen)
-
-                    self.plots[plot_name]['curves'][curveName]['bw_curve_min'] = min_curve
-                    self.plots[plot_name]['curves'][curveName]['bw_curve_max'] = max_curve
-
-                    # 2. Build the bridging Fill Item
-                    fill_item = pg.FillBetweenItem(
-                        min_curve,
-                        max_curve,
-                        brush=pg.mkBrush(curveSpec['colour'])
-                    )
-                    self.plots[plot_name]['curves'][curveName]['fill_band'] = fill_item
-
-                    
-
-                    # 3. CRITICAL: Add all 3 items explicitly to the plot viewport canvas
-                    self.plots[plot_name]['plot'].addItem(min_curve)
-                    self.plots[plot_name]['plot'].addItem(max_curve)
-                    self.plots[plot_name]['plot'].addItem(fill_item)
-
-                    # 4. Push the shaded area beneath markers and curves
-                    fill_item.setZValue(-10)
-
-                else:
-                    self.plots[plot_name]['curves'][curveName]['curve'] = self.plots[plot_name]['plot'].plot(
-                        [],
-                        symbol="o",
-                        pen=None,
-                        symbolBrush=curveSpec['colour'],
-                        symbolPen=None,
-                        symbolSize=curveSpec['size']  # Sets the point size
-                    )
-
-                    # Register the Z-axis color source if it exists
-                    if 'colorSource' in curveSpec:
-                        self.plots[plot_name]['curves'][curveName]['colorSource'] = curveSpec['colorSource']
-
-                self.plots[plot_name]['curves'][curveName]['analysisResult'] = curveSpec['analysisResult']
-
-            self.plots[plot_name]['plot'].addItem(self.plots[plot_name]['playhead'])
-
-            # --- [NEW] Construct the Target Bands ---
-            self.target_bands[plot_name] = {}
-            for target_name, target_spec in plot_spec.get('targets', {}).items():
-                # Generate horizontal linear region
-                region = pg.LinearRegionItem(orientation='horizontal', movable=False, brush=target_spec['colour'])
-
-                # Remove outline borders from pyqtgraph's linear region item
-                for line in region.lines:
-                    line.setPen(pg.mkPen(None))
-                    line.setHoverPen(pg.mkPen(None))
-
-                region.setZValue(-20)  # Make sure the band is deeply below annotations and lines
-                region.setVisible(False)
-                self.plots[plot_name]['plot'].addItem(region)
-
-                self.target_bands[plot_name][target_name] = {
-                    'item': region,
-                    'min': 0.0,
-                    'max': 1.0,
-                    'enabled': False
-                }
-
-            if 'y_min' in plot_spec and 'y_max' in plot_spec:
-                self.plots[plot_name]['plot'].setYRange(plot_spec['y_min'], plot_spec['y_max'], padding=0)
-
-            if plot_spec['linkX'] is not None:
-                targetPlot = self.plots[plot_spec['linkX']]['plot']
-                self.plots[plot_name]['plot'].setXLink(targetPlot)
-
-            self.plots[plot_name]['plot'].scene().sigMouseClicked.connect(
-                lambda event, p_name=plot_name, p_title=plot_spec['title']:
-                self.on_mouse_clicked(event, self.plots[p_name]['plot'], p_title)
-            )
-
-            if plot_spec.get('hidden', False):
-                self.plots[plot_name]['plot'].setVisible(False)
-
-            # Apply the initial stretch sizes to the splitter items
         for idx, stretch in enumerate(stretch_factors):
             self.plot_splitter.setStretchFactor(idx, stretch)
 
-            # Finally, add the entire splitter tool into your main layout
         self.layout.addWidget(self.plot_splitter)
 
+    # --- Theme Switching Methods ---
+    def set_theme_os_default(self):
+        # unsetColorScheme removes any manual override, falling back to dynamic OS settings
+        if hasattr(QtGui.QGuiApplication.styleHints(), 'unsetColorScheme'):
+            QtGui.QGuiApplication.styleHints().unsetColorScheme()
+        else:
+            print("Native OS theme syncing requires Qt 6.8+")
+
+    def set_theme_light(self):
+        # Overrides the OS setting to force Light Mode
+        if hasattr(QtGui.QGuiApplication.styleHints(), 'setColorScheme'):
+            QtGui.QGuiApplication.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Light)
+
+    def set_theme_dark(self):
+        # Overrides the OS setting to force Dark Mode
+        if hasattr(QtGui.QGuiApplication.styleHints(), 'setColorScheme'):
+            QtGui.QGuiApplication.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Dark)
 
 
     #################### File loading/saving ####################
@@ -573,6 +513,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             # Clear the analysed features
             self.analysedAudioFeatures = AudioFeatures()
+            self.clear_annotations()
 
             # 2. Setup background worker (Clear queue from previous runs)
             while not self.audio_queue.empty():
@@ -655,33 +596,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.audio_queue.put(new_bytes)
 
     def append_live_data(self, latest_point: FeatureSnapshot):
-        """Receives a single processed data point and appends it dynamically
-        using the layout structures from update_plots.
+        """Dispatches an incoming streaming FeatureSnapshot directly into
+        the active plotting controllers for incremental drawing.
         """
-        current_time = latest_point.time
+        for plot_name, controller in self.plot_controllers.items():
+            for curve_name in controller.curves.keys():
+                # Route the snapshot data down into the controller
+                controller.append_curve_point(
+                    curve_name=curve_name,
+                    snapshot=latest_point,
+                    audio_features_ctx=self.analysedAudioFeatures
+                )
 
-        # Use the structural mapping loop from update_plots
-        for plot_name, plot in self.plots.items():
-            for curve_name, curve in plot['curves'].items():
-                result_key = curve['analysisResult']
-
-                # If this quality metric isn't an attribute of our results object, skip it
-                if not hasattr(self.analysedAudioFeatures, result_key):
-                    print("key not in results: " + result_key)
-                    continue
-
-                # Retrieve the specific SignalTimeSeries or BandwidthTimeSeries container
-                data_container = getattr(self.analysedAudioFeatures, result_key)
-
-                # Ensure the specific point value exists in our incoming live stream packet
-                if hasattr(latest_point, result_key) and latest_point.time and getattr(latest_point, result_key) is not None:
-                    new_y_val = getattr(latest_point, result_key)
-
-                    # Append coordinates dynamically. Dataclasses guarantee they are numpy arrays.
-                    data_container.x = np.append(data_container.x, current_time)
-                    data_container.y = np.append(data_container.y, new_y_val)
-
-        self.update_plots()
+        # Move global elements like synced playhead lines or scrolling viewports
+        self.update_playhead()
 
     def handle_playback(self):
         if self.is_recording:
@@ -750,84 +678,34 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     #################### Misc plot stuff ####################
 
     def handle_symbol_size_change(self, value):
-        """
-        Called whenever the slider is moved.
+        """Called whenever the slider is moved.
+
         'value' will be an integer between 1 and 5.
         """
-
-        for plot_name, plot in self.plots.items():
-            # Loop through the visual items on the plot canvas
-            for item in plot['plot'].getPlotItem().items:
-
-                # 1. Handle standard ScatterPlotItems
-                if isinstance(item, pg.ScatterPlotItem):
-                    if isinstance(item, AnnotationMarker):
-                        # Annotation markers should keep ther size
-                        pass
-                    else:
-                        item.setSize(value)
-                        if plot_name == "Weight":
-                            item.setSize(value+1)
-
-
-                # 2. Handle PlotDataItems (The helper function items)
-                elif isinstance(item, pg.PlotDataItem):
-                    # STEP A: Update the internal options dictionary so
-                    # pyqtgraph remembers this size during clicks/pans/zooms
-                    item.opts['symbolSize'] = value
-
-                    # STEP B: Apply it immediately to the active rendering object
-                    if item.scatter is not None:
-                        item.scatter.setSize(value)
-                        if plot_name == "Weight":
-                            item.scatter.setSize(value + 1)
+        for controller in self.plot_controllers.values():
+            controller.set_symbol_size(value)
 
     def handle_reset_zoom(self):
         """Resets the zoom, applying fixed min/max spec boundaries where defined,
-
-        and falling back to autoRange elsewhere.
+        and falling back to autoRange elsewhere across all controllers.
         """
-        for plot_name, plot_data in self.plots.items():
-            plot_item = plot_data['plot']
-            plot_spec = spec.get(plot_name, {})
+        for controller in self.plot_controllers.values():
+            controller.reset_zoom()
 
-            y_min = plot_spec.get('y_min')
-            y_max = plot_spec.get('y_max')
+    def handle_toggle_plot(self, plot_key: str, checked: bool):
+        """Toggles visibility of the entire plot widget panel."""
+        if plot_key in self.plot_controllers:
+            self.plot_controllers[plot_key].set_plot_visible(checked)
 
-            # Safely check if limits are explicitly provided (even if they are 0)
-            if y_min is not None and y_max is not None:
-                # Explicitly lock the Y-axis to your specs
-                plot_item.setYRange(y_min, y_max, padding=0)
+    def handle_toggle_pixels(self, plot_key: str, curve_key: str, checked: bool):
+        """Toggles visibility of standard scatter points or lines on a specific canvas."""
+        if plot_key in self.plot_controllers:
+            self.plot_controllers[plot_key].set_curve_visible(curve_key, checked)
 
-                # If X-axis should still auto-fit data while Y is locked:
-                plot_item.enableAutoRange(axis=pg.ViewBox.XAxis)
-            else:
-                # Fallback to pure auto-scaling for both axes if no specs exist
-                plot_item.autoRange()
-
-    def handle_toggle_plot(self, plot_name: str, checked: bool):
-        """Shows or hides an entire PlotWidget panel inside the QSplitter layout."""
-        if plot_name in self.plots:
-            self.plots[plot_name]['plot'].setVisible(checked)
-
-    def handle_toggle_bandwidth(self, plot_name: str, curve_name: str, checked: bool):
-        """Shows or hides background shaded bandwidth fills and boundary lines."""
-        if plot_name in self.plots:
-            curve_obj = self.plots[plot_name]['curves'].get(curve_name, {})
-            if curve_obj.get('has_bw', False):
-                if 'fill_band' in curve_obj:
-                    curve_obj['fill_band'].setVisible(checked)
-                if 'bw_curve_min' in curve_obj:
-                    curve_obj['bw_curve_min'].setVisible(checked)
-                if 'bw_curve_max' in curve_obj:
-                    curve_obj['bw_curve_max'].setVisible(checked)
-
-    def handle_toggle_pixels(self, plot_name: str, curve_name: str, checked: bool):
-        """Shows or hides an individual pixel/scatter point curve series."""
-        if plot_name in self.plots:
-            curve_obj = self.plots[plot_name]['curves'].get(curve_name, {})
-            if 'curve' in curve_obj:
-                curve_obj['curve'].setVisible(checked)
+    def handle_toggle_bandwidth(self, plot_key: str, curve_key: str, checked: bool):
+        """Toggles visibility of bandwidth shaded regions and bounds."""
+        if plot_key in self.plot_controllers:
+            self.plot_controllers[plot_key].set_bandwidth_visible(curve_key, checked)
 
     def handle_reset_plots(self):
         """Restores visibility to all plots, curves, and bandwidth regions,
@@ -840,7 +718,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             total_height = self.plot_splitter.height()
 
             # Recalculate total stretch units allocated across all specs
-            from PlotsSpec import default_stretch, spec
             total_stretch = sum(plot_spec.get('stretch', default_stretch) for plot_spec in spec.values())
 
             # Calculate pixel distribution per plot based on its original stretch factor
@@ -878,89 +755,59 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     if action_key in self.menu_toggle_actions['bandwidths']:
                         self.menu_toggle_actions['bandwidths'][action_key].setChecked(True)
 
+    def show_all_plots(self):
+        # --- 1. Reset Draggable Sizes ---
+        if hasattr(self, 'plot_splitter'):
+            # Look up the current combined height of the plot container area
+            total_height = self.plot_splitter.height()
+
+            # Recalculate total stretch units allocated across all specs
+            total_stretch = sum(plot_spec.get('stretch', default_stretch) for plot_spec in spec.values())
+
+            # Calculate pixel distribution per plot based on its original stretch factor
+            default_sizes = []
+            for plot_spec in spec.values():
+                stretch = plot_spec.get('stretch', default_stretch)
+                # Assign proportional pixel shares from the live height layout
+                allocated_pixels = int((stretch / total_stretch) * total_height)
+                default_sizes.append(allocated_pixels)
+
+            # Forces the splitter to re-snap to the original geometric proportions
+            self.plot_splitter.setSizes(default_sizes)
+
+        # --- 2. Reset Component Visibilities & Menu Sync ---
+        for plot_key, plot_spec in spec.items():
+            self.handle_toggle_plot(plot_key, True)
+
+            if plot_key in self.menu_toggle_actions['plots']:
+                self.menu_toggle_actions['plots'][plot_key].setChecked(True)
+
     def update_plots(self):
-        for plot_name, plot_container in self.plots.items():
-            for curve_name, curve in plot_container['curves'].items():
+        for plot_name, controller in self.plot_controllers.items():
+            for curve_name, curve_config in controller.curves.items():
+
                 # Ensure the required feature exists in our AudioFeatures result object
-                if not hasattr(self.analysedAudioFeatures, curve['analysisResult']):
+                if not hasattr(self.analysedAudioFeatures, curve_config['analysisResult']):
                     continue
 
-                # Retrieve the data object (e.g., a SignalTimeSeries or BandwidthTimeSeries instance)
-                data = getattr(self.analysedAudioFeatures, curve['analysisResult'])
+                # Retrieve the data object (e.g., a SignalTimeSeries instance)
+                data = getattr(self.analysedAudioFeatures, curve_config['analysisResult'])
 
-                # Guard against unexpected types
+                # Guard against unexpected types or mismatched vectors
                 if not hasattr(data, 'x') or not hasattr(data, 'y'):
                     continue
-
                 if len(data.x) != len(data.y):
                     print(f"Mismatch in length for {plot_name}.{curve_name}")
-                else:
-                    if 'has_bw' in curve:
-                        y_arr = np.array(data.y, dtype=float)
-                        x_arr = np.array(data.x, dtype=float)
+                    continue
 
-                        if isinstance(data, BandwidthTimeSeries) and len(data.BW) == len(y_arr):
-                            bw_arr = np.array(data.BW, dtype=float)
-                        else:
-                            bw_arr = np.zeros_like(y_arr)
-
-                        new_upper = y_arr + (bw_arr / 2)
-                        new_lower = y_arr - (bw_arr / 2)
-
-                        # Assuming an analysis step of ~50-100ms, any gap > 0.15s means silence.
-                        # Adjust this threshold if your frame rate changes!
-                        gap_threshold = 0.15
-
-                        if len(x_arr) > 1:
-                            # Find indices where the time difference exceeds our threshold
-                            gaps = np.where(np.diff(x_arr) > gap_threshold)[0] + 1
-
-                            if len(gaps) > 0:
-                                # Insert NaN at these indices to tell PyQtGraph to stop drawing
-                                x_arr = np.insert(x_arr, gaps, np.nan)
-                                new_upper = np.insert(new_upper, gaps, np.nan)
-                                new_lower = np.insert(new_lower, gaps, np.nan)
-
-                        # Set data coordinates directly on the individual curves
-                        curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
-                        curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
-                    else:
-                        if 'colorSource' in curve:
-                            # 1. Fetch the Z-axis data (Weight / slopes)
-                            z_feature = curve['colorSource']
-                            if hasattr(self.analysedAudioFeatures, z_feature):
-                                z_data = getattr(self.analysedAudioFeatures, z_feature)
-
-                                # 2. Proceed only if we have data to map
-                                if len(z_data.x) > 0 and len(data.x) > 0:
-                                    # Interpolate Z to match Y's exact timestamps
-                                    z_interp = np.interp(data.x, z_data.x, z_data.y)
-
-                                    # --- [UPDATED] Hard limits for the colormap ---
-                                    z_min = 0.0
-                                    z_max = 4e-7
-
-                                    # Clip values to ensure they don't exceed the bounds
-                                    z_clipped = np.clip(z_interp, z_min, z_max)
-
-                                    # Normalize Z to a 0.0 - 1.0 scale based strictly on the hard limits
-                                    z_norm = (z_clipped - z_min) / (z_max - z_min)
-                                    # ----------------------------------------------
-
-                                    # 3. Apply a scientific colormap (Viridis)
-                                    cmap = pg.colormap.get('viridis')
-                                    colors = cmap.map(z_norm)  # Returns RGBA tuples/arrays
-
-                                    # Generate PyQTGraph brushes
-                                    brushes = [pg.mkBrush(tuple(c)) for c in colors]
-
-                                    # Draw with dynamic colors
-                                    curve['curve'].setData(x=data.x, y=data.y, symbolBrush=brushes)
-                                else:
-                                    curve['curve'].setData(x=data.x, y=data.y)
-                        else:
-                            # Standard uniform color drawing
-                            curve['curve'].setData(x=data.x, y=data.y)
+                # Route rendering data through the clean interface
+                controller.set_curve_data(
+                    curve_name=curve_name,
+                    x=data.x,
+                    y=data.y,
+                    data_container=data,
+                    audio_features_ctx=self.analysedAudioFeatures
+                )
 
         self.update_playhead()
 
@@ -969,126 +816,44 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     #################### Targets ####################
 
     def open_targets_dialog(self):
-        """Displays a dialog box allowing the user to configure visual targets."""
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("Set Targets")
-        dialog.setMinimumWidth(400)
+        """Displays a detached clean configuration panel dialog box for visual target configs."""
+        # 1. Instantiate the dialog passing your extractor config payload as the strict input interface
+        dialog = TargetConfigDialog(self.audioFeatureExtractor.target_config, parent=self)
 
-        layout = QtWidgets.QVBoxLayout(dialog)
-        form_layout = QtWidgets.QGridLayout()
-        layout.addLayout(form_layout)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            # 2. Extract updated TargetConfig instance out of the dialog wrapper on successful submission
+            updated_config = dialog.get_confirmed_config()
+            self.audioFeatureExtractor.target_config = updated_config
 
-        # Headers
-        form_layout.addWidget(QtWidgets.QLabel("<b>Enable</b>"), 0, 0)
-        form_layout.addWidget(QtWidgets.QLabel("<b>Plot</b>"), 0, 1)
-        form_layout.addWidget(QtWidgets.QLabel("<b>Target min</b>"), 0, 2)
-        form_layout.addWidget(QtWidgets.QLabel("<b>Target max</b>"), 0, 3)
+            # 3. Dynamic lookup and injection across our clean PlotController abstraction
+            for plot_name, controller in self.plot_controllers.items():
 
-        row = 1
-        gui_elements = []
+                # Synchronize enablement states from the dialog GUI elements into the controller bands
+                for target_name, band in controller.target_bands.items():
+                    key = target_name.lower()
+                    is_enabled = dialog.gui_elements[key]['cb'].isChecked() if key in dialog.gui_elements else True
+                    band['enabled'] = is_enabled
 
-        for plot_name, targets in self.target_bands.items():
-            for target_name, target_data in targets.items():
-                cb = QtWidgets.QCheckBox()
-                cb.setChecked(target_data['enabled'])
+                    if not is_enabled:
+                        band['item'].setVisible(False)
 
-                # Format the label nicely
-                lbl_text = f"{plot_name} - {target_name}" if plot_name != target_name else target_name
-                lbl = QtWidgets.QLabel(lbl_text)
+                # Let the controller automatically map and update the min/max regions
+                controller.update_target_bands(updated_config)
 
-                # --- PyQtGraph SpinBox Setup ---
-                # Handles scientific notation natively and limits display to 2 decimals
-                min_spin = pg.SpinBox(
-                    value=target_data['min'],
-                    bounds=[-100000, 100000],
-                    decimals=2
-                )
-
-                max_spin = pg.SpinBox(
-                    value=target_data['max'],
-                    bounds=[-100000, 100000],
-                    decimals=2
-                )
-                # -------------------------------
-
-                form_layout.addWidget(cb, row, 0)
-                form_layout.addWidget(lbl, row, 1)
-                form_layout.addWidget(min_spin, row, 2)
-                form_layout.addWidget(max_spin, row, 3)
-
-                gui_elements.append({
-                    'plot': plot_name,
-                    'target': target_name,
-                    'cb': cb,
-                    'min': min_spin,
-                    'max': max_spin
-                })
-                row += 1
-
-        btn_layout = QtWidgets.QHBoxLayout()
-        save_btn = QtWidgets.QPushButton("Apply && Close")
-        cancel_btn = QtWidgets.QPushButton("Cancel")
-        btn_layout.addWidget(save_btn)
-        btn_layout.addWidget(cancel_btn)
-        layout.addLayout(btn_layout)
-
-        def on_save():
-            for elem in gui_elements:
-                p_name = elem['plot']
-                t_name = elem['target']
-                t_data = self.target_bands[p_name][t_name]
-
-                t_data['enabled'] = elem['cb'].isChecked()
-                t_data['min'] = elem['min'].value()
-                t_data['max'] = elem['max'].value()
-
-                if t_data['enabled']:
-                    t_data['item'].setRegion((t_data['min'], t_data['max']))
-                    t_data['item'].setVisible(True)
-                else:
-                    t_data['item'].setVisible(False)
-
-                val_min = elem['min'].value()
-                val_max = elem['max'].value()
-
-                if t_name == 'F1_Pitch':
-                    self.audioFeatureExtractor.target_config.f1_pitch_min = val_min
-                    self.audioFeatureExtractor.target_config.f1_pitch_max = val_max
-                elif t_name == 'F2_Pitch':
-                    self.audioFeatureExtractor.target_config.f2_pitch_min = val_min
-                    self.audioFeatureExtractor.target_config.f2_pitch_max = val_max
-                elif t_name == 'F3_Pitch':
-                    self.audioFeatureExtractor.target_config.f3_pitch_min = val_min
-                    self.audioFeatureExtractor.target_config.f3_pitch_max = val_max
-
-            self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size()
+            # 4. Trigger calculations downstream and refresh active viewports
+            self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
             self.update_plots()
 
-            dialog.accept()
-
-        save_btn.clicked.connect(on_save)
-        cancel_btn.clicked.connect(dialog.reject)
-
-        dialog.exec()
-
     def export_targets(self):
-        """Dumps dictionary rules to a standard JSON configured txt file."""
+        """Dumps TargetConfig rules directly to a standard JSON or text file."""
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Save Targets", "", "Text Files (*.txt);;JSON Files (*.json);;All Files (*)"
+            self, "Save Targets", "", "JSON Files (*.json);;Text Files (*.txt);;All Files (*)"
         )
         if save_path:
             try:
-                data_to_save = {}
-                for plot_name, targets in self.target_bands.items():
-                    data_to_save[plot_name] = {}
-                    for target_name, target_data in targets.items():
-                        data_to_save[plot_name][target_name] = {
-                            'enabled': target_data['enabled'],
-                            'min': target_data['min'],
-                            'max': target_data['max']
-                        }
-                with open(save_path, 'w') as f:
-                    json.dump(data_to_save, f, indent=4)
+                # Leverage the TargetConfig 4-significant-digits JSON exporter directly
+                config_obj = self.audioFeatureExtractor.target_config
+                config_obj.to_json(save_path)
                 print(f"Successfully saved targets to: {save_path}")
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving targets:\n{str(e)}")
@@ -1099,42 +864,21 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self, "Load Targets", "", "Text/JSON Files (*.txt *.json);;All Files (*)"
         )
         if open_path:
-            self._load_targets_from_path(open_path)
+            self.load_targets_from_path(open_path)
 
-    def _load_targets_from_path(self, open_path):
-        """Shared logic to read and parse target profiles from a specific file path location."""
+    def load_targets_from_path(self, open_path):
+        """Shared logic to read, parse, and synchronize TargetConfig configurations with the UI."""
         try:
-            with open(open_path, 'r') as f:
-                loaded_data = json.load(f)
+            new_config = TargetConfig.from_json(open_path)
+            self.audioFeatureExtractor.target_config = new_config
 
-            for plot_name, targets in loaded_data.items():
-                if plot_name in self.target_bands:
-                    for target_name, target_data in targets.items():
-                        if target_name in self.target_bands[plot_name]:
-                            t_obj = self.target_bands[plot_name][target_name]
-                            t_obj['enabled'] = target_data.get('enabled', False)
-                            t_obj['min'] = target_data.get('min', 0.0)
-                            t_obj['max'] = target_data.get('max', 1.0)
+            for plot_name, controller in self.plot_controllers.items():
+                for band in controller.target_bands.values():
+                    band['enabled'] = True
 
-                            if t_obj['enabled']:
-                                t_obj['item'].setRegion((t_obj['min'], t_obj['max']))
-                                t_obj['item'].setVisible(True)
-                            else:
-                                t_obj['item'].setVisible(False)
+                controller.update_target_bands(new_config)
 
-            targets_f1 = loaded_data.get('F1_Pitch', {}).get('F1_Pitch', {})
-            self.audioFeatureExtractor.target_config.f1_pitch_min = targets_f1.get('min', 0.0)
-            self.audioFeatureExtractor.target_config.f1_pitch_max = targets_f1.get('max', 1.0)
-
-            targets_f2 = loaded_data.get('F2_Pitch', {}).get('F2_Pitch', {})
-            self.audioFeatureExtractor.target_config.f2_pitch_min = targets_f2.get('min', 0.0)
-            self.audioFeatureExtractor.target_config.f2_pitch_max = targets_f2.get('max', 1.0)
-
-            targets_f3 = loaded_data.get('F3_Pitch', {}).get('F3_Pitch', {})
-            self.audioFeatureExtractor.target_config.f3_pitch_min = targets_f3.get('min', 0.0)
-            self.audioFeatureExtractor.target_config.f3_pitch_max = targets_f3.get('max', 1.0)
-
-            self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size()
+            self.analysedAudioFeatures.size = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
             self.update_plots()
             print(f"Successfully loaded targets from: {open_path}")
 

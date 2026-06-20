@@ -2,34 +2,18 @@ import json
 import pytest
 
 
-# --- TESTS ---
 
 def test_export_targets_successful(widget, mocker):
     """
-    Business Logic: Ensures that the internal `target_bands` dictionary (which contains
-    PyQtGraph UI elements) is safely stripped of UI references and correctly formatted
-    into a JSON-compatible dictionary for exporting.
+    Business Logic: Ensures that the TargetConfig parameters are correctly
+    serialized and exported to a JSON file format via the target config instance.
     """
-    # 1. Setup fake internal target bands data containing UI items that cannot be JSON serialized
-    mock_ui_item = mocker.MagicMock()
-    widget.target_bands = {
-        'Plot1': {
-            'F1_Pitch': {
-                'enabled': True,
-                'min': 150.0,
-                'max': 250.0,
-                'item': mock_ui_item  # This should NOT be in the exported JSON
-            }
-        },
-        'Plot2': {
-            'F2_Pitch': {
-                'enabled': False,
-                'min': 800.0,
-                'max': 1200.0,
-                'item': mock_ui_item
-            }
-        }
-    }
+    # 1. Update the widget's internal target_config state with known parameters
+    from signal_processing.TargetConfig import TargetConfig
+    widget.audioFeatureExtractor.target_config = TargetConfig(targets=[
+        {"name": "f1_pitch", "min": 150.0, "max": 250.0, "enabled": True},
+        {"name": "f2_pitch", "min": 800.0, "max": 1200.0, "enabled": False}
+    ])
 
     # 2. Mock file dialog to simulate user selecting a save path
     mocker.patch(
@@ -37,7 +21,7 @@ def test_export_targets_successful(widget, mocker):
         return_value=('dummy_export.json', 'JSON Files (*.json)')
     )
 
-    # 3. Mock file operations
+    # 3. Mock file operations to capture the write execution
     mock_file = mocker.patch('builtins.open', mocker.mock_open())
     mock_json_dump = mocker.patch('json.dump')
 
@@ -45,22 +29,19 @@ def test_export_targets_successful(widget, mocker):
     widget.export_targets()
 
     # Assert
-    mock_file.assert_called_once_with('dummy_export.json', 'w')
+    mock_file.assert_called_once_with('dummy_export.json', 'w', encoding='utf-8')
 
-    # Check exactly what data was passed to json.dump
+    # Verify that the expected uniform data format was passed to json.dump
     expected_export_dict = {
-        'Plot1': {
-            'F1_Pitch': {'enabled': True, 'min': 150.0, 'max': 250.0}
-        },
-        'Plot2': {
-            'F2_Pitch': {'enabled': False, 'min': 800.0, 'max': 1200.0}
-        }
+        'targets': [
+            {'name': 'f1_pitch', 'min': 150.0, 'max': 250.0, 'enabled': True},
+            {'name': 'f2_pitch', 'min': 800.0, 'max': 1200.0, 'enabled': False}
+        ]
     }
 
     mock_json_dump.assert_called_once()
-    args, kwargs = mock_json_dump.call_args
+    args, _ = mock_json_dump.call_args
     assert args[0] == expected_export_dict
-
 
 def test_export_targets_cancelled(widget, mocker):
     """
@@ -94,7 +75,7 @@ def test_import_targets_successful(widget, mocker):
     )
 
     # Mock the internal loader so we can intercept the call
-    mock_loader = mocker.patch.object(widget, '_load_targets_from_path')
+    mock_loader = mocker.patch.object(widget, 'load_targets_from_path')
 
     # Act
     widget.import_targets()
@@ -114,7 +95,7 @@ def test_import_targets_cancelled(widget, mocker):
         return_value=('', '')
     )
 
-    mock_loader = mocker.patch.object(widget, '_load_targets_from_path')
+    mock_loader = mocker.patch.object(widget, 'load_targets_from_path')
 
     # Act
     widget.import_targets()
@@ -122,6 +103,7 @@ def test_import_targets_cancelled(widget, mocker):
     # Assert
     mock_loader.assert_not_called()
 
+import json
 
 def test_targets_propagate_to_feature_extractor(widget, mocker):
     """
@@ -130,17 +112,13 @@ def test_targets_propagate_to_feature_extractor(widget, mocker):
     underlying AudioFeatureExtractor's target_config object, and a recalculation
     is triggered.
     """
-    # 1. Setup a comprehensive fake JSON payload containing distinct values for all formants
+    # 1. Setup a comprehensive fake JSON payload structured as a uniform list of target objects
     mock_json_data = {
-        "F1_Pitch": {
-            "F1_Pitch": {"enabled": True, "min": 300.0, "max": 600.0}
-        },
-        "F2_Pitch": {
-            "F2_Pitch": {"enabled": True, "min": 1000.0, "max": 1500.0}
-        },
-        "F3_Pitch": {
-            "F3_Pitch": {"enabled": False, "min": 2500.0, "max": 3000.0}
-        }
+        "targets": [
+            {"name": "F1_Pitch", "enabled": True, "min": 300.0, "max": 600.0},
+            {"name": "F2_Pitch", "enabled": True, "min": 1000.0, "max": 1500.0},
+            {"name": "F3_Pitch", "enabled": False, "min": 2500.0, "max": 3000.0}
+        ]
     }
 
     # Mock 'open' to simulate reading the file
@@ -150,19 +128,31 @@ def test_targets_propagate_to_feature_extractor(widget, mocker):
     mocker.patch.object(widget, 'update_plots')
 
     # Act
-    widget._load_targets_from_path("dummy_path.json")
+    widget.load_targets_from_path("dummy_path.json")
 
-    # Assert - Verify propagation to the internal F1 limits
-    assert widget.audioFeatureExtractor.target_config.f1_pitch_min == 300.0
-    assert widget.audioFeatureExtractor.target_config.f1_pitch_max == 600.0
+    # Assert - Reference the target config instance
+    target_config = widget.audioFeatureExtractor.target_config
 
-    # Assert - Verify propagation to the internal F2 limits
-    assert widget.audioFeatureExtractor.target_config.f2_pitch_min == 1000.0
-    assert widget.audioFeatureExtractor.target_config.f2_pitch_max == 1500.0
+    # Verify propagation to the internal F1 limits
+    f1_bounds = target_config.get_bounds("F1_Pitch")
+    assert f1_bounds is not None
+    assert f1_bounds[0] == 300.0
+    assert f1_bounds[1] == 600.0
+    assert f1_bounds[2] is True
 
-    # Assert - Verify propagation to the internal F3 limits
-    assert widget.audioFeatureExtractor.target_config.f3_pitch_min == 2500.0
-    assert widget.audioFeatureExtractor.target_config.f3_pitch_max == 3000.0
+    # Verify propagation to the internal F2 limits
+    f2_bounds = target_config.get_bounds("F2_Pitch")
+    assert f2_bounds is not None
+    assert f2_bounds[0] == 1000.0
+    assert f2_bounds[1] == 1500.0
+    assert f2_bounds[2] is True
+
+    # Verify propagation to the internal F3 limits
+    f3_bounds = target_config.get_bounds("F3_Pitch")
+    assert f3_bounds is not None
+    assert f3_bounds[0] == 2500.0
+    assert f3_bounds[1] == 3000.0
+    assert f3_bounds[2] is False
 
     # Assert - Ensure the extractor was commanded to rebuild its sizes based on the new limits
     widget.audioFeatureExtractor.recalculate_size.assert_called_once()

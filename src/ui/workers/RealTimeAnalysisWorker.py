@@ -79,8 +79,8 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                                 F2=results.F2.y[-1],
                                 F3=results.F3.y[-1],
 
-                                # Spectral Slopes
-                                slopes=results.slopes.y[-1],
+                                # Weight
+                                weight=results.weight.y[-1],
 
                                 F1_Pitch=results.F1_Pitch.y[-1] if len(results.F1_Pitch.y) > 0 else None,
                                 F2_Pitch=results.F2_Pitch.y[-1] if len(results.F2_Pitch.y) > 0 else None,

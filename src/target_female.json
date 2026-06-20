@@ -1,51 +1,64 @@
 {
-    "Loudness": {
-        "Loudness": {
-            "enabled": false,
+    "targets": [
+        {
+            "name": "loudness",
             "min": 0.0,
-            "max": 1.0
-        }
-    },
-    "Pitch": {
-        "Pitch": {
-            "enabled": true,
-            "min": 161.0,
-            "max": 209.0
-        }
-    },
-    "F3_Pitch": {
-        "F3_Pitch": {
-            "enabled": true,
+            "max": 1.0,
+            "enabled": false
+        },
+        {
+            "name": "pitch",
+            "min": 170.0,
+            "max": 250.0,
+            "enabled": true
+        },
+        {
+            "name": "f1",
+            "min": 300.0,
+            "max": 500.0,
+            "enabled": false
+        },
+        {
+            "name": "f2",
+            "min": 1300.0,
+            "max": 1700.0,
+            "enabled": false
+        },
+        {
+            "name": "f3",
+            "min": 2550.0,
+            "max": 2750.0,
+            "enabled": false
+        },
+        {
+            "name": "f3_pitch",
             "min": 12.95,
-            "max": 15.92
-        }
-    },
-    "F2_Pitch": {
-        "F2_Pitch": {
-            "enabled": true,
+            "max": 15.92,
+            "enabled": true
+        },
+        {
+            "name": "f2_pitch",
             "min": 7.92,
-            "max": 9.56
-        }
-    },
-    "F1_Pitch": {
-        "F1_Pitch": {
-            "enabled": true,
+            "max": 9.56,
+            "enabled": true
+        },
+        {
+            "name": "f1_pitch",
             "min": 2.38,
-            "max": 3.27
+            "max": 3.27,
+            "enabled": true
+        },
+        {
+            "name": "size",
+            "min": -5.0,
+            "max": 1.0,
+            "enabled": true
+        },
+        {
+            "name": "weight",
+            "min": 0.0,
+            "max": 4e-07,
+            "enabled": true
         }
-    },
-    "Size": {
-        "Size": {
-            "enabled": true,
-            "min": -2.0,
-            "max": 2.0
-        }
-    },
-    "Weight": {
-        "Weight": {
-            "enabled": true,
-            "min": 7.4915e-08,
-            "max": 1.2780e-07
-        }
-    }
+    ]
 }

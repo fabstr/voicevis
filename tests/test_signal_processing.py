@@ -166,7 +166,7 @@ def test_derived_properties(analyzer, soft_isch_aaa):
     assert len(f2_pitch_bw) > 0 and not np.isnan(f2_pitch_bw).all()
     assert len(f3_pitch_bw) > 0 and not np.isnan(f3_pitch_bw).all()
 
-    weight_array = features.slopes.y
+    weight_array = features.weight.y
     assert len(weight_array) > 0, "Weight array was not populated."
     assert np.isfinite(weight_array).all()
 
