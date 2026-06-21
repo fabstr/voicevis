@@ -56,5 +56,5 @@ jobs:
       with:
         name: VoiceVis-Windows-Build
         # PyInstaller outputs the folder to dist/<name> in onedir mode
-        path: dist/VoiceVis/
+        path: dist/VoiceVis-*/
         retention-days: 7
