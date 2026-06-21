@@ -10,6 +10,5 @@ build/
 dist/
 accent_gmu_edu/
 examples/
-*.json
 ffmpeg*
 resources/
