@@ -1,15 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
 hiddenimports = []
 
-# --- Copy resource folders into the application tree ---
-datas += [
-    ('targets', 'targets'),
-    ('docs', 'docs')
-]
+# --- 1. Safely read the generated version file at compile time ---
+# Changed SPEC_FILE to spec_file here:
+SPEC_DIR = SPECPATH
+version_file = os.path.join(SPEC_DIR, 'src', '_version.py')
+
+version_str = "Dev-Snapshot"
+if os.path.exists(version_file):
+    version_globals = {}
+    with open(version_file, "r", encoding="utf-8") as f:
+        exec(f.read(), version_globals)
+    if "__version__" in version_globals:
+        version_str = version_globals["__version__"]
+
+# Construct the versioned application name
+app_name = f"VoiceVis-{version_str}"
+
+
+# --- 2. Copy resource folders into the application tree ---
+for folder in ['targets', 'docs']:
+    folder_path = os.path.join(SPEC_DIR, folder)
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    datas.append((folder_path, folder))
 
 # Collect third-party package resources
 tmp_ret = collect_all('opensmile')
@@ -39,7 +58,7 @@ exe = EXE(
     [],
     [],
     exclude_binaries=True,
-    name='VoiceVis',
+    name=app_name,  # Updates the main executable filename
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -62,5 +81,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='VoiceVis',
+    name=app_name,  # Updates the parent folder directory name inside dist/
 )
