@@ -24,7 +24,7 @@ app_name = f"VoiceVis-{version_str}"
 
 
 # --- 2. Copy resource folders into the application tree ---
-for folder in ['targets', 'docs']:
+for folder in ['targets', 'docs', 'sample_texts']:
     folder_path = os.path.join(SPEC_DIR, folder)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)

@@ -60,6 +60,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.setup_audio()
 
         self.help_window = None
+        self.sample_text_window = None
 
     def setup_audio(self):
         # 1. Define the audio format (Standard CD quality PCM)
@@ -184,6 +185,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         self.handle_toggle_bandwidth(p_key, c_key, checked)
                     )
                     self.menu_toggle_actions['bandwidths'][(plot_key, curve_key)] = show_bw_action
+
+        samples_menu = self.menu_bar.addMenu("&Sample texts")
+        sample_texts_action = samples_menu.addAction("Sample Texts Editor")
+        sample_texts_action.triggered.connect(self.show_sample_text_window)
 
         # --- View Menu (Theme Settings) ---
         view_menu = self.menu_bar.addMenu("&View")
@@ -352,6 +357,16 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # Always call the parent class implementation to maintain native behaviors
         super().changeEvent(event)
+
+    def show_sample_text_window(self):
+        if self.sample_text_window is None:
+            # Assuming you saved the above class in ui/SampleTextWindow.py
+            from ui.SampleTextWindow import SampleTextWindow
+            self.sample_text_window = SampleTextWindow()
+
+        self.sample_text_window.show()
+        self.sample_text_window.raise_()
+        self.sample_text_window.activateWindow()
 
     #################### File loading/saving ####################
 
