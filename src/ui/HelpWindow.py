@@ -4,11 +4,18 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter, QListWidget, QTextB
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 
+# --- Try to safely read the auto-generated version file ---
+try:
+    from _version import __version__
+except ImportError:
+    __version__ = "Dev-Snapshot"
+
 
 class HelpWindow(QWidget):
     def __init__(self, docs_dir="docs"):
         super().__init__()
-        self.setWindowTitle("VoiceVis Help")
+        # --- Update the window title to include the version ---
+        self.setWindowTitle(f"VoiceVis Help")
         self.resize(850, 600)
 
         # --- Resolve the Docs Directory Path Dynamically ---
@@ -114,6 +121,11 @@ class HelpWindow(QWidget):
             try:
                 with open(file_name, "r", encoding="utf-8") as f:
                     markdown_text = f.read()
+
+                # --- Dynamic replacement step ---
+                # This injects the version string wherever you drop {{VERSION}} in your markdown files
+                markdown_text = markdown_text.replace("{{VERSION}}", __version__)
+
                 self.text_browser.setMarkdown(markdown_text)
             except FileNotFoundError:
                 error_msg = f"# Error\nCould not find documentation file:\n`{file_name}`"

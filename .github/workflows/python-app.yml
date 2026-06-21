@@ -18,7 +18,12 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Forces downloading all history and tags
+
     - name: Set up Python 3.10
       uses: actions/setup-python@v3
       with:
@@ -43,7 +48,7 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        # Replace 'VoiceVis.spec' with the actual filename of your spec file if it differs
+        python src/generate_version.py
         pyinstaller VoiceVis.spec
 
     - name: Upload Build Artifact

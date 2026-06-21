@@ -4,6 +4,11 @@ import qtawesome as qta
 
 from ui.LiveMultiPlotWidget import LiveMultiPlotWidget
 
+# Try to safely read the auto-generated version file
+try:
+    from _version import __version__
+except ImportError:
+    __version__ = "Dev-Snapshot"
 
 # --- NEW: Subclass to catch the close event properly ---
 class SessionDockWidget(QtWidgets.QDockWidget):
@@ -18,7 +23,7 @@ class SessionDockWidget(QtWidgets.QDockWidget):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("VoiceVis")
+        self.setWindowTitle(f"VoiceVis {__version__}")
         self.resize(800, 900)
 
         # --- DOCK WIDGET SETUP ---
