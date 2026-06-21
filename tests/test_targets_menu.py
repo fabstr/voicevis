@@ -66,22 +66,32 @@ def test_export_targets_cancelled(widget, mocker):
 def test_import_targets_successful(widget, mocker):
     """
     Business Logic: Ensures that selecting a file from the import dialog correctly
-    forwards the path to the internal `_load_targets_from_path` loading method.
+    parses the JSON configuration and passes it to set_target_config.
     """
-    # Simulate user selecting a file to open
+    # 1. Simulate the user selecting a file to open
     mocker.patch(
         'ui.LiveMultiPlotWidget.QtWidgets.QFileDialog.getOpenFileName',
         return_value=('dummy_import.json', 'JSON Files (*.json)')
     )
 
-    # Mock the internal loader so we can intercept the call
-    mock_loader = mocker.patch.object(widget, 'load_targets_from_path')
+    # 2. Mock TargetConfig.from_json so it returns a dummy object instead of hitting the file system
+    mock_config = mocker.MagicMock()
+    mock_from_json = mocker.patch(
+        'signal_processing.TargetConfig.TargetConfig.from_json',
+        return_value=mock_config
+    )
+
+    # 3. Spy on or mock set_target_config to verify it receives the object
+    mock_set_config = mocker.patch.object(widget, 'set_target_config')
 
     # Act
     widget.import_targets()
 
     # Assert
-    mock_loader.assert_called_once_with('dummy_import.json')
+    # Verify from_json was called with our dummy path string
+    mock_from_json.assert_called_once_with('dummy_import.json')
+    # Verify the extracted configuration was forwarded to the widget's setter
+    mock_set_config.assert_called_once_with(mock_config)
 
 
 def test_import_targets_cancelled(widget, mocker):
