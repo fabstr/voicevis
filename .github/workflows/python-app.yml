@@ -51,10 +51,29 @@ jobs:
         python src/generate_version.py
         pyinstaller VoiceVis.spec
 
+    - name: Read Version from Python
+      id: get_version
+      shell: bash # Use bash to avoid PowerShell quote-escaping issues
+      run: |
+        python -c "
+        import os
+        
+        # Read the version file safely
+        version_globals = {}
+        with open('src/_version.py', 'r', encoding='utf-8') as f:
+            exec(f.read(), version_globals)
+        version = version_globals.get('__version__', 'VERSION_UNKNOWN')
+        
+        # Append the dynamic name directly to the GitHub outputs file
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as env_file:
+            env_file.write(f'ARTIFACT_NAME=VoiceVis-{version}\n')
+        "
+
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: VoiceVis-Windows-Build
+        # Use the variable set by our Python script
+        name: ${{ steps.get_version.outputs.ARTIFACT_NAME }}-Windows
         # PyInstaller outputs the folder to dist/<name> in onedir mode
         path: dist/VoiceVis-*/
-        retention-days: 7
+        retention-days: 3
