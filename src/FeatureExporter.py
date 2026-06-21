@@ -285,8 +285,8 @@ def main():
                     print(f"Error exporting to {path}: {ex}", file=sys.stderr)
 
         # Output paths
-        output_paths_male = [os.path.join(script_dir, "target_male.json")]
-        output_paths_female = [os.path.join(script_dir, "target_female.json")]
+        output_paths_male = [os.path.join(script_dir, "../targets/target_male.json")]
+        output_paths_female = [os.path.join(script_dir, "../targets/target_female.json")]
 
         output_paths_male = list(set(os.path.abspath(p) for p in output_paths_male))
         output_paths_female = list(set(os.path.abspath(p) for p in output_paths_female))

@@ -1,4 +1,5 @@
 import os
+import sys
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter, QListWidget, QTextBrowser
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
@@ -9,7 +10,17 @@ class HelpWindow(QWidget):
         super().__init__()
         self.setWindowTitle("VoiceVis Help")
         self.resize(850, 600)
-        self.docs_dir = docs_dir
+
+        # --- Resolve the Docs Directory Path Dynamically ---
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running as a bundled application; 'docs' sits inside PyInstaller's data tree
+            base_dir = sys._MEIPASS
+        else:
+            # Running as a raw script; look for 'docs' up one level from 'src'
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            base_dir = os.path.join(base_dir, '..')
+
+        self.docs_dir = os.path.join(base_dir, docs_dir)
 
         # Set up the main layout and a splitter for resizable panes
         layout = QHBoxLayout(self)
@@ -73,7 +84,7 @@ class HelpWindow(QWidget):
                 else:
                     help_items.append(item)
 
-        # If main.md was found, insert it at the very top (index 0)
+        # If readme.md was found, insert it at the very top (index 0)
         if main_item:
             help_items.insert(0, main_item)
         print("main", main_item)
@@ -116,14 +127,12 @@ class HelpWindow(QWidget):
             return
 
         # 2. Handle internal Markdown links
-        # Extract just the filename (e.g., from "./docs/data_extraction.md" to "data_extraction.md")
         target_filename = os.path.basename(url.toString())
 
         # Search our help_data for a matching filename
         for index, item in enumerate(self.help_data):
             if os.path.basename(item["file_name"]) == target_filename:
                 # Update the sidebar selection.
-                # This automatically triggers on_row_changed() and loads the document!
                 self.toc_list.setCurrentRow(index)
                 return
 

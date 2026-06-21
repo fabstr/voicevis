@@ -4,6 +4,14 @@ from PyInstaller.utils.hooks import collect_all
 datas = []
 binaries = []
 hiddenimports = []
+
+# --- Copy resource folders into the application tree ---
+datas += [
+    ('targets', 'targets'),
+    ('docs', 'docs')
+]
+
+# Collect third-party package resources
 tmp_ret = collect_all('opensmile')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('audresample')
@@ -11,7 +19,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['src\\app.py'],
+    ['src\\main.py'],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -28,9 +36,9 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    [],
+    exclude_binaries=True,
     name='VoiceVis',
     debug=False,
     bootloader_ignore_signals=False,
@@ -44,4 +52,15 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='VoiceVis',
 )

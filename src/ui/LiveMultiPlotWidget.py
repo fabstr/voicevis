@@ -114,8 +114,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         targets_menu = self.menu_bar.addMenu("&Targets")
         targets_menu.addAction("Set Targets...", self.open_targets_dialog)
         targets_menu.addSeparator()
-        targets_menu.addAction("Female", lambda: self.load_targets_from_path("src/target_female.json"))
-        targets_menu.addAction("Male", lambda: self.load_targets_from_path("src/target_male.json"))
+        targets_menu.addAction("Female", lambda: self.load_targets_from_path("target_female.json"))
+        targets_menu.addAction("Male", lambda: self.load_targets_from_path("target_male.json"))
         targets_menu.addSeparator()
         targets_menu.addAction("Import targets...", self.import_targets)
         targets_menu.addAction("Export targets...", self.export_targets)
@@ -862,26 +862,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             # 2. Extract updated TargetConfig instance out of the dialog wrapper on successful submission
             updated_config = dialog.get_confirmed_config()
-            self.audioFeatureExtractor.target_config = updated_config
-
-            # 3. Dynamic lookup and injection across our clean PlotController abstraction
-            for plot_name, controller in self.plot_controllers.items():
-
-                # Synchronize enablement states from the dialog GUI elements into the controller bands
-                for target_name, band in controller.target_bands.items():
-                    key = target_name.lower()
-                    is_enabled = dialog.gui_elements[key]['cb'].isChecked() if key in dialog.gui_elements else True
-                    band['enabled'] = is_enabled
-
-                    if not is_enabled:
-                        band['item'].setVisible(False)
-
-                # Let the controller automatically map and update the min/max regions
-                controller.update_target_bands(updated_config)
-
-            # 4. Trigger calculations downstream and refresh active viewports
-            self.analysedAudioFeatures = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
-            self.update_plots()
+            self.set_target_config(updated_config)
 
     def export_targets(self):
         """Dumps TargetConfig rules directly to a standard JSON or text file."""
@@ -903,29 +884,51 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self, "Load Targets", "", "Text/JSON Files (*.txt *.json);;All Files (*)"
         )
         if open_path:
-            self.load_targets_from_path(open_path)
+            try:
+                new_config = TargetConfig.from_json(open_path)
 
-    def load_targets_from_path(self, open_path):
+                self.set_target_config(new_config)
+                print(f"Successfully loaded targets from: {open_path}")
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Load Error",
+                                               f"An error occurred while loading targets:\n{str(e)}")
+                raise e
+
+    def load_targets_from_path(self, target_file_name):
         """Shared logic to read, parse, and synchronize TargetConfig configurations with the UI."""
         try:
-            new_config = TargetConfig.from_json(open_path)
-            self.audioFeatureExtractor.target_config = new_config
+            # Determine the base directory dynamically
+            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                # Works perfectly in PyInstaller v6+ (--onedir drops datas into _internal)
+                base_dir = sys._MEIPASS
+            else:
+                # Running as raw script; 'targets' folder is up one level from 'src'
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                base_dir = os.path.join(base_dir, '..')
 
-            for plot_name, controller in self.plot_controllers.items():
-                for band in controller.target_bands.values():
-                    band['enabled'] = True
+            # Safely resolve the absolute path to the target file inside the targets folder
+            full_path = os.path.join(base_dir, 'targets', target_file_name)
 
-                controller.update_target_bands(new_config)
-
-            self.analysedAudioFeatures.size = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
-            self.update_plots()
-            print(f"Successfully loaded targets from: {open_path}")
+            new_config = TargetConfig.from_json(full_path)
+            self.set_target_config(new_config)
+            print(f"Successfully loaded targets from: {full_path}")
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
                                            f"An error occurred while loading targets:\n{str(e)}")
             raise e
 
+    def set_target_config(self, new_config: TargetConfig):
+        self.audioFeatureExtractor.target_config = new_config
+
+        for plot_name, controller in self.plot_controllers.items():
+            for band in controller.target_bands.values():
+                band['enabled'] = True
+
+            controller.update_target_bands(new_config)
+
+        self.analysedAudioFeatures.size = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
+        self.update_plots()
 
     #################### Mouse & keyboard actions ####################
 
