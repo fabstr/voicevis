@@ -24,7 +24,7 @@ app_name = f"VoiceVis-{version_str}"
 
 
 # --- 2. Copy resource folders into the application tree ---
-for folder in ['targets', 'docs', 'sample_texts']:
+for folder in ['targets', 'docs']:
     folder_path = os.path.join(SPEC_DIR, folder)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
@@ -83,3 +83,29 @@ coll = COLLECT(
     upx_exclude=[],
     name=app_name,  # Updates the parent folder directory name inside dist/
 )
+
+import shutil
+
+print("*** Running post-processing to copy external folders ***")
+
+# DISTPATH is a built-in PyInstaller spec variable pointing to the dist/ folder
+final_build_dir = os.path.join(DISTPATH, app_name)
+
+# The folders you want sitting next to the .exe
+folders_to_expose = ['sample_texts']
+
+for folder in folders_to_expose:
+    src_folder = os.path.join(SPECPATH, folder)
+    dest_folder = os.path.join(final_build_dir, folder)
+
+    # Create the source folder locally if it doesn't exist
+    if not os.path.exists(src_folder):
+        os.makedirs(src_folder)
+
+    # If rebuilding, delete the old destination folder first
+    if os.path.exists(dest_folder):
+        shutil.rmtree(dest_folder)
+
+    # Copy the folder to the final build directory, next to the .exe
+    shutil.copytree(src_folder, dest_folder)
+    print(f"Copied {folder} directly next to the executable.")
