@@ -36,12 +36,15 @@ class AudioFeatures:
     # Pitch-Relative Formants (Standard & Bandwidth variants)
     F1_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F1_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
+    F1_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     F2_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F2_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
+    F2_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     F3_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F3_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
+    F3_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     size: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     size_vs_weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)

@@ -123,6 +123,13 @@ class AudioFeatureExtractor:
             F2=SignalTimeSeries(x=t_filtered, y=f2[valid_mask]),
             F3=SignalTimeSeries(x=t_filtered, y=f3[valid_mask]),
 
+            F1_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered,
+                                                    y=df['F1amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+            F2_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered,
+                                                    y=df['F2amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+            F3_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered,
+                                                    y=df['F3amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+
             loudness=SignalTimeSeries(x=t_filtered, y=loudness_raw[valid_mask]),
 
             sample_rate=sampling_rate,
@@ -211,6 +218,7 @@ class AudioFeatureExtractor:
                 window_size=window_size_samples, step_size=step_size_samples
             )
             result.F3_Pitch_BW = BandwidthTimeSeries(x=bw_f3_pitch["x"], y=bw_f3_pitch["y"], BW=bw_f3_pitch["BW"])
+
 
             elapsed_time_bw = time.perf_counter() - start_time_bw
             # print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")

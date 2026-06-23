@@ -138,6 +138,52 @@ spec = {
         'linkX': 'Loudness'
     },
 
+    'F3_Pitch_rel_amplitude': {
+        'title': 'F3 / Pitch rel amp',
+        'hidden': False,
+        'y_min': -120,
+        'y_max': 30,
+        'curves': {
+            'F3_Pitch_rel_amplitude': {
+                'size': defaultSize,
+                'colour': f3_pitch,
+                'analysisResult': 'F3_Pitch_rel_amplitude'
+            },
+        },
+        'linkX': 'Loudness'
+    },
+
+    'F2_Pitch_rel_amplitude': {
+        'title': 'F2 / Pitch rel amp',
+        'hidden': False,
+        'y_min': -120,
+        'y_max': 20,
+        'curves': {
+            'F2_Pitch_rel_amplitude': {
+                'size': defaultSize,
+                'colour': f2_pitch,
+                'analysisResult': 'F2_Pitch_rel_amplitude'
+            },
+        },
+        'linkX': 'Loudness'
+    },
+
+    'F1_Pitch_rel_amplitude': {
+        'title': 'F1 / Pitch rel amp',
+        'hidden': False,
+        'y_min': -120,
+        'y_max': 20,
+        'curves': {
+            'F1_Pitch_rel_amplitude': {
+                'size': defaultSize,
+                'colour': f1_pitch,
+                'analysisResult': 'F1_Pitch_rel_amplitude'
+            },
+        },
+        'linkX': 'Loudness'
+    },
+
+
     'F2_Pitch': {
         'title': 'F2 / Pitch',
         'y_min': 1,
