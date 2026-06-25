@@ -28,6 +28,7 @@ spec = {
         'mouse_enabled_y': False,
         'y_min': 0,
         'y_max': 1,
+        'hidden': True,
         'curves': {
             'pitch': {
                 'size': defaultSize,
@@ -46,6 +47,7 @@ spec = {
         'y_min': 0,
         'y_max': 350,
         'stretch': 1,
+        'hidden': True,
         'curves': {
             'pitch': {
                 'size': defaultSize,
@@ -236,6 +238,7 @@ spec = {
         'title': 'Size',
         'y_min': -15,
         'y_max': 25  ,
+        'hidden': True,
         'curves': {
             'size': {
                 'size': defaultSize+1,
@@ -253,6 +256,7 @@ spec = {
         'title': 'Weight',
         'y_min': 0,
         'y_max': 8.0e-7,
+        'hidden': True,
         'curves': {
             'weight': {
                 'size': defaultSize+1,
@@ -270,6 +274,7 @@ spec = {
         'title': 'Fullness',
         'y_min': -15,
         'y_max': 25,
+        'hidden': True,
         'curves': {
             'size_weight': {
                 'size': defaultSize + 2,
@@ -282,5 +287,21 @@ spec = {
             'Size': {'colour': target_band}
         },
         'linkX': 'Loudness',
-    }
+    },
+
+    'Spectrogram': {
+            'title': 'Spectrogram',
+            'y_min': 0,
+            'y_max': 8000,  # Displays up to 8kHz by default
+            'mouse_enabled_x': True,
+            'mouse_enabled_y': True,
+            'curves': {
+                'spectrogram': {
+                    'analysisResult': 'spectrogram',
+                    'is_spectrogram': True,  # The flag our PlotController looks for
+                    'colour': 'viridis',
+                },
+            },
+            'linkX': 'Loudness' # Synchronize zooming/panning with the other plots
+        },
 }

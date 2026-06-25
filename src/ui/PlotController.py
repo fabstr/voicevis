@@ -129,6 +129,22 @@ class PlotController(QtCore.QObject):
         for name, curve_spec in self.spec['curves'].items():
             self.curves[name] = {'analysisResult': curve_spec['analysisResult']}
 
+            if curve_spec.get('is_spectrogram'):
+                img = pg.ImageItem()
+
+                # Apply a visually distinct colormap (magma/viridis is standard for spectrograms)
+                cmap = pg.colormap.get(curve_spec['colour'])
+                img.setLookupTable(cmap.getLookupTable())
+
+                self.widget.addItem(img)
+
+                # Z-value pushed back so crosshairs/playheads render on top
+                img.setZValue(-30)
+
+                self.curves[name]['is_spectrogram'] = True
+                self.curves[name]['image_item'] = img
+                continue
+
             if "BW" in curve_spec and curve_spec["BW"]:
                 self.curves[name]['has_bw'] = True
                 transparent_pen = pg.mkPen(color=(0, 0, 0, 0), width=1)
@@ -187,6 +203,24 @@ class PlotController(QtCore.QObject):
         curve = self.curves.get(curve_name)
         if not curve:
             return
+
+        # --- NEW SPECTROGRAM BLOCK ---
+        if curve.get('is_spectrogram'):
+            if data_container is not None and hasattr(data_container, 'magnitude_db'):
+                img = curve['image_item']
+
+                # pyqtgraph ImageItem expects shape (x, y) which means (time, freq)
+                # scipy.signal.spectrogram outputs (freq, time). We MUST transpose (.T).
+                img.setImage(data_container.magnitude_db.T, autoLevels=True)
+
+                # Scale the image coordinates to match our axis boundaries
+                t_max = data_container.x[-1] if len(data_container.x) > 0 else 1.0
+                f_max = data_container.y[-1] if len(data_container.y) > 0 else 1.0
+                img.setRect(QtCore.QRectF(0, 0, t_max, f_max))
+            return
+        # -----------------------------
+
+        x_arr = np.array(x, dtype=float)
 
         x_arr = np.array(x, dtype=float)
         y_arr = np.array(y, dtype=float)
@@ -250,7 +284,7 @@ class PlotController(QtCore.QObject):
 
     def append_curve_point(self, curve_name: str, snapshot: FeatureSnapshot, audio_features_ctx):
         curve = self.curves.get(curve_name)
-        if not curve:
+        if not curve or curve.get('is_spectrogram'):  # Guard added here
             return
 
         result_key = curve['analysisResult']

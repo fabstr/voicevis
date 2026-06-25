@@ -850,7 +850,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 # Guard against unexpected types or mismatched vectors
                 if not hasattr(data, 'x') or not hasattr(data, 'y'):
                     continue
-                if len(data.x) != len(data.y):
+
+                is_spectrogram = curve_config.get('is_spectrogram', False)
+                if not is_spectrogram and len(data.x) != len(data.y):
                     print(f"Mismatch in length for {plot_name}.{curve_name}")
                     continue
 

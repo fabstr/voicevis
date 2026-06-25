@@ -5,10 +5,10 @@ import miniaudio
 import numpy as np
 import wave
 
-from scipy.signal import stft
+from scipy.signal import stft, spectrogram
 
 from PlotsSpec import outliers_m
-from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, BandwidthTimeSeries
+from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, BandwidthTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
 
 
@@ -149,6 +149,20 @@ class AudioFeatureExtractor:
 
         # Now slopes perfectly matches the length and timeline of everything else
         result.weight = SignalTimeSeries(x=t_filtered, y=matched_weight)
+
+
+
+        # --- NEW SPECTROGRAM CALCULATION ---
+        # Using a standard 1024-point Hanning window for speech/audio
+        f_spec, t_spec, Sxx = spectrogram(pcm_data, fs=sampling_rate, window='hann', nperseg=2048, noverlap=1536)
+
+        # Convert magnitude to log scale (Decibels), strictly clipping to prevent log(0) errors
+        Sxx_db = 10 * np.log10(np.clip(Sxx, 1e-10, None))
+
+        result.spectrogram = SpectrogramData(x=t_spec, y=f_spec, magnitude_db=Sxx_db)
+        # -----------------------------------
+
+
 
         if len(t_filtered) > 0:
             # 4. Handle Outliers (Note: reject_outliers should now accept/return SignalTimeSeries)

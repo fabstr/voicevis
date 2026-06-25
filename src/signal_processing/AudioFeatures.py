@@ -17,6 +17,14 @@ class BandwidthTimeSeries(SignalTimeSeries):
 
 
 @dataclass
+class SpectrogramData:
+    """Stores 2D spectrogram arrays and their axis bins."""
+    x: np.ndarray = field(default_factory=lambda: np.array([]))  # Time bins
+    y: np.ndarray = field(default_factory=lambda: np.array([]))  # Frequency bins
+    magnitude_db: np.ndarray = field(default_factory=lambda: np.array([[]])) # 2D STFT matrix
+
+
+@dataclass
 class AudioFeatures:
     # Core Acoustic Features
     pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
@@ -48,6 +56,8 @@ class AudioFeatures:
 
     size: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     size_vs_weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+
+    spectrogram: SpectrogramData = field(default_factory=SpectrogramData)
 
     # Metadata (Initialized via your audio processing pipeline)
     sample_rate: float = 0.0
