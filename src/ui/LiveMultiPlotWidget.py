@@ -31,7 +31,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     new_session_signal = QtCore.pyqtSignal()
     close_session_signal = QtCore.pyqtSignal()
 
-
     #################### Init ####################
 
     def __init__(self):
@@ -62,27 +61,26 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.help_window = None
         self.sample_text_window = None
 
+        self.menu_toggle_actions = {
+            'plots': {}
+        }
+
     def setup_audio(self):
-        # 1. Define the audio format (Standard CD quality PCM)
         self.audio_format = QAudioFormat()
         self.audio_format.setSampleRate(self.sampling_rate)
-        self.audio_format.setChannelCount(1)  # Mono for voice
-        self.audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)  # 16-bit PCM
+        self.audio_format.setChannelCount(1)
+        self.audio_format.setSampleFormat(QAudioFormat.SampleFormat.Int16)
 
-        # 2. Get default audio input device (Microphone)
         self.input_device = QMediaDevices.defaultAudioInput()
-
-        # 3. Create the QAudioSource
         self.audio_source = QAudioSource(self.input_device, self.audio_format, self)
 
-        # 4. Set up a QByteArray and QBuffer to store the recorded data in RAM
         self.audio_data = QByteArray()
         self.audio_buffer = QBuffer(self.audio_data)
 
         self.audio_queue = queue.Queue()
 
         self.poll_timer = QtCore.QTimer()
-        self.poll_timer.setInterval(33)  # Grab audio every 100ms
+        self.poll_timer.setInterval(33)
         self.poll_timer.timeout.connect(self.read_audio_chunk)
 
     def setup_GUI(self):
@@ -132,10 +130,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         plots_menu.addSeparator()
 
-        self.menu_toggle_actions = {
-            'plots': {}
-        }
-
         samples_menu = self.menu_bar.addMenu("&Sample texts")
         sample_texts_action = samples_menu.addAction("Sample Texts Editor")
         sample_texts_action.triggered.connect(self.show_sample_text_window)
@@ -172,20 +166,15 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def setupControlButtons(self):
         top_buttons_layout = QtWidgets.QHBoxLayout()
 
-        # 1. Fetch active theme colors dynamically from the palette
         palette = self.palette()
         icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
-        # Optional: You can also define an active/hover color if needed
-        # active_color = palette.color(QtGui.QPalette.ColorRole.Highlight)
 
-        # 2. Pass the dynamic color to QtAwesome icons
         self.record_icon = qta.icon('fa5s.microphone', color=icon_color)
         self.stop_icon = qta.icon('fa5s.stop', color=icon_color)
         self.play_icon = qta.icon('fa5s.play', color=icon_color)
         self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
         self.save_icon = qta.icon('fa5s.save', color=icon_color)
 
-        # Record Button
         self.record_stop_btn = QtWidgets.QPushButton()
         self.record_stop_btn.setFixedSize(40, 40)
         self.record_stop_btn.setIcon(self.record_icon)
@@ -194,7 +183,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.record_stop_btn.clicked.connect(self.handle_record_stop)
         top_buttons_layout.addWidget(self.record_stop_btn)
 
-        # Playback Button
         self.playback_btn = QtWidgets.QPushButton()
         self.playback_btn.setFixedSize(40, 40)
         self.playback_btn.setIcon(self.play_icon)
@@ -203,7 +191,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playback_btn.clicked.connect(self.handle_playback)
         top_buttons_layout.addWidget(self.playback_btn)
 
-        # Row layout controls
         self.add_row_btn = QtWidgets.QPushButton("Add Row")
         self.add_row_btn.clicked.connect(self.add_plot_row)
         top_buttons_layout.addWidget(self.add_row_btn)
@@ -212,7 +199,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.remove_row_btn.clicked.connect(self.remove_plot_row)
         top_buttons_layout.addWidget(self.remove_row_btn)
 
-        ################ Plot item size slider
         self.size_label = QtWidgets.QLabel("Global point size:")
         top_buttons_layout.addWidget(self.size_label)
 
@@ -223,7 +209,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.size_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
         self.size_slider.setTickInterval(1)
         self.size_slider.setFixedWidth(120)
-
         self.size_slider.valueChanged.connect(self.handle_symbol_size_change)
         top_buttons_layout.addWidget(self.size_slider)
 
@@ -239,10 +224,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.plot_splitter.addWidget(self.right_col)
         self.layout.addWidget(self.plot_splitter)
 
-        # Track active container cells instead of single plot instances
         self.plot_cells = []
 
-        # Default 2x2 Grid (4 plots)
         available_plots = list(spec.keys())
         p1 = available_plots[0] if len(available_plots) > 0 else None
         p2 = available_plots[1] if len(available_plots) > 1 else p1
@@ -255,245 +238,151 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def create_plot_cell(self, plot_name):
         if not plot_name: return None
 
-        frame = QtWidgets.QFrame()
-        frame.setObjectName("PlotContainer")
-        frame.setStyleSheet("#PlotContainer { border: 1px solid gray; margin: 2px; }")
+        initial_size = self.size_slider.value() if hasattr(self, 'size_slider') else defaultSize
 
-        layout = QtWidgets.QVBoxLayout(frame)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(2)
+        controller = PlotController(
+            plot_name=plot_name,
+            all_specs=spec,
+            click_callback=self.on_mouse_clicked,
+            change_plot_callback=self.handle_plot_selection,
+            initial_size=initial_size
+        )
 
-        top_bar_layout = QtWidgets.QHBoxLayout()
-        selector = QtWidgets.QComboBox()
-        selector.addItems(list(spec.keys()))
-        selector.setCurrentText(plot_name)
-        selector.setStyleSheet("""
-            QComboBox { border: 1px solid gray; padding: 2px; background-color: palette(window); color: palette(text); }
-            QComboBox QAbstractItemView { background-color: palette(base); color: palette(text); selection-background-color: palette(highlight); }
-        """)
-        top_bar_layout.addWidget(selector)
-        top_bar_layout.addStretch()
-
-        # --- NEW: Dynamic Checkboxes Layout ---
-        checkbox_layout = QtWidgets.QHBoxLayout()
-        checkbox_layout.setSpacing(10)
-        top_bar_layout.addLayout(checkbox_layout)
-        top_bar_layout.addSpacing(15)  # Buffer before the size slider
-        # ------------------------------------
-
-        # --- Local Point Size Slider ---
-        local_size_label = QtWidgets.QLabel("Size:")
-
-        local_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        local_slider.setMinimum(1)
-        local_slider.setMaximum(5)
-        local_slider.setValue(defaultSize)
-        local_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
-        local_slider.setTickInterval(1)
-        local_slider.setFixedWidth(80)
-
-        top_bar_layout.addWidget(local_size_label)
-        top_bar_layout.addWidget(local_slider)
-        # ------------------------------------
-
-        layout.addLayout(top_bar_layout)
-
-        controller = PlotController(plot_name, spec[plot_name], self.on_mouse_clicked)
-        controller.widget.setStyleSheet("border: none;")
-        layout.addWidget(controller.widget, stretch=1)
-
-        cell_data = {
-            'frame': frame,
-            'layout': layout,
-            'controller': controller,
-            'selector': selector,
-            'checkbox_layout': checkbox_layout,  # Tracked for dynamic updates
-            'local_slider': local_slider,
-            'current_plot': plot_name
-        }
-
-        # Populate the checkboxes dynamically
-        self.populate_cell_toggles(cell_data)
-
-        local_slider.valueChanged.connect(lambda val, c=cell_data: c['controller'].set_symbol_size(val))
-        selector.currentTextChanged.connect(lambda new_name, c=cell_data: self.handle_plot_selection(c, new_name))
-
-        return cell_data
-
-    def populate_cell_toggles(self, cell_data):
-        layout = cell_data.get('checkbox_layout')
-        if layout is None: return
-
-        # Clear old toggles if swapping plots
-        while layout.count():
-            child = layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-
-        cell_data['toggles'] = []
-        plot_name = cell_data['current_plot']
-        plot_spec = spec.get(plot_name, {})
-        controller = cell_data['controller']
-
-        for curve_key, curve_spec in plot_spec.get('curves', {}).items():
-            if curve_spec.get('is_spectrogram'):
-                continue
-
-            # Format label cleanly
-            if curve_spec.get("BW", False):
-                label_text = curve_key.replace('_IBW', ' BW').replace('_BW', ' BW')
-            else:
-                label_text = curve_key
-
-            cb = QtWidgets.QCheckBox(label_text)
-            cb.setChecked(True)
-
-            # Bind the toggle directly to the controller for THIS cell
-            if curve_spec.get("BW", False):
-                cb.toggled.connect(
-                    lambda checked, ck=curve_key, ctrl=controller: ctrl.set_bandwidth_visible(ck, checked))
-            else:
-                cb.toggled.connect(lambda checked, ck=curve_key, ctrl=controller: ctrl.set_curve_visible(ck, checked))
-
-            layout.addWidget(cb)
-            cell_data['toggles'].append(cb)
+        return controller
 
     def add_plot_row(self, left_name=None, right_name=None):
         if not left_name: left_name = list(spec.keys())[0]
         if not right_name: right_name = list(spec.keys())[0]
 
-        left_cell = self.create_plot_cell(left_name)
-        right_cell = self.create_plot_cell(right_name)
+        left_controller = self.create_plot_cell(left_name)
+        right_controller = self.create_plot_cell(right_name)
 
-        self.plot_cells.append(left_cell)
-        self.plot_cells.append(right_cell)
+        self.plot_cells.append(left_controller)
+        self.plot_cells.append(right_controller)
 
-        self.left_col.addWidget(left_cell['frame'])
-        self.right_col.addWidget(right_cell['frame'])
+        self.left_col.addWidget(left_controller.container)
+        self.right_col.addWidget(right_controller.container)
 
-        self.sync_all_x_axes()
-        self.update_plots() # Populate the new row with data if a file is loaded
-
-        # Apply global size to the new rows AFTER data is pushed
-        if hasattr(self, 'size_slider'):
-            self.handle_symbol_size_change(self.size_slider.value())
-
-    def handle_plot_selection(self, cell_data, new_plot_name):
-        if cell_data['current_plot'] == new_plot_name:
-            return
-
-        # 1. Strip the old plot
-        old_controller = cell_data['controller']
-        cell_data['layout'].removeWidget(old_controller.widget)
-        old_controller.widget.deleteLater()
-
-        # 2. Build the new plot and assign it
-        new_controller = PlotController(new_plot_name, spec[new_plot_name], self.on_mouse_clicked)
-        new_controller.widget.setStyleSheet("border: none;")
-
-        cell_data['layout'].addWidget(new_controller.widget, stretch=1)
-
-        # Update the cell tracking data
-        cell_data['controller'] = new_controller
-        cell_data['current_plot'] = new_plot_name
-
-        # --- FIX: Regenerate the checkboxes for the new plot ---
-        self.populate_cell_toggles(cell_data)
-
-        # 3. Force visibility and update the menu checkbox to reflect "enabled" status
-        if new_plot_name in self.menu_toggle_actions['plots']:
-            self.menu_toggle_actions['plots'][new_plot_name].setChecked(True)
-            self.handle_toggle_plot(new_plot_name, True)
-
-        # 4. Sync panning and render active data immediately
         self.sync_all_x_axes()
         self.update_plots()
 
-        # 5. Apply the cell's local point size AFTER the new data is drawn!
-        if 'local_slider' in cell_data:
-            cell_data['controller'].set_symbol_size(cell_data['local_slider'].value())
+        if hasattr(self, 'size_slider'):
+            self.handle_symbol_size_change(self.size_slider.value())
+
+    def handle_plot_selection(self, old_controller, new_plot_name):
+        if old_controller.plot_name == new_plot_name:
+            return
+
+        # 1. Capture current size and create the new controller
+        current_size = old_controller.local_slider.value()
+        new_controller = PlotController(
+            plot_name=new_plot_name,
+            all_specs=spec,
+            click_callback=self.on_mouse_clicked,
+            change_plot_callback=self.handle_plot_selection,
+            initial_size=current_size
+        )
+
+        # 2. Swap out the controllers safely inside the QSplitter
+        splitter = old_controller.container.parentWidget()
+        if isinstance(splitter, QtWidgets.QSplitter):
+            # Find exactly where the old plot was and swap it natively
+            index = splitter.indexOf(old_controller.container)
+            splitter.replaceWidget(index, new_controller.container)
+        else:
+            # Fallback just in case it ever ends up in a standard layout
+            parent_layout = old_controller.container.parentWidget().layout()
+            if parent_layout:
+                parent_layout.replaceWidget(old_controller.container, new_controller.container)
+
+        # Explicitly show the new container (QSplitter sometimes leaves them hidden)
+        new_controller.container.show()
+
+        # Update tracking list
+        self.plot_cells[self.plot_cells.index(old_controller)] = new_controller
+
+        # Clean up the old controller
+        old_controller.container.deleteLater()
+        old_controller.deleteLater()
+
+        # 3. Sync UI menus and apply target configurations
+        if new_plot_name in self.menu_toggle_actions['plots']:
+            self.menu_toggle_actions['plots'][new_plot_name].setChecked(True)
+
+        new_controller.update_target_bands(self.audioFeatureExtractor.target_config)
+
+        # 4. Push data and sync axes
+        self.sync_all_x_axes()
+        self.update_plots()
+
+        # 5. FIX: Force the camera to frame the newly drawn data!
+        new_controller.reset_zoom()
+        new_controller.set_symbol_size(current_size)
 
     def remove_plot_row(self):
-        # Ensure we keep at least 1 row (2 cells)
         if self.left_col.count() > 1 and self.right_col.count() > 1:
             left_widget = self.left_col.widget(self.left_col.count() - 1)
             right_widget = self.right_col.widget(self.right_col.count() - 1)
 
-            # Remove from tracking list
-            self.plot_cells = [c for c in self.plot_cells if c['frame'] not in (left_widget, right_widget)]
+            self.plot_cells = [c for c in self.plot_cells if c.container not in (left_widget, right_widget)]
 
             left_widget.deleteLater()
             right_widget.deleteLater()
 
     def sync_all_x_axes(self):
-        """Cross-links panning/zooming for all active plots."""
         target_widget = None
-        for cell in self.plot_cells:
-            if cell['current_plot'] == 'Loudness':
-                target_widget = cell['controller'].widget
+        for controller in self.plot_cells:
+            if controller.plot_name == 'Loudness':
+                target_widget = controller.widget
                 break
 
         if not target_widget: return
 
-        for cell in self.plot_cells:
-            if spec[cell['current_plot']].get('linkX') == 'Loudness':
-                if cell['controller'].widget != target_widget:
-                    cell['controller'].widget.setXLink(target_widget)
+        for controller in self.plot_cells:
+            if controller.spec.get('linkX') == 'Loudness':
+                if controller.widget != target_widget:
+                    controller.widget.setXLink(target_widget)
 
     # --- Theme Switching Methods ---
     def set_theme_os_default(self):
-        # unsetColorScheme removes any manual override, falling back to dynamic OS settings
         if hasattr(QtGui.QGuiApplication.styleHints(), 'unsetColorScheme'):
             QtGui.QGuiApplication.styleHints().unsetColorScheme()
-        else:
-            print("Native OS theme syncing requires Qt 6.8+")
 
     def set_theme_light(self):
-        # Overrides the OS setting to force Light Mode
         if hasattr(QtGui.QGuiApplication.styleHints(), 'setColorScheme'):
             QtGui.QGuiApplication.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Light)
 
     def set_theme_dark(self):
-        # Overrides the OS setting to force Dark Mode
         if hasattr(QtGui.QGuiApplication.styleHints(), 'setColorScheme'):
             QtGui.QGuiApplication.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Dark)
 
     def changeEvent(self, event):
-        # Detect when the application theme or palette changes
         if event.type() == QtCore.QEvent.Type.PaletteChange:
-            # 1. Fetch the new color from the updated palette
             palette = self.palette()
             icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
 
-            # 2. Re-render and cache all base icons with the new color
             self.record_icon = qta.icon('fa5s.microphone', color=icon_color)
             self.stop_icon = qta.icon('fa5s.stop', color=icon_color)
             self.play_icon = qta.icon('fa5s.play', color=icon_color)
             self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
             self.save_icon = qta.icon('fa5s.save', color=icon_color)
 
-            # 3. Safely update Record/Stop button based on its current state
-            # (Using tooltip inspection as a safe fallback strategy)
             if "Record" in self.record_stop_btn.toolTip():
                 self.record_stop_btn.setIcon(self.record_icon)
             else:
                 self.record_stop_btn.setIcon(self.stop_icon)
 
-            # 4. Safely update Play/Pause button based on its current state
             if "Play" in self.playback_btn.toolTip():
                 self.playback_btn.setIcon(self.play_icon)
             else:
                 self.playback_btn.setIcon(self.pause_icon)
 
-            # 5. Update static buttons
             self.save_btn.setIcon(self.save_icon)
 
-        # Always call the parent class implementation to maintain native behaviors
         super().changeEvent(event)
 
     def show_sample_text_window(self):
         if self.sample_text_window is None:
-            # Assuming you saved the above class in ui/SampleTextWindow.py
             from ui.SampleTextWindow import SampleTextWindow
             self.sample_text_window = SampleTextWindow()
 
@@ -540,10 +429,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.select_analysis_file(file_name)
 
     def load_annotations_file(self, json_file_path):
-        """Parses a JSON annotation file, loads the linked audio, and redraws markers."""
         try:
-            # 1. Use the static method from AnnotationMarker
-            active_audio_path, annotations, original_audio_path, fallback_audio_path = AnnotationMarker.load_from_file(json_file_path)
+            active_audio_path, annotations, original_audio_path, fallback_audio_path = AnnotationMarker.load_from_file(
+                json_file_path)
 
             if active_audio_path is None:
                 QtWidgets.QMessageBox.warning(
@@ -556,34 +444,24 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 )
                 return
 
-            # 2. Clear old data and load the audio file using the found path
             self.clear_annotations()
             self.file_path = active_audio_path
             self.file_loaded_signal.emit(self.file_path)
             self.select_analysis_file(active_audio_path)
 
-            # 3. Parse annotations
             for annotation in annotations:
                 plot_widget = None
                 target_plot_key = None
 
-                # Match the saved text against either the dictionary key or the plot's title
-                for p_key, p_data in self.plots.items():
-                    # Get the title from your spec config if it exists
-                    from PlotsSpec import spec
-                    plot_title = spec.get(p_key, {}).get('title', '')
-
-                    if annotation['plot'] == p_key or annotation['plot'] == plot_title:
-                        plot_widget = p_data['plot']
-                        target_plot_key = p_key
+                for controller in self.plot_cells:
+                    plot_title = controller.spec.get('title', '')
+                    if annotation['plot'] == controller.plot_name or annotation['plot'] == plot_title:
+                        plot_widget = controller.widget
+                        target_plot_key = controller.plot_name
                         break
 
-                # Recreate the marker and save it to memory
                 if plot_widget:
-                    # Crucial: Override the text feature string back to the standardized plot key
-                    # so future updates or saves remain stable
                     annotation['plot'] = target_plot_key
-
                     marker = AnnotationMarker(
                         annotation['time'],
                         annotation['y'],
@@ -601,16 +479,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                                            f"An error occurred while loading annotations:\n{str(e)}")
 
     def save_audio(self):
-        """Saves the currently loaded/recorded audio to a permanent WAV file."""
         if not hasattr(self, 'file_path') or not self.file_path or not os.path.exists(self.file_path):
             QtWidgets.QMessageBox.warning(self, "No Audio", "There is no audio currently loaded or recorded to save.")
             return
 
-        # Determine a default save name based on the current file path
         base_path, _ = os.path.splitext(self.file_path)
         default_save_path = f"{base_path}_saved.wav"
 
-        # Open a save file dialog
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Save Audio As",
@@ -620,54 +495,36 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         if save_path:
             try:
-                # Copy the temporary/current file to the new permanent destination
                 shutil.copy2(self.file_path, save_path)
-                print(f"Successfully saved audio to: {save_path}")
-
-                # Update the application's file path to point to the new permanent file
-                # This ensures future annotations save alongside the permanent file, not the temp one.
                 self.file_path = save_path
                 self.file_loaded_signal.emit(self.file_path)
-
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error",
                                                f"An error occurred while saving the audio:\n{str(e)}")
 
-
-
     #################### File analysis ####################
 
     def select_analysis_file(self, file_name):
-        # 1. Setup and show the loading dialog
         self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio file...", None, 0, 0, self)
         self.loading_dialog.setWindowTitle("Please Wait")
         self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
-        self.loading_dialog.setMinimumDuration(0)  # Ensure it shows immediately
+        self.loading_dialog.setMinimumDuration(0)
         self.loading_dialog.show()
 
-        # 2. Setup the worker thread
         self.worker = AnalysisWorker(self.audioFeatureExtractor, file_name)
-
-        # Connect signals to slots
         self.worker.result_ready.connect(self.on_analysis_finished)
         self.worker.error_occurred.connect(self.on_analysis_error)
         self.worker.finished.connect(self.loading_dialog.close)
-
-        # 3. Start the background thread
         self.worker.start()
 
     def on_analysis_finished(self, results):
-        """Called automatically when the worker thread finishes successfully."""
         self.analysedAudioFeatures = results
         self.current_playback_time = 0
         self.update_plots()
         self.handle_reset_zoom()
 
     def on_analysis_error(self, error_msg):
-        """Called automatically if the worker thread encounters an error."""
         QtWidgets.QMessageBox.critical(self, "Analysis Error", f"An error occurred during analysis:\n{error_msg}")
-
-
 
     #################### Record, playback ####################
 
@@ -683,25 +540,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.record_stop()
 
     def record_start(self):
-        # --- UI Updates ---
         self.record_stop_btn.setIcon(self.stop_icon)
         self.record_stop_btn.setToolTip("Stop Recording")
 
-        # Clear the queue from previous runs
         while not self.audio_queue.empty():
             self.audio_queue.get()
 
-        # [NEW] Save the offset so we can shift live data points later
         self.recording_start_offset = self.current_playback_time
 
         self.rt_worker = RealTimeAnalysisWorker(self.audioFeatureExtractor, self.audio_queue, self.sampling_rate)
         self.rt_worker.new_data_point.connect(self.append_live_data)
         self.rt_worker.start()
 
-        # --- Audio Recording Logic (Insert / Overwrite) ---
         target_byte_pos = int(self.current_playback_time * self.sampling_rate) * 2
 
-        # Only pad if we are recording past the current end of the file
         if target_byte_pos > self.audio_data.size():
             padding_size = target_byte_pos - self.audio_data.size()
             self.audio_data.append(QByteArray(padding_size, b'\x00'))
@@ -709,7 +561,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.audio_buffer.close()
         self.audio_buffer.open(QIODevice.OpenModeFlag.ReadWrite)
 
-        # Seek the buffer write-cursor to the playhead
         self.audio_buffer.seek(target_byte_pos)
         self.last_read_pos = target_byte_pos
 
@@ -717,56 +568,36 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.poll_timer.start()
         self.timer.start()
 
-        print(f"Real-time recording started at {self.current_playback_time:.2f}s...")
-
     def record_stop(self):
-        # --- UI Updates ---
         self.record_stop_btn.setIcon(self.record_icon)
         self.record_stop_btn.setToolTip("Record")
-        print("Recording stopped.")
 
-        # --- Audio Stop Logic ---
         self.poll_timer.stop()
-
-        # [NEW] Force one last read to catch stranded bytes before closing the buffer
         self.read_audio_chunk()
 
         self.audio_source.stop()
         self.audio_buffer.close()
         self.timer.stop()
 
-        # --- Stop Worker ---
         if hasattr(self, 'rt_worker'):
             self.rt_worker.stop()
             self.rt_worker.wait()
 
-        # --- Save to WAV for Playback ---
         pcm_bytes = self.audio_data.data()
-
-        # 1. Save to the temporary location first
         temp_wav_path = save_to_temp_wav(pcm_bytes, self.sampling_rate)
 
-        # 2. Generate a unique filename using the current date and time
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         unique_wav_path = f"recording_{timestamp}.wav"
 
-        # 3. Rename/move the temp file to the unique, permanent filename
         shutil.move(temp_wav_path, unique_wav_path)
-
-        # 4. Set the app to use the new unique file
         self.file_path = unique_wav_path
 
         self.current_playback_time = 0
         self.update_playhead()
-
-        # Perform analysis
         self.select_analysis_file(self.file_path)
 
     def read_audio_chunk(self):
-        """Safely slices new audio bytes using the buffer's write cursor."""
         current_pos = self.audio_buffer.pos()
-
-        # If the recording cursor has moved forward...
         if current_pos > self.last_read_pos:
             new_bytes = self.audio_data.mid(self.last_read_pos, current_pos - self.last_read_pos).data()
             self.last_read_pos = current_pos
@@ -775,44 +606,31 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.audio_queue.put(new_bytes)
 
     def append_live_data(self, latest_point: FeatureSnapshot):
-        """Dispatches an incoming streaming FeatureSnapshot directly into
-        the active plotting controllers for incremental drawing.
-        """
-        # --- NEW: Shift the live data point's time to match the playhead ---
-        # Update 'time' to match whatever your actual timestamp property is named!
         if hasattr(latest_point, 'time'):
             latest_point.time += self.recording_start_offset
         elif hasattr(latest_point, 'timestamp'):
             latest_point.timestamp += self.recording_start_offset
 
-        for cell in self.plot_cells:
-            plot_name = cell['current_plot']
-            controller = cell['controller']
+        for controller in self.plot_cells:
             for curve_name in controller.curves.keys():
-                # Route the shifted snapshot data down into the controller
                 controller.append_curve_point(
                     curve_name=curve_name,
                     snapshot=latest_point,
                     audio_features_ctx=self.analysedAudioFeatures
                 )
 
-        # Move global elements like synced playhead lines or scrolling viewports
         self.update_playhead()
 
     def handle_playback(self):
-        if self.is_recording:
-            print("Cannot start playback while recording.")
-            return
-
+        if self.is_recording: return
         if not self.is_playing:
             self.seek_and_play()
-            print("Playback started...")
         else:
             self.stop_playback()
 
     def stop_playback(self):
         self.is_playing = False
-        self.playback_btn.setIcon(self.play_icon)  # FIXED: Ensured icon always goes to Play
+        self.playback_btn.setIcon(self.play_icon)
 
         if hasattr(self, 'play_worker'):
             self.play_worker.stop_backend()
@@ -821,23 +639,21 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def seek_and_play(self):
         target_time = max(0.0, self.current_playback_time)
-        if self.analysedAudioFeatures.sample_rate is None:
-            raise "NEEEJ"
+        if self.analysedAudioFeatures.sample_rate is None: return
+
         seek_frame = int(target_time * self.analysedAudioFeatures.sample_rate)
 
-        # Clear old worker if running
         if hasattr(self, 'play_worker') and self.play_worker.isRunning():
             self.play_worker.stop_backend()
             self.play_worker.wait()
 
-        # Spawn background playback
         self.play_worker = PlaybackWorker(self.file_path, seek_frame)
         self.play_worker.playback_finished.connect(self.stop_playback)
         self.play_worker.start()
 
         self.playback_start_time = time.time() - target_time
         self.is_playing = True
-        self.playback_btn.setIcon(self.pause_icon)  # FIXED: Unified explicit icon setting here
+        self.playback_btn.setIcon(self.pause_icon)
         self.timer.start()
 
     def update_playhead(self):
@@ -848,17 +664,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.current_playback_time = 0
 
         elif self.is_recording:
-            # Calculate time based on the buffer's write cursor, NOT the total array size
             self.current_playback_time = self.audio_buffer.pos() / (2 * self.sampling_rate)
-
-            # Keep the max length accurate if we happen to record past the old end of the file
             total_duration = self.audio_data.size() / (2 * self.sampling_rate)
             self.analysedAudioFeatures.length_seconds = max(self.analysedAudioFeatures.length_seconds, total_duration)
 
         # --- Sync with Controllers ---
-        for cell in self.plot_cells:
-            plot_name = cell['current_plot']
-            controller = cell['controller']
+        for controller in self.plot_cells:
             controller.set_playhead_value(self.current_playback_time)
 
             if self.is_recording:
@@ -870,45 +681,27 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def handle_symbol_size_change(self, value):
         """Called whenever the Global slider is moved."""
-        if not hasattr(self, 'plot_cells'):
-            return
+        if not hasattr(self, 'plot_cells'): return
 
-        for cell in self.plot_cells:
-            # Safely update the local slider's UI position without double-triggering signals
-            if 'local_slider' in cell:
-                cell['local_slider'].blockSignals(True)
-                cell['local_slider'].setValue(value)
-                cell['local_slider'].blockSignals(False)
+        for controller in self.plot_cells:
+            if hasattr(controller, 'local_slider'):
+                controller.local_slider.blockSignals(True)
+                controller.local_slider.setValue(value)
+                controller.local_slider.blockSignals(False)
 
-            # Apply the size to the controller
-            cell['controller'].set_symbol_size(value)
+            controller.set_symbol_size(value)
 
     def handle_reset_zoom(self):
-        """Resets the zoom, applying fixed min/max spec boundaries where defined."""
-        if not hasattr(self, 'plot_cells'):
-            return
-
-        for cell in self.plot_cells:
-            cell['controller'].reset_zoom()
+        if not hasattr(self, 'plot_cells'): return
+        for controller in self.plot_cells:
+            controller.reset_zoom()
 
     def handle_toggle_plot(self, plot_key: str, checked: bool):
-        for cell in self.plot_cells:
-            if cell['current_plot'] == plot_key:
-                cell['controller'].set_plot_visible(checked)
-                cell['frame'].setVisible(checked) # Hide the border/dropdown too
-
-    def handle_toggle_pixels(self, plot_key: str, curve_key: str, checked: bool):
-        """Toggles visibility of standard scatter points or lines on a specific canvas."""
-        if plot_key in self.plot_controllers:
-            self.plot_controllers[plot_key].set_curve_visible(curve_key, checked)
-
-    def handle_toggle_bandwidth(self, plot_key: str, curve_key: str, checked: bool):
-        """Toggles visibility of bandwidth shaded regions and bounds."""
-        if plot_key in self.plot_controllers:
-            self.plot_controllers[plot_key].set_bandwidth_visible(curve_key, checked)
+        for controller in self.plot_cells:
+            if controller.plot_name == plot_key:
+                controller.set_plot_visible(checked)
 
     def handle_reset_plots(self):
-        # --- 1. Reset Draggable Sizes ---
         if hasattr(self, 'left_col') and hasattr(self, 'right_col'):
             total_width = self.plot_splitter.width()
             self.plot_splitter.setSizes([int(total_width / 2), int(total_width / 2)])
@@ -935,21 +728,18 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if right_stretch_total > 0:
                 self.right_col.setSizes([int((s / right_stretch_total) * right_height) for s in right_specs])
 
-        # --- 2. Reset Component Visibilities & Menu Sync ---
         for plot_key, plot_spec in spec.items():
             is_visible = not plot_spec.get('hidden', False)
             self.handle_toggle_plot(plot_key, is_visible)
             if plot_key in self.menu_toggle_actions['plots']:
                 self.menu_toggle_actions['plots'][plot_key].setChecked(is_visible)
 
-        # Reset local point and bandwidth checkboxes
         if hasattr(self, 'plot_cells'):
-            for cell in self.plot_cells:
-                for cb in cell.get('toggles', []):
+            for controller in self.plot_cells:
+                for cb in getattr(controller, 'toggles', []):
                     cb.setChecked(True)
 
     def show_all_plots(self):
-        # --- 1. Reset Draggable Sizes ---
         if hasattr(self, 'left_col') and hasattr(self, 'right_col'):
             total_width = self.plot_splitter.width()
             self.plot_splitter.setSizes([int(total_width / 2), int(total_width / 2)])
@@ -976,41 +766,30 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if right_stretch_total > 0:
                 self.right_col.setSizes([int((s / right_stretch_total) * right_height) for s in right_specs])
 
-        # --- 2. Reset Component Visibilities & Menu Sync ---
         for plot_key, plot_spec in spec.items():
             self.handle_toggle_plot(plot_key, True)
             if plot_key in self.menu_toggle_actions['plots']:
                 self.menu_toggle_actions['plots'][plot_key].setChecked(True)
 
-        # Ensure active plots have their curves visible
         if hasattr(self, 'plot_cells'):
-            for cell in self.plot_cells:
-                for cb in cell.get('toggles', []):
+            for controller in self.plot_cells:
+                for cb in getattr(controller, 'toggles', []):
                     cb.setChecked(True)
 
     def update_plots(self):
-        for cell in self.plot_cells:
-            plot_name = cell['current_plot']
-            controller = cell['controller']
+        for controller in self.plot_cells:
             for curve_name, curve_config in controller.curves.items():
-
-                # Ensure the required feature exists in our AudioFeatures result object
                 if not hasattr(self.analysedAudioFeatures, curve_config['analysisResult']):
                     continue
 
-                # Retrieve the data object (e.g., a SignalTimeSeries instance)
                 data = getattr(self.analysedAudioFeatures, curve_config['analysisResult'])
-
-                # Guard against unexpected types or mismatched vectors
                 if not hasattr(data, 'x') or not hasattr(data, 'y'):
                     continue
 
                 is_spectrogram = curve_config.get('is_spectrogram', False)
                 if not is_spectrogram and len(data.x) != len(data.y):
-                    print(f"Mismatch in length for {plot_name}.{curve_name}")
                     continue
 
-                # Route rendering data through the clean interface
                 controller.set_curve_data(
                     curve_name=curve_name,
                     x=data.x,
@@ -1021,28 +800,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         self.update_playhead()
 
-
-
     #################### Targets ####################
 
     def open_targets_dialog(self):
-        """Displays a detached clean configuration panel dialog box for visual target configs."""
-        # 1. Instantiate the dialog passing your extractor config payload as the strict input interface
         dialog = TargetConfigDialog(self.audioFeatureExtractor.target_config, parent=self)
-
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            # 2. Extract updated TargetConfig instance out of the dialog wrapper on successful submission
             updated_config = dialog.get_confirmed_config()
             self.set_target_config(updated_config)
 
     def export_targets(self):
-        """Dumps TargetConfig rules directly to a standard JSON or text file."""
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self, "Save Targets", "", "JSON Files (*.json);;Text Files (*.txt);;All Files (*)"
         )
         if save_path:
             try:
-                # Leverage the TargetConfig 4-significant-digits JSON exporter directly
                 config_obj = self.audioFeatureExtractor.target_config
                 config_obj.to_json(save_path)
                 print(f"Successfully saved targets to: {save_path}")
@@ -1050,54 +821,39 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving targets:\n{str(e)}")
 
     def import_targets(self):
-        """Opens a file dialog to dynamically select and load a JSON configuration file."""
         open_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Load Targets", "", "Text/JSON Files (*.txt *.json);;All Files (*)"
         )
         if open_path:
             try:
                 new_config = TargetConfig.from_json(open_path)
-
                 self.set_target_config(new_config)
                 print(f"Successfully loaded targets from: {open_path}")
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Load Error",
                                                f"An error occurred while loading targets:\n{str(e)}")
-                raise e
 
     def load_targets_from_path(self, target_file_name):
-        """Shared logic to read, parse, and synchronize TargetConfig configurations with the UI."""
         try:
-            # Determine the base directory dynamically
             if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                # Works perfectly in PyInstaller v6+ (--onedir drops datas into _internal)
                 base_dir = sys._MEIPASS
             else:
-                # Running as raw script; 'targets' folder is up one level from 'src'
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 base_dir = os.path.join(base_dir, '..')
 
-            # Safely resolve the absolute path to the target file inside the targets folder
             full_path = os.path.join(base_dir, 'targets', target_file_name)
-
             new_config = TargetConfig.from_json(full_path)
             self.set_target_config(new_config)
-            print(f"Successfully loaded targets from: {full_path}")
 
         except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Load Error",
-                                           f"An error occurred while loading targets:\n{str(e)}")
-            raise e
+            QtWidgets.QMessageBox.critical(self, "Load Error", f"An error occurred while loading targets:\n{str(e)}")
 
     def set_target_config(self, new_config: TargetConfig):
         self.audioFeatureExtractor.target_config = new_config
 
-        for cell in self.plot_cells:
-            plot_name = cell['current_plot']
-            controller = cell['controller']
+        for controller in self.plot_cells:
             for band in controller.target_bands.values():
                 band['enabled'] = True
-
             controller.update_target_bands(new_config)
 
         self.analysedAudioFeatures.size = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
@@ -1107,73 +863,49 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def keyPressEvent(self, event):
         key = event.key()
-
-        # --- Spacebar Logic ---
         if key == QtCore.Qt.Key.Key_Space:
             if self.is_recording:
-                # If recording and space is pressed -> stop recording
                 self.is_recording = False
                 self.record_stop()
             elif self.is_playing:
-                # If playing and space is pressed -> stop playback
                 self.stop_playback()
             else:
-                # If not playing (and not recording) and space is pressed -> start playback
-                if self.file_path:  # Safety check to ensure there's audio to play
+                if self.file_path:
                     self.seek_and_play()
-
             event.accept()
 
-        # --- "R" Key Logic ---
         elif key == QtCore.Qt.Key.Key_R:
             if self.is_recording:
-                # If recording and "R" is pressed -> stop recording
                 self.is_recording = False
                 self.record_stop()
             else:
-                # If not recording and "R" is pressed -> start recording
                 if self.is_playing:
-                    # Guarantee recording and playback are never active at the same time
                     self.stop_playback()
-
                 self.is_recording = True
                 self.record_start()
-
             event.accept()
-
-        # --- Unhandled Keys ---
         else:
-            # Pass any other keys (like arrows, etc.) back to the standard Qt handler
             super().keyPressEvent(event)
 
     def on_mouse_clicked(self, event, plot_widget, plot_name):
-        # Check if the click was a left-click
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            pos = event.scenePos()  # The pixel coordinates of the click
-
-            # We don't need to guess the plot anymore; we just use plot_widget!
+            pos = event.scenePos()
             mouse_point = plot_widget.plotItem.vb.mapSceneToView(pos)
 
-            # The X and Y coordinates
             target_time = mouse_point.x()
-            if target_time < 0:
-                target_time = 0
-
+            if target_time < 0: target_time = 0
             target_y = mouse_point.y()
 
-            HIT_RADIUS_PIXELS = 15  # Generous clickable area
+            HIT_RADIUS_PIXELS = 15
             clicked_marker = None
 
             for ann in self.annotations:
                 if ann['plot'] == plot_name:
                     marker = ann['marker']
-
-                    # Map the marker's underlying data coordinates back to screen pixels
                     marker_pt = QtCore.QPointF(marker.x_val, marker.y_val)
                     scene_pt = plot_widget.plotItem.vb.mapViewToScene(marker_pt)
 
                     if scene_pt:
-                        # Calculate the physical pixel distance between the mouse and the star
                         dist = ((scene_pt.x() - pos.x()) ** 2 + (scene_pt.y() - pos.y()) ** 2) ** 0.5
                         if dist <= HIT_RADIUS_PIXELS:
                             clicked_marker = marker
@@ -1186,30 +918,21 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     existing_marker=clicked_marker
                 )
             else:
-                # if a double click, handle new annotations
                 if event.double():
                     self.add_annotation(plot_name, plot_widget, target_time, target_y)
-
-                # if a single click, update current playback time and handle playback
                 else:
                     self.current_playback_time = target_time
-
                     if self.is_playing:
                         self.seek_and_play()
-
                     self.update_playhead()
-
-
 
     #################### Annotations  ####################
 
     def add_annotation(self, plot_name, plot, target_time, target_y, existing_marker=None):
-        # FIXED: Route cleanly through stop_playback() to keep states and UI synced
         if self.is_playing:
             self.stop_playback()
             self.paused_time = time.time() - self.playback_start_time
 
-        # Setup the Custom Dialog Window
         dialog = QtWidgets.QDialog(self)
         title = "Edit Annotation" if existing_marker else "New Annotation"
         dialog.setWindowTitle(f"{title} - {plot_name} @ {target_time:.2f}s")
@@ -1217,27 +940,22 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout(dialog)
 
-        # Multi-row text box
         text_edit = QtWidgets.QTextEdit(dialog)
         if existing_marker:
             text_edit.setPlainText(existing_marker.text_val)
         layout.addWidget(text_edit)
 
-        # Setup Buttons
         btn_layout = QtWidgets.QHBoxLayout()
         save_btn = QtWidgets.QPushButton("Save")
         cancel_btn = QtWidgets.QPushButton("Cancel")
         btn_layout.addWidget(save_btn)
 
-        # Only show the Delete button if we are editing an existing annotation
         if existing_marker:
             delete_btn = QtWidgets.QPushButton("Delete")
             btn_layout.addWidget(delete_btn)
 
             def on_delete():
-                # Remove the visual symbol from the graph
                 plot.removeItem(existing_marker)
-                # Remove the dictionary from our master list
                 self.annotations = [a for a in self.annotations if a.get('marker') != existing_marker]
                 dialog.accept()
 
@@ -1246,12 +964,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
 
-        # Save Logic
         def on_save():
             new_text = text_edit.toPlainText().strip()
             if new_text:
                 if existing_marker:
-                    # Update existing marker and dict
                     existing_marker.text_val = new_text
                     existing_marker.setToolTip(new_text)
                     for ann in self.annotations:
@@ -1259,55 +975,48 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                             ann['text'] = new_text
                             break
                 else:
-                    # Create new marker
                     marker = AnnotationMarker(target_time, target_y, new_text, plot_name, plot, self)
                     plot.addItem(marker)
-
-                    # Store the complete dict
                     self.annotations.append({
                         "time": target_time,
                         "y": target_y,
                         "text": new_text,
                         "plot": plot_name,
-                        "marker": marker  # Keeping the object reference makes deletion easy
+                        "marker": marker
                     })
             dialog.accept()
 
-        # Connect buttons
         save_btn.clicked.connect(on_save)
         cancel_btn.clicked.connect(dialog.reject)
-
         dialog.exec()
 
     def clear_annotations(self):
-        """Removes all current annotations from the plots and memory."""
         for ann in self.annotations:
             marker = ann.get('marker')
             plot_name = ann.get('plot')
 
-            # Route removal through the controller's underlying widget pipeline
-            if marker and plot_name in self.plot_controllers:
-                self.plot_controllers[plot_name].widget.removeItem(marker)
+            if marker:
+                for controller in self.plot_cells:
+                    if controller.plot_name == plot_name:
+                        controller.widget.removeItem(marker)
+                        break
         self.annotations.clear()
 
     def save_annotations(self):
-        """Saves the self.annotations list of AnnotationMarker objects to a JSON file."""
         if not hasattr(self, 'annotations') or not self.annotations:
             QtWidgets.QMessageBox.warning(self, "No Annotations", "There are no annotations to save yet.")
             return
 
-        # Determine Default Save Path
         default_save_path = ""
         if hasattr(self, 'file_path') and self.file_path:
             base_path, _ = os.path.splitext(self.file_path)
-            default_save_path = f"{base_path}.json"  # Changed to .json
+            default_save_path = f"{base_path}.json"
 
-        # Open a save file dialog
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Save Annotations",
             default_save_path,
-            "JSON Files (*.json);;All Files (*)"  # Changed filter
+            "JSON Files (*.json);;All Files (*)"
         )
 
         if save_path and self.file_path is not None:
@@ -1319,16 +1028,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{str(e)}")
 
-
-
-    #################### Hwlp  ####################
+    #################### Help  ####################
 
     def show_help_window(self):
-        # Create the window only if it doesn't exist yet
         if self.help_window is None:
             self.help_window = HelpWindow()
 
-        # Show it and bring it to the front
         self.help_window.show()
         self.help_window.raise_()
         self.help_window.activateWindow()

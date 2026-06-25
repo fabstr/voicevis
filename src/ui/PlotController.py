@@ -13,102 +13,173 @@ class TimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
         strings = []
         for v in values:
-            # Handle potential negative values safely by treating them as 0
             val = max(0.0, float(v))
             minutes = int(val // 60)
             seconds = val % 60
-
-            # 06.3f ensures a total length of 6 characters:
-            # 2 for seconds, 1 for the decimal, 2 for hundreds (e.g., 05.12)
             strings.append(f"{minutes:02d}:{seconds:06.2f}")
         return strings
 
 
 class PlotController(QtCore.QObject):
     """Encapsulates the creation, configuration, structural layout, and
-    dynamic updating of a single pyqtgraph plot and its target bounds.
+    dynamic updating of a single pyqtgraph plot, its target bounds, and its wrapper UI.
     """
 
-    def __init__(self, plot_name, plot_spec, click_callback):
-        # Initialize the QObject parent
+    def __init__(self, plot_name, all_specs, click_callback, change_plot_callback, initial_size=2):
         super().__init__()
 
         self.plot_name = plot_name
-        self.spec = plot_spec
+        self.all_specs = all_specs
+        self.spec = all_specs[plot_name]
+        self.click_callback = click_callback
+        self.change_plot_callback = change_plot_callback
 
-        # 1. Initialize Core Widget with Custom Time Axis
+        # 1. Initialize Core Plot Widget
         time_axis = TimeAxisItem(orientation='bottom')
         self.widget = pg.PlotWidget(
             title=self.spec['title'],
             axisItems={'bottom': time_axis}
         )
 
-        # Create the playhead early so apply_theme can configure it
         self.playhead = pg.InfiniteLine(angle=90, movable=False)
         self.widget.addItem(self.playhead)
 
         self.curves = {}
         self.target_bands = {}
 
-        # 2. Apply dynamic colors
+        # 2. Apply dynamic colors & events
         self.apply_theme()
-
-        # 3. Install event filter to listen for theme changes
         self.widget.installEventFilter(self)
 
-        # Run Internal Build Pipelines
+        # 3. Build Plot Items
         self._apply_optimizations()
         self._configure_mouse_behavior()
         self._build_curves()
         self._build_target_bands()
         self._set_initial_bounds()
 
-        # Event Routing
         self.widget.scene().sigMouseClicked.connect(
-            lambda event: click_callback(event, self.widget, self.spec['title'])
+            lambda event: self.click_callback(event, self.widget, self.spec['title'])
         )
 
+        # 4. Build the Wrapper UI (Frame, ComboBox, Checkboxes, Slider)
+        self._build_wrapper_ui(initial_size)
+
         if self.spec.get('hidden', False):
-            self.widget.setVisible(False)
+            self.container.setVisible(False)
+
+    def _build_wrapper_ui(self, initial_size):
+        """Constructs the outer QFrame, top control bar, and embeds the plot widget."""
+        self.container = QtWidgets.QFrame()
+        self.container.setObjectName("PlotContainer")
+        self.container.setStyleSheet("#PlotContainer { border: 1px solid gray; margin: 2px; }")
+
+        layout = QtWidgets.QVBoxLayout(self.container)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(2)
+
+        top_bar_layout = QtWidgets.QHBoxLayout()
+
+        # --- Dropdown Selector ---
+        self.selector = QtWidgets.QComboBox()
+
+        self.selector.blockSignals(True)
+
+        # --- FIX: Sort the keys alphabetically before adding them ---
+        sorted_plot_names = sorted(list(self.all_specs.keys()))
+        self.selector.addItems(sorted_plot_names)
+
+        self.selector.setCurrentText(self.plot_name)
+        self.selector.blockSignals(False)
+
+        self.selector.setStyleSheet("""
+                    QComboBox { border: 1px solid gray; padding: 2px; background-color: palette(window); color: palette(text); }
+                    QComboBox QAbstractItemView { background-color: palette(base); color: palette(text); selection-background-color: palette(highlight); }
+                """)
+        self.selector.currentTextChanged.connect(lambda new_name: self.change_plot_callback(self, new_name))
+        top_bar_layout.addWidget(self.selector)
+        top_bar_layout.addStretch()
+
+        # --- Dynamic Checkboxes ---
+        self.checkbox_layout = QtWidgets.QHBoxLayout()
+        self.checkbox_layout.setSpacing(10)
+        self._populate_checkboxes()
+        top_bar_layout.addLayout(self.checkbox_layout)
+        top_bar_layout.addSpacing(15)
+
+        # --- Local Point Size Slider ---
+        local_size_label = QtWidgets.QLabel("Size:")
+        self.local_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.local_slider.setMinimum(1)
+        self.local_slider.setMaximum(5)
+        self.local_slider.setValue(initial_size)
+        self.local_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
+        self.local_slider.setTickInterval(1)
+        self.local_slider.setFixedWidth(80)
+        self.local_slider.valueChanged.connect(self.set_symbol_size)
+
+        top_bar_layout.addWidget(local_size_label)
+        top_bar_layout.addWidget(self.local_slider)
+
+        layout.addLayout(top_bar_layout)
+
+        # --- Embed Plot Widget ---
+        self.widget.setStyleSheet("border: none;")
+        layout.addWidget(self.widget, stretch=1)
+
+    def _populate_checkboxes(self):
+        """Generates checkboxes based on the curves configured in the spec."""
+        self.toggles = []
+        for curve_key, curve_spec in self.spec.get('curves', {}).items():
+            if curve_spec.get('is_spectrogram'):
+                continue
+
+            # Format label cleanly
+            if curve_spec.get("BW", False):
+                label_text = curve_key.replace('_IBW', ' BW').replace('_BW', ' BW')
+            else:
+                label_text = curve_key
+
+            cb = QtWidgets.QCheckBox(label_text)
+            cb.setChecked(True)
+
+            # Bind the toggle directly to this controller's visibility methods
+            if curve_spec.get("BW", False):
+                cb.toggled.connect(lambda checked, ck=curve_key: self.set_bandwidth_visible(ck, checked))
+            else:
+                cb.toggled.connect(lambda checked, ck=curve_key: self.set_curve_visible(ck, checked))
+
+            self.checkbox_layout.addWidget(cb)
+            self.toggles.append(cb)
+
+    # ... (Keep all other PlotController methods like apply_theme, _build_curves, set_curve_data exactly as they were) ...
 
     def eventFilter(self, obj, event):
-        """Intercepts palette changes triggered by the OS or the View menu."""
         if event.type() in (QtCore.QEvent.Type.PaletteChange, QtCore.QEvent.Type.ApplicationPaletteChange):
             self.apply_theme()
         return super().eventFilter(obj, event)
 
     def apply_theme(self):
-        """Fetches the current application palette and updates plot colors dynamically."""
         palette = QtWidgets.QApplication.palette()
         bg_color = palette.color(QtGui.QPalette.ColorRole.Window)
         text_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
         grid_color = palette.color(QtGui.QPalette.ColorRole.PlaceholderText)
 
-        # Update Background
         self.widget.setBackground(bg_color)
-
-        # Configure canvas items & styling
         canvas = self.widget.getPlotItem()
         grid_pen = pg.mkPen(color=grid_color, width=1)
 
         for axis_name in ['bottom', 'left']:
             axis = canvas.getAxis(axis_name)
             axis.setPen(text_color)
-            axis.setTextPen(text_color)  # Ensures tick labels update
+            axis.setTextPen(text_color)
             axis._gridPen = grid_pen
-
-            # Clear the axis's cached drawing picture so it is forced to redraw
             axis.picture = None
             axis.update()
 
-        # Turn on the grid
         self.widget.showGrid(x=True, y=True, alpha=0.3)
-
-        # Apply System Text Color to the Title
         title_style = {'color': text_color.name(), 'size': '12pt'}
         canvas.setTitle(self.spec['title'], **title_style)
-
-        # Update Playhead Color
         self.playhead.setPen(pg.mkPen(text_color, width=2))
 
     def _apply_optimizations(self):
@@ -131,16 +202,10 @@ class PlotController(QtCore.QObject):
 
             if curve_spec.get('is_spectrogram'):
                 img = pg.ImageItem()
-
-                # Apply a visually distinct colormap (magma/viridis is standard for spectrograms)
                 cmap = pg.colormap.get(curve_spec['colour'])
                 img.setLookupTable(cmap.getLookupTable())
-
                 self.widget.addItem(img)
-
-                # Z-value pushed back so crosshairs/playheads render on top
                 img.setZValue(-30)
-
                 self.curves[name]['is_spectrogram'] = True
                 self.curves[name]['image_item'] = img
                 continue
@@ -162,13 +227,11 @@ class PlotController(QtCore.QObject):
                 self.widget.addItem(fill_item)
                 fill_item.setZValue(-10)
             else:
-                # A semi-transparent medium-grey pen (RGBA) to define boundaries on ANY background
                 edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
-
                 self.curves[name]['curve'] = self.widget.plot(
                     [], symbol="o", pen=None,
                     symbolBrush=curve_spec['colour'],
-                    symbolPen=edge_pen,  # <-- Applied globally here
+                    symbolPen=edge_pen,
                     symbolSize=curve_spec['size']
                 )
                 if 'colorSource' in curve_spec:
@@ -177,22 +240,13 @@ class PlotController(QtCore.QObject):
     def _build_target_bands(self):
         for target_name, target_spec in self.spec.get('targets', {}).items():
             region = pg.LinearRegionItem(orientation='horizontal', movable=False, brush=target_spec['colour'])
-
             for line in region.lines:
                 line.setPen(pg.mkPen(None))
                 line.setHoverPen(pg.mkPen(None))
-
             region.setZValue(-20)
             region.setVisible(False)
             self.widget.addItem(region)
-
-            # Encapsulated state storage
-            self.target_bands[target_name] = {
-                'item': region,
-                'min': 0.0,
-                'max': 1.0,
-                'enabled': False
-            }
+            self.target_bands[target_name] = {'item': region, 'min': 0.0, 'max': 1.0, 'enabled': False}
 
     def _set_initial_bounds(self):
         if 'y_min' in self.spec and 'y_max' in self.spec:
@@ -201,26 +255,16 @@ class PlotController(QtCore.QObject):
     def set_curve_data(self, curve_name: str, x: np.ndarray, y: np.ndarray, data_container=None,
                        audio_features_ctx=None):
         curve = self.curves.get(curve_name)
-        if not curve:
-            return
+        if not curve: return
 
-        # --- NEW SPECTROGRAM BLOCK ---
         if curve.get('is_spectrogram'):
             if data_container is not None and hasattr(data_container, 'magnitude_db'):
                 img = curve['image_item']
-
-                # pyqtgraph ImageItem expects shape (x, y) which means (time, freq)
-                # scipy.signal.spectrogram outputs (freq, time). We MUST transpose (.T).
                 img.setImage(data_container.magnitude_db.T, autoLevels=True)
-
-                # Scale the image coordinates to match our axis boundaries
                 t_max = data_container.x[-1] if len(data_container.x) > 0 else 1.0
                 f_max = data_container.y[-1] if len(data_container.y) > 0 else 1.0
                 img.setRect(QtCore.QRectF(0, 0, t_max, f_max))
             return
-        # -----------------------------
-
-        x_arr = np.array(x, dtype=float)
 
         x_arr = np.array(x, dtype=float)
         y_arr = np.array(y, dtype=float)
@@ -245,7 +289,6 @@ class PlotController(QtCore.QObject):
             curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
             curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
 
-
         elif 'colorSource' in curve and audio_features_ctx:
             z_feature = curve['colorSource']
             if hasattr(audio_features_ctx, z_feature):
@@ -253,30 +296,15 @@ class PlotController(QtCore.QObject):
                 if len(z_data.x) > 0 and len(x_arr) > 0:
                     z_interp = np.interp(x_arr, z_data.x, z_data.y)
                     z_clipped = np.clip(z_interp, 0.0, 4e-7)
-
-                    # 1. Standard normalization (0.0 to 1.0)
-
                     z_norm = (z_clipped - 0.0) / (6e-7 - 0.0)
-
-                    # 2. THE RESTRICTED RANGE TECHNIQUE
                     z_restricted = 0.1 + (z_norm * 0.90)
 
                     cmap = pg.colormap.get('viridis')
-                    # Map using the restricted values so we never hit absolute ends of the colormap
                     colors = cmap.map(z_restricted)
                     brushes = [pg.mkBrush(tuple(c)) for c in colors]
-
-                    # 3. THE MARKER EDGE HACK
-                    # A semi-transparent medium-grey pen to define boundaries on ANY background
                     edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
 
-                    # Apply both the restricted brushes and the edge pen
-                    curve['curve'].setData(
-                        x=x_arr,
-                        y=y_arr,
-                        symbolBrush=brushes,
-                        symbolPen=edge_pen
-                    )
+                    curve['curve'].setData(x=x_arr, y=y_arr, symbolBrush=brushes, symbolPen=edge_pen)
             else:
                 curve['curve'].setData(x=x_arr, y=y_arr)
         else:
@@ -284,7 +312,7 @@ class PlotController(QtCore.QObject):
 
     def append_curve_point(self, curve_name: str, snapshot: FeatureSnapshot, audio_features_ctx):
         curve = self.curves.get(curve_name)
-        if not curve or curve.get('is_spectrogram'):  # Guard added here
+        if not curve or curve.get('is_spectrogram'):
             return
 
         result_key = curve['analysisResult']
@@ -298,44 +326,27 @@ class PlotController(QtCore.QObject):
 
         data_container.x = np.append(data_container.x, snapshot.time)
         data_container.y = np.append(data_container.y, new_y_val)
-
         self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
 
     def update_target_bands(self, config: TargetConfig):
-        """Maps specific properties from a TargetConfig instance to the
-        internal LinearRegionItems registered on this plot canvas.
-        """
         for target_name, band in self.target_bands.items():
-            # Query the target data unpacking min, max, and enabled state values
             bounds = config.get_bounds(target_name)
-
             if bounds is not None:
                 band_min, band_max, is_enabled = bounds
-
                 band['min'] = band_min
                 band['max'] = band_max
                 band['enabled'] = is_enabled
-
-                # Update visual coordinates on the viewport canvas
                 band['item'].setRegion([band_min, band_max])
-
-                # Manage visual visibility layout criteria based on configuration parameters
-                if is_enabled:
-                    band['item'].setVisible(True)
-                else:
-                    band['item'].setVisible(False)
+                band['item'].setVisible(is_enabled)
 
     def set_plot_visible(self, visible: bool):
-        """Shows or hides the entire plot panel widget."""
-        self.widget.setVisible(visible)
+        self.container.setVisible(visible)
 
     def set_curve_visible(self, curve_name: str, visible: bool):
-        """Shows or hides a standard scatter/line curve item."""
         if curve_name in self.curves and 'curve' in self.curves[curve_name]:
             self.curves[curve_name]['curve'].setVisible(visible)
 
     def set_bandwidth_visible(self, curve_name: str, visible: bool):
-        """Shows or hides the transparent bounding curves and the fill band."""
         if curve_name in self.curves and self.curves[curve_name].get('has_bw'):
             c = self.curves[curve_name]
             c['bw_curve_min'].setVisible(visible)
@@ -343,50 +354,24 @@ class PlotController(QtCore.QObject):
             c['fill_band'].setVisible(visible)
 
     def set_symbol_size(self, size_value: int):
-        """Updates the rendering size of all valid ScatterPlotItems and
-
-        PlotDataItems drawn on this canvas viewport.
-        """
-        # Determine the contextual offset size for special plots like Weight
         target_size = size_value
         for item in self.widget.getPlotItem().items:
-            # 1. Handle standard ScatterPlotItems
             if isinstance(item, pg.ScatterPlotItem):
-                # Safeguard annotation markers using the class type passed down
-                if isinstance(item, AnnotationMarker):
-                    continue
-
+                if isinstance(item, AnnotationMarker): continue
                 item.setSize(target_size)
-
-            # 2. Handle PlotDataItems
             elif isinstance(item, pg.PlotDataItem):
                 item.opts['symbolSize'] = size_value
                 if item.scatter is not None:
                     item.scatter.setSize(target_size)
 
     def reset_zoom(self):
-        """Resets the viewport zoom, applying fixed min/max spec boundaries where defined,
-
-        and falling back to autoRange elsewhere.
-        """
         y_min = self.spec.get('y_min')
         y_max = self.spec.get('y_max')
-
-        # Safely check if limits are explicitly provided (even if they are 0)
         if y_min is not None and y_max is not None:
-            # Explicitly lock the Y-axis to your specs
             self.widget.setYRange(y_min, y_max, padding=0)
-
-            # If X-axis should still auto-fit data while Y is locked:
             self.widget.enableAutoRange(axis=pg.ViewBox.XAxis)
         else:
-            # Fallback to pure auto-scaling for both axes if no specs exist
             self.widget.autoRange()
 
     def set_playhead_value(self, value: float):
-        """Updates the vertical playhead line's X position on the canvas.
-
-        Args:
-            value (float): The target playback time in seconds.
-        """
         self.playhead.setValue(value)

@@ -147,7 +147,7 @@ spec = {
         'linkX': 'Loudness'
     },
 
-    'F3_Pitch': {
+    'F3/Pitch': {
         'title': 'F3 / Pitch',
         'y_min': 1,
         'y_max': 50,
@@ -213,7 +213,7 @@ spec = {
     },
 
 
-    'F2_Pitch': {
+    'F2/Pitch': {
         'title': 'F2 / Pitch',
         'y_min': 1,
         'y_max': 30,
@@ -236,7 +236,7 @@ spec = {
         'linkX': 'Loudness'
     },
 
-    'F1_Pitch': {
+    'F1/Pitch': {
         'title': 'F1 / Pitch',
         'y_min': 1,
         'y_max': 15,
