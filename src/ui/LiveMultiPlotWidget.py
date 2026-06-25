@@ -102,8 +102,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- File Menu ---
         file_menu = self.menu_bar.addMenu("&File")
-
-        # --- NEW: Add the New Session action ---
         file_menu.addAction("&New", "Ctrl+N", self.new_session_signal.emit)
         file_menu.addAction("&Open", "Ctrl+O", self.browse_file)
         file_menu.addAction("&Save Annotations", "Ctrl+S", self.save_annotations)
@@ -111,7 +109,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         file_menu.addSeparator()
         file_menu.addAction("&Close", "Ctrl+W", self.close_session_signal.emit)
 
-        # --- Targets Menu [NEW] ---
+        # --- Targets Menu ---
         targets_menu = self.menu_bar.addMenu("&Targets")
         targets_menu.addAction("Set Targets...", self.open_targets_dialog)
         targets_menu.addSeparator()
@@ -123,68 +121,20 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- View Menu ---
         plots_menu = self.menu_bar.addMenu("&Plots")
-
         reset_zoom_action = plots_menu.addAction("&Reset zoom")
         reset_zoom_action.triggered.connect(self.handle_reset_zoom)
 
-        # New "Reset plots" Action
         reset_plots_action = plots_menu.addAction("Reset plots")
         reset_plots_action.triggered.connect(self.handle_reset_plots)
 
-        # New "Reset plots" Action
         show_all_plots_action = plots_menu.addAction("Show all plots")
         show_all_plots_action.triggered.connect(self.show_all_plots)
 
         plots_menu.addSeparator()
 
-        # We keep track of the toggle actions in a dictionary so handle_reset_plots can re-check them
         self.menu_toggle_actions = {
-            'plots': {},
-            'pixels': {},
-            'bandwidths': {}
+            'plots': {}
         }
-
-        # Grouping dynamically by Plot
-        for plot_key, plot_spec in spec.items():
-            plot_submenu = plots_menu.addMenu(plot_spec['title'])
-
-            # 1. Action to Show/Hide the entire Plot panel
-            is_visible = not plot_spec.get('hidden', False)
-
-            show_plot_action = plot_submenu.addAction("Show Plot Panel")
-            show_plot_action.setCheckable(True)
-            show_plot_action.setChecked(is_visible)
-
-            show_plot_action.triggered.connect(
-                lambda checked, name=plot_key: self.handle_toggle_plot(name, checked)
-            )
-            self.menu_toggle_actions['plots'][plot_key] = show_plot_action
-            plot_submenu.addSeparator()
-
-            # 2. Actions for every pixel/scatter curve inside this plot
-            for curve_key, curve_spec in plot_spec['curves'].items():
-                if not curve_spec.get("BW", False):
-                    show_pixel_action = plot_submenu.addAction(f"Show '{curve_key}' Pixels")
-                    show_pixel_action.setCheckable(True)
-                    show_pixel_action.setChecked(True)
-                    show_pixel_action.triggered.connect(
-                        lambda checked, p_key=plot_key, c_key=curve_key:
-                        self.handle_toggle_pixels(p_key, c_key, checked)
-                    )
-                    # Use a composite key to safely track nested components
-                    self.menu_toggle_actions['pixels'][(plot_key, curve_key)] = show_pixel_action
-
-            # 3. Actions for every Bandwidth curve inside this plot
-            for curve_key, curve_spec in plot_spec['curves'].items():
-                if curve_spec.get("BW", False):
-                    show_bw_action = plot_submenu.addAction("Show Bandwidth Region")
-                    show_bw_action.setCheckable(True)
-                    show_bw_action.setChecked(True)
-                    show_bw_action.triggered.connect(
-                        lambda checked, p_key=plot_key, c_key=curve_key:
-                        self.handle_toggle_bandwidth(p_key, c_key, checked)
-                    )
-                    self.menu_toggle_actions['bandwidths'][(plot_key, curve_key)] = show_bw_action
 
         samples_menu = self.menu_bar.addMenu("&Sample texts")
         sample_texts_action = samples_menu.addAction("Sample Texts Editor")
@@ -192,8 +142,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- View Menu (Theme Settings) ---
         view_menu = self.menu_bar.addMenu("&View")
-
-        # QActionGroup ensures only one option is checked at a time
         self.theme_group = QtGui.QActionGroup(self)
         self.theme_group.setExclusive(True)
 
@@ -205,7 +153,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.theme_group.addAction(self.action_light)
         self.theme_group.addAction(self.action_dark)
 
-        # Connect actions to the logic
         self.action_os_default.triggered.connect(self.set_theme_os_default)
         self.action_light.triggered.connect(self.set_theme_light)
         self.action_dark.triggered.connect(self.set_theme_dark)
@@ -213,14 +160,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         view_menu.addAction(self.action_os_default)
         view_menu.addAction(self.action_light)
         view_menu.addAction(self.action_dark)
-
-        # Default to OS behavior on initialization
         self.action_os_default.setChecked(True)
 
-        # Build the Help Menu
         help_menu = self.menu_bar.addMenu("Help")
-
-        # Add the Action
         open_help_action = help_menu.addAction("Documentation")
         open_help_action.setShortcut("F1")
         open_help_action.triggered.connect(self.show_help_window)
@@ -261,8 +203,17 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playback_btn.clicked.connect(self.handle_playback)
         top_buttons_layout.addWidget(self.playback_btn)
 
+        # Row layout controls
+        self.add_row_btn = QtWidgets.QPushButton("Add Row")
+        self.add_row_btn.clicked.connect(self.add_plot_row)
+        top_buttons_layout.addWidget(self.add_row_btn)
+
+        self.remove_row_btn = QtWidgets.QPushButton("Remove Row")
+        self.remove_row_btn.clicked.connect(self.remove_plot_row)
+        top_buttons_layout.addWidget(self.remove_row_btn)
+
         ################ Plot item size slider
-        self.size_label = QtWidgets.QLabel("Point Size:")
+        self.size_label = QtWidgets.QLabel("Global point size:")
         top_buttons_layout.addWidget(self.size_label)
 
         self.size_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
@@ -280,32 +231,214 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.layout.addLayout(top_buttons_layout)
 
     def setupPlots(self):
-        self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
-        stretch_factors = []
-        self.plot_controllers = {}
+        self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.left_col = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
+        self.right_col = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
 
-        for plot_name, plot_spec in spec.items():
-            controller = PlotController(plot_name, plot_spec, self.on_mouse_clicked)
-            self.plot_controllers[plot_name] = controller
-
-            # Target bands setup is fully delegated into the controller class now!
-            self.plot_splitter.addWidget(controller.widget)
-
-            stretch = plot_spec.get('stretch', default_stretch)
-            stretch_factors.append(stretch)
-
-        # Secondary Pass: Cross-linking
-        for plot_name, plot_spec in spec.items():
-            if plot_spec.get('linkX') is not None:
-                target_plot_name = plot_spec['linkX']
-                if target_plot_name in self.plot_controllers:
-                    target_widget = self.plot_controllers[target_plot_name].widget
-                    self.plot_controllers[plot_name].widget.setXLink(target_widget)
-
-        for idx, stretch in enumerate(stretch_factors):
-            self.plot_splitter.setStretchFactor(idx, stretch)
-
+        self.plot_splitter.addWidget(self.left_col)
+        self.plot_splitter.addWidget(self.right_col)
         self.layout.addWidget(self.plot_splitter)
+
+        # Track active container cells instead of single plot instances
+        self.plot_cells = []
+
+        # Default 2x2 Grid (4 plots)
+        available_plots = list(spec.keys())
+        p1 = available_plots[0] if len(available_plots) > 0 else None
+        p2 = available_plots[1] if len(available_plots) > 1 else p1
+        p3 = available_plots[2] if len(available_plots) > 2 else p1
+        p4 = available_plots[3] if len(available_plots) > 3 else p1
+
+        self.add_plot_row(p1, p2)
+        self.add_plot_row(p3, p4)
+
+    def create_plot_cell(self, plot_name):
+        if not plot_name: return None
+
+        frame = QtWidgets.QFrame()
+        frame.setObjectName("PlotContainer")
+        frame.setStyleSheet("#PlotContainer { border: 1px solid gray; margin: 2px; }")
+
+        layout = QtWidgets.QVBoxLayout(frame)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(2)
+
+        top_bar_layout = QtWidgets.QHBoxLayout()
+        selector = QtWidgets.QComboBox()
+        selector.addItems(list(spec.keys()))
+        selector.setCurrentText(plot_name)
+        selector.setStyleSheet("""
+            QComboBox { border: 1px solid gray; padding: 2px; background-color: palette(window); color: palette(text); }
+            QComboBox QAbstractItemView { background-color: palette(base); color: palette(text); selection-background-color: palette(highlight); }
+        """)
+        top_bar_layout.addWidget(selector)
+        top_bar_layout.addStretch()
+
+        # --- NEW: Dynamic Checkboxes Layout ---
+        checkbox_layout = QtWidgets.QHBoxLayout()
+        checkbox_layout.setSpacing(10)
+        top_bar_layout.addLayout(checkbox_layout)
+        top_bar_layout.addSpacing(15)  # Buffer before the size slider
+        # ------------------------------------
+
+        # --- Local Point Size Slider ---
+        local_size_label = QtWidgets.QLabel("Size:")
+
+        local_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        local_slider.setMinimum(1)
+        local_slider.setMaximum(5)
+        local_slider.setValue(defaultSize)
+        local_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
+        local_slider.setTickInterval(1)
+        local_slider.setFixedWidth(80)
+
+        top_bar_layout.addWidget(local_size_label)
+        top_bar_layout.addWidget(local_slider)
+        # ------------------------------------
+
+        layout.addLayout(top_bar_layout)
+
+        controller = PlotController(plot_name, spec[plot_name], self.on_mouse_clicked)
+        controller.widget.setStyleSheet("border: none;")
+        layout.addWidget(controller.widget, stretch=1)
+
+        cell_data = {
+            'frame': frame,
+            'layout': layout,
+            'controller': controller,
+            'selector': selector,
+            'checkbox_layout': checkbox_layout,  # Tracked for dynamic updates
+            'local_slider': local_slider,
+            'current_plot': plot_name
+        }
+
+        # Populate the checkboxes dynamically
+        self.populate_cell_toggles(cell_data)
+
+        local_slider.valueChanged.connect(lambda val, c=cell_data: c['controller'].set_symbol_size(val))
+        selector.currentTextChanged.connect(lambda new_name, c=cell_data: self.handle_plot_selection(c, new_name))
+
+        return cell_data
+
+    def populate_cell_toggles(self, cell_data):
+        layout = cell_data.get('checkbox_layout')
+        if layout is None: return
+
+        # Clear old toggles if swapping plots
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        cell_data['toggles'] = []
+        plot_name = cell_data['current_plot']
+        plot_spec = spec.get(plot_name, {})
+        controller = cell_data['controller']
+
+        for curve_key, curve_spec in plot_spec.get('curves', {}).items():
+            if curve_spec.get('is_spectrogram'):
+                continue
+
+            # Format label cleanly
+            if curve_spec.get("BW", False):
+                label_text = curve_key.replace('_IBW', ' BW').replace('_BW', ' BW')
+            else:
+                label_text = curve_key
+
+            cb = QtWidgets.QCheckBox(label_text)
+            cb.setChecked(True)
+
+            # Bind the toggle directly to the controller for THIS cell
+            if curve_spec.get("BW", False):
+                cb.toggled.connect(
+                    lambda checked, ck=curve_key, ctrl=controller: ctrl.set_bandwidth_visible(ck, checked))
+            else:
+                cb.toggled.connect(lambda checked, ck=curve_key, ctrl=controller: ctrl.set_curve_visible(ck, checked))
+
+            layout.addWidget(cb)
+            cell_data['toggles'].append(cb)
+
+    def add_plot_row(self, left_name=None, right_name=None):
+        if not left_name: left_name = list(spec.keys())[0]
+        if not right_name: right_name = list(spec.keys())[0]
+
+        left_cell = self.create_plot_cell(left_name)
+        right_cell = self.create_plot_cell(right_name)
+
+        self.plot_cells.append(left_cell)
+        self.plot_cells.append(right_cell)
+
+        self.left_col.addWidget(left_cell['frame'])
+        self.right_col.addWidget(right_cell['frame'])
+
+        self.sync_all_x_axes()
+        self.update_plots() # Populate the new row with data if a file is loaded
+
+        # Apply global size to the new rows AFTER data is pushed
+        if hasattr(self, 'size_slider'):
+            self.handle_symbol_size_change(self.size_slider.value())
+
+    def handle_plot_selection(self, cell_data, new_plot_name):
+        if cell_data['current_plot'] == new_plot_name:
+            return
+
+        # 1. Strip the old plot
+        old_controller = cell_data['controller']
+        cell_data['layout'].removeWidget(old_controller.widget)
+        old_controller.widget.deleteLater()
+
+        # 2. Build the new plot and assign it
+        new_controller = PlotController(new_plot_name, spec[new_plot_name], self.on_mouse_clicked)
+        new_controller.widget.setStyleSheet("border: none;")
+
+        cell_data['layout'].addWidget(new_controller.widget, stretch=1)
+
+        # Update the cell tracking data
+        cell_data['controller'] = new_controller
+        cell_data['current_plot'] = new_plot_name
+
+        # --- FIX: Regenerate the checkboxes for the new plot ---
+        self.populate_cell_toggles(cell_data)
+
+        # 3. Force visibility and update the menu checkbox to reflect "enabled" status
+        if new_plot_name in self.menu_toggle_actions['plots']:
+            self.menu_toggle_actions['plots'][new_plot_name].setChecked(True)
+            self.handle_toggle_plot(new_plot_name, True)
+
+        # 4. Sync panning and render active data immediately
+        self.sync_all_x_axes()
+        self.update_plots()
+
+        # 5. Apply the cell's local point size AFTER the new data is drawn!
+        if 'local_slider' in cell_data:
+            cell_data['controller'].set_symbol_size(cell_data['local_slider'].value())
+
+    def remove_plot_row(self):
+        # Ensure we keep at least 1 row (2 cells)
+        if self.left_col.count() > 1 and self.right_col.count() > 1:
+            left_widget = self.left_col.widget(self.left_col.count() - 1)
+            right_widget = self.right_col.widget(self.right_col.count() - 1)
+
+            # Remove from tracking list
+            self.plot_cells = [c for c in self.plot_cells if c['frame'] not in (left_widget, right_widget)]
+
+            left_widget.deleteLater()
+            right_widget.deleteLater()
+
+    def sync_all_x_axes(self):
+        """Cross-links panning/zooming for all active plots."""
+        target_widget = None
+        for cell in self.plot_cells:
+            if cell['current_plot'] == 'Loudness':
+                target_widget = cell['controller'].widget
+                break
+
+        if not target_widget: return
+
+        for cell in self.plot_cells:
+            if spec[cell['current_plot']].get('linkX') == 'Loudness':
+                if cell['controller'].widget != target_widget:
+                    cell['controller'].widget.setXLink(target_widget)
 
     # --- Theme Switching Methods ---
     def set_theme_os_default(self):
@@ -652,7 +785,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         elif hasattr(latest_point, 'timestamp'):
             latest_point.timestamp += self.recording_start_offset
 
-        for plot_name, controller in self.plot_controllers.items():
+        for cell in self.plot_cells:
+            plot_name = cell['current_plot']
+            controller = cell['controller']
             for curve_name in controller.curves.keys():
                 # Route the shifted snapshot data down into the controller
                 controller.append_curve_point(
@@ -721,7 +856,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.analysedAudioFeatures.length_seconds = max(self.analysedAudioFeatures.length_seconds, total_duration)
 
         # --- Sync with Controllers ---
-        for plot_name, controller in self.plot_controllers.items():
+        for cell in self.plot_cells:
+            plot_name = cell['current_plot']
+            controller = cell['controller']
             controller.set_playhead_value(self.current_playback_time)
 
             if self.is_recording:
@@ -732,24 +869,33 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     #################### Misc plot stuff ####################
 
     def handle_symbol_size_change(self, value):
-        """Called whenever the slider is moved.
+        """Called whenever the Global slider is moved."""
+        if not hasattr(self, 'plot_cells'):
+            return
 
-        'value' will be an integer between 1 and 5.
-        """
-        for controller in self.plot_controllers.values():
-            controller.set_symbol_size(value)
+        for cell in self.plot_cells:
+            # Safely update the local slider's UI position without double-triggering signals
+            if 'local_slider' in cell:
+                cell['local_slider'].blockSignals(True)
+                cell['local_slider'].setValue(value)
+                cell['local_slider'].blockSignals(False)
+
+            # Apply the size to the controller
+            cell['controller'].set_symbol_size(value)
 
     def handle_reset_zoom(self):
-        """Resets the zoom, applying fixed min/max spec boundaries where defined,
-        and falling back to autoRange elsewhere across all controllers.
-        """
-        for controller in self.plot_controllers.values():
-            controller.reset_zoom()
+        """Resets the zoom, applying fixed min/max spec boundaries where defined."""
+        if not hasattr(self, 'plot_cells'):
+            return
+
+        for cell in self.plot_cells:
+            cell['controller'].reset_zoom()
 
     def handle_toggle_plot(self, plot_key: str, checked: bool):
-        """Toggles visibility of the entire plot widget panel."""
-        if plot_key in self.plot_controllers:
-            self.plot_controllers[plot_key].set_plot_visible(checked)
+        for cell in self.plot_cells:
+            if cell['current_plot'] == plot_key:
+                cell['controller'].set_plot_visible(checked)
+                cell['frame'].setVisible(checked) # Hide the border/dropdown too
 
     def handle_toggle_pixels(self, plot_key: str, curve_key: str, checked: bool):
         """Toggles visibility of standard scatter points or lines on a specific canvas."""
@@ -762,82 +908,90 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.plot_controllers[plot_key].set_bandwidth_visible(curve_key, checked)
 
     def handle_reset_plots(self):
-        """Restores visibility to all plots, curves, and bandwidth regions,
-        updates the menu checkboxes, and resets the draggable layout splitter
-        back to its original default stretch configurations.
-        """
         # --- 1. Reset Draggable Sizes ---
-        if hasattr(self, 'plot_splitter'):
-            # Look up the current combined height of the plot container area
-            total_height = self.plot_splitter.height()
+        if hasattr(self, 'left_col') and hasattr(self, 'right_col'):
+            total_width = self.plot_splitter.width()
+            self.plot_splitter.setSizes([int(total_width / 2), int(total_width / 2)])
 
-            # Recalculate total stretch units allocated across all specs
-            total_stretch = sum(plot_spec.get('stretch', default_stretch) for plot_spec in spec.values())
+            left_height = self.left_col.height()
+            right_height = self.right_col.height()
 
-            # Calculate pixel distribution per plot based on its original stretch factor
-            default_sizes = []
-            for plot_spec in spec.values():
+            left_stretch_total, right_stretch_total = 0, 0
+            left_specs, right_specs = [], []
+
+            left_turn = True
+            for plot_name, plot_spec in spec.items():
                 stretch = plot_spec.get('stretch', default_stretch)
-                # Assign proportional pixel shares from the live height layout
-                allocated_pixels = int((stretch / total_stretch) * total_height)
-                default_sizes.append(allocated_pixels)
+                if left_turn:
+                    left_stretch_total += stretch
+                    left_specs.append(stretch)
+                else:
+                    right_stretch_total += stretch
+                    right_specs.append(stretch)
+                left_turn = not left_turn
 
-            # Forces the splitter to re-snap to the original geometric proportions
-            self.plot_splitter.setSizes(default_sizes)
+            if left_stretch_total > 0:
+                self.left_col.setSizes([int((s / left_stretch_total) * left_height) for s in left_specs])
+            if right_stretch_total > 0:
+                self.right_col.setSizes([int((s / right_stretch_total) * right_height) for s in right_specs])
 
         # --- 2. Reset Component Visibilities & Menu Sync ---
         for plot_key, plot_spec in spec.items():
-            # Reset Plot Panel Visibility to Default Spec
             is_visible = not plot_spec.get('hidden', False)
-
             self.handle_toggle_plot(plot_key, is_visible)
             if plot_key in self.menu_toggle_actions['plots']:
                 self.menu_toggle_actions['plots'][plot_key].setChecked(is_visible)
 
-            for curve_key, curve_spec in plot_spec['curves'].items():
-                # Reset Pixel Visibility
-                if not curve_spec.get("BW", False):
-                    self.handle_toggle_pixels(plot_key, curve_key, True)
-                    action_key = (plot_key, curve_key)
-                    if action_key in self.menu_toggle_actions['pixels']:
-                        self.menu_toggle_actions['pixels'][action_key].setChecked(True)
-
-                # Reset Bandwidth Visibility
-                else:
-                    self.handle_toggle_bandwidth(plot_key, curve_key, True)
-                    action_key = (plot_key, curve_key)
-                    if action_key in self.menu_toggle_actions['bandwidths']:
-                        self.menu_toggle_actions['bandwidths'][action_key].setChecked(True)
+        # Reset local point and bandwidth checkboxes
+        if hasattr(self, 'plot_cells'):
+            for cell in self.plot_cells:
+                for cb in cell.get('toggles', []):
+                    cb.setChecked(True)
 
     def show_all_plots(self):
         # --- 1. Reset Draggable Sizes ---
-        if hasattr(self, 'plot_splitter'):
-            # Look up the current combined height of the plot container area
-            total_height = self.plot_splitter.height()
+        if hasattr(self, 'left_col') and hasattr(self, 'right_col'):
+            total_width = self.plot_splitter.width()
+            self.plot_splitter.setSizes([int(total_width / 2), int(total_width / 2)])
 
-            # Recalculate total stretch units allocated across all specs
-            total_stretch = sum(plot_spec.get('stretch', default_stretch) for plot_spec in spec.values())
+            left_height = self.left_col.height()
+            right_height = self.right_col.height()
 
-            # Calculate pixel distribution per plot based on its original stretch factor
-            default_sizes = []
-            for plot_spec in spec.values():
+            left_stretch_total, right_stretch_total = 0, 0
+            left_specs, right_specs = [], []
+
+            left_turn = True
+            for plot_name, plot_spec in spec.items():
                 stretch = plot_spec.get('stretch', default_stretch)
-                # Assign proportional pixel shares from the live height layout
-                allocated_pixels = int((stretch / total_stretch) * total_height)
-                default_sizes.append(allocated_pixels)
+                if left_turn:
+                    left_stretch_total += stretch
+                    left_specs.append(stretch)
+                else:
+                    right_stretch_total += stretch
+                    right_specs.append(stretch)
+                left_turn = not left_turn
 
-            # Forces the splitter to re-snap to the original geometric proportions
-            self.plot_splitter.setSizes(default_sizes)
+            if left_stretch_total > 0:
+                self.left_col.setSizes([int((s / left_stretch_total) * left_height) for s in left_specs])
+            if right_stretch_total > 0:
+                self.right_col.setSizes([int((s / right_stretch_total) * right_height) for s in right_specs])
 
         # --- 2. Reset Component Visibilities & Menu Sync ---
         for plot_key, plot_spec in spec.items():
             self.handle_toggle_plot(plot_key, True)
-
             if plot_key in self.menu_toggle_actions['plots']:
                 self.menu_toggle_actions['plots'][plot_key].setChecked(True)
 
+        # Ensure active plots have their curves visible
+        if hasattr(self, 'plot_cells'):
+            for cell in self.plot_cells:
+                for cb in cell.get('toggles', []):
+                    cb.setChecked(True)
+
     def update_plots(self):
-        for plot_name, controller in self.plot_controllers.items():
+        for cell in self.plot_cells:
+            plot_name = cell['current_plot']
+            controller = cell['controller']
             for curve_name, curve_config in controller.curves.items():
 
                 # Ensure the required feature exists in our AudioFeatures result object
@@ -938,7 +1092,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def set_target_config(self, new_config: TargetConfig):
         self.audioFeatureExtractor.target_config = new_config
 
-        for plot_name, controller in self.plot_controllers.items():
+        for cell in self.plot_cells:
+            plot_name = cell['current_plot']
+            controller = cell['controller']
             for band in controller.target_bands.values():
                 band['enabled'] = True
 

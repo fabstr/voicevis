@@ -28,9 +28,8 @@ spec = {
         'mouse_enabled_y': False,
         'y_min': 0,
         'y_max': 1,
-        'hidden': False,
         'curves': {
-            'pitch': {
+            'Loudness': {
                 'size': defaultSize,
                 'colour': loudness,
                 'analysisResult': 'loudness'
@@ -47,9 +46,8 @@ spec = {
         'y_min': 0,
         'y_max': 350,
         'stretch': 1,
-        'hidden': True,
         'curves': {
-            'pitch': {
+            'Pitch': {
                 'size': defaultSize,
                 'colour': pitch,
                 'analysisResult': 'pitch',
@@ -67,11 +65,44 @@ spec = {
         'linkX': 'Loudness'
     },
 
+    "Size": {
+        'title': 'Size',
+        'y_min': -15,
+        'y_max': 25,
+        'curves': {
+            'Size': {
+                'size': defaultSize,
+                'colour': size,
+                'analysisResult': 'size'
+            }
+        },
+        'targets': {
+            'Size': {'colour': target_band}
+        },
+        'linkX': 'Loudness',
+    },
+
+    "Weight": {
+        'title': 'Weight',
+        'y_min': 0,
+        'y_max': 8.0e-7,
+        'curves': {
+            'Weight': {
+                'size': defaultSize,
+                'colour': weight,
+                'analysisResult': 'weight'
+            }
+        },
+        'targets': {
+            'Weight': {'colour': target_band}
+        },
+        'linkX': 'Loudness',
+    },
+
     'Formants': {
         'title': 'Formants (Hz)',
         'y_min': 0,
         'y_max': 3500,
-        'hidden': True,
         'curves': {
             'F1': {
                 'size': defaultSize,
@@ -89,19 +120,19 @@ spec = {
                 'colour': f3,
                 'analysisResult': 'F3'
             },
-            'F1_IBW': {
+            'F1 BW': {
                 'size': defaultSize,
                 'colour': white,
                 'analysisResult': 'F1_IBW',
                 'BW': True
             },
-            'F2_IBW': {
+            'F2 BW': {
                 'size': defaultSize,
                 'colour': white,
                 'analysisResult': 'F2_IBW',
                 'BW': True
             },
-            'F3_IBW': {
+            'F3 BW': {
                 'size': defaultSize,
                 'colour': white,
                 'analysisResult': 'F3_IBW',
@@ -120,14 +151,13 @@ spec = {
         'title': 'F3 / Pitch',
         'y_min': 1,
         'y_max': 50,
-        'hidden': True,
         'curves': {
-            'F3_Pitch': {
+            'F3/Pitch': {
                 'size': defaultSize,
                 'colour': f3_pitch,
                 'analysisResult': 'F3_Pitch'
             },
-            "F3_Pitch_BW": {
+            "F3/Pitch BW": {
                 'size': defaultSize,
                 'colour': white,
                 'analysisResult': 'F3_Pitch_BW',
@@ -142,7 +172,6 @@ spec = {
 
     'F3_Pitch_rel_amplitude': {
         'title': 'F3 / Pitch rel amp',
-        'hidden': True,
         'y_min': -120,
         'y_max': 30,
         'curves': {
@@ -157,7 +186,6 @@ spec = {
 
     'F2_Pitch_rel_amplitude': {
         'title': 'F2 / Pitch rel amp',
-        'hidden': True,
         'y_min': -120,
         'y_max': 20,
         'curves': {
@@ -172,7 +200,6 @@ spec = {
 
     'F1_Pitch_rel_amplitude': {
         'title': 'F1 / Pitch rel amp',
-        'hidden': True,
         'y_min': -120,
         'y_max': 20,
         'curves': {
@@ -190,14 +217,13 @@ spec = {
         'title': 'F2 / Pitch',
         'y_min': 1,
         'y_max': 30,
-        'hidden': True,
         'curves': {
-            'F2_Pitch': {
+            'F2/Pitch': {
                 'size': defaultSize,
                 'colour': f2_pitch,
                 'analysisResult': 'F2_Pitch'
             },
-            "F2_Pitch_BW": {
+            "F2/Pitch BW": {
                 'size': defaultSize,
                 'colour': white,
                 'analysisResult': 'F2_Pitch_BW',
@@ -214,14 +240,13 @@ spec = {
         'title': 'F1 / Pitch',
         'y_min': 1,
         'y_max': 15,
-        'hidden': True,
         'curves': {
-            'F1_Pitch': {
+            'F1/Pitch': {
                 'size': defaultSize,
                 'colour': f1_pitch,
                 'analysisResult': 'F1_Pitch'
             },
-            "F1_Pitch_BW": {
+            "F1/Pitch BW": {
                 'size': defaultSize,
                 'colour': white,
                 'analysisResult': 'F1_Pitch_BW',
@@ -234,49 +259,12 @@ spec = {
         'linkX': 'Loudness'
     },
 
-    "Size": {
-        'title': 'Size',
-        'y_min': -15,
-        'y_max': 25  ,
-        'hidden': False,
-        'curves': {
-            'size': {
-                'size': defaultSize+1,
-                'colour': size,
-                'analysisResult': 'size'
-            }
-        },
-        'targets': {
-            'Size': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
-    },
-
-    "Weight": {
-        'title': 'Weight',
-        'y_min': 0,
-        'y_max': 8.0e-7,
-        'hidden': False,
-        'curves': {
-            'weight': {
-                'size': defaultSize+1,
-                'colour': weight,
-                'analysisResult': 'weight'
-            }
-        },
-        'targets': {
-            'Weight': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
-    },
-
     "Fullness": {
         'title': 'Fullness',
         'y_min': -15,
         'y_max': 25,
-        'hidden': True,
         'curves': {
-            'size_weight': {
+            'Fullness': {
                 'size': defaultSize + 2,
                 'colour': white,  # Fallback color
                 'analysisResult': 'size', # Y-axis
@@ -295,9 +283,8 @@ spec = {
             'y_max': 8000,  # Displays up to 8kHz by default
             'mouse_enabled_x': True,
             'mouse_enabled_y': True,
-            'hidden': True,
             'curves': {
-                'spectrogram': {
+                'Spectrogram': {
                     'analysisResult': 'spectrogram',
                     'is_spectrogram': True,  # The flag our PlotController looks for
                     'colour': 'viridis',
@@ -310,9 +297,8 @@ spec = {
         'title': 'logRelF0_H1_A3_sma3nz',
         'y_min': -20,
         'y_max': 50,
-        'hidden': False,
         'curves': {
-            'weight': {
+            'logRelF0_H1_A3_sma3nz': {
                 'size': defaultSize+1,
                 'colour': weight,
                 'analysisResult': 'logRelF0_H1_A3_sma3nz'

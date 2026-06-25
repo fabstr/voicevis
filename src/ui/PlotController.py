@@ -348,10 +348,7 @@ class PlotController(QtCore.QObject):
         PlotDataItems drawn on this canvas viewport.
         """
         # Determine the contextual offset size for special plots like Weight
-        target_size = size_value + 1
-        if self.plot_name in ["Weight", "Fullness"]:
-            target_size = target_size + 1
-
+        target_size = size_value
         for item in self.widget.getPlotItem().items:
             # 1. Handle standard ScatterPlotItems
             if isinstance(item, pg.ScatterPlotItem):
