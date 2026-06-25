@@ -280,7 +280,7 @@ spec = {
     'Spectrogram': {
             'title': 'Spectrogram',
             'y_min': 0,
-            'y_max': 8000,  # Displays up to 8kHz by default
+            'y_max': 8000,
             'mouse_enabled_x': True,
             'mouse_enabled_y': True,
             'curves': {

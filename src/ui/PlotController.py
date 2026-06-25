@@ -47,11 +47,7 @@ class PlotController(QtCore.QObject):
         self.curves = {}
         self.target_bands = {}
 
-        # 2. Apply dynamic colors & events
-        self.apply_theme()
-        self.widget.installEventFilter(self)
-
-        # 3. Build Plot Items
+        # 2. Build Plot Items
         self._apply_optimizations()
         self._configure_mouse_behavior()
         self._build_curves()
@@ -62,8 +58,11 @@ class PlotController(QtCore.QObject):
             lambda event: self.click_callback(event, self.widget, self.spec['title'])
         )
 
-        # 4. Build the Wrapper UI (Frame, ComboBox, Checkboxes, Slider)
+        # 3. Build the Wrapper UI (Frame, ComboBox, Checkboxes, Slider)
         self._build_wrapper_ui(initial_size)
+
+        # 4. Apply the theme safely ONCE during initialization
+        self.apply_theme()
 
         if self.spec.get('hidden', False):
             self.container.setVisible(False)
@@ -82,20 +81,14 @@ class PlotController(QtCore.QObject):
 
         # --- Dropdown Selector ---
         self.selector = QtWidgets.QComboBox()
-
         self.selector.blockSignals(True)
-
-        # --- FIX: Sort the keys alphabetically before adding them ---
         sorted_plot_names = sorted(list(self.all_specs.keys()))
         self.selector.addItems(sorted_plot_names)
-
         self.selector.setCurrentText(self.plot_name)
         self.selector.blockSignals(False)
 
-        self.selector.setStyleSheet("""
-                    QComboBox { border: 1px solid gray; padding: 2px; background-color: palette(window); color: palette(text); }
-                    QComboBox QAbstractItemView { background-color: palette(base); color: palette(text); selection-background-color: palette(highlight); }
-                """)
+        # NOTE: Removed self.selector.setStyleSheet(...) from here!
+
         self.selector.currentTextChanged.connect(lambda new_name: self.change_plot_callback(self, new_name))
         top_bar_layout.addWidget(self.selector)
         top_bar_layout.addStretch()
@@ -152,12 +145,6 @@ class PlotController(QtCore.QObject):
             self.checkbox_layout.addWidget(cb)
             self.toggles.append(cb)
 
-    # ... (Keep all other PlotController methods like apply_theme, _build_curves, set_curve_data exactly as they were) ...
-
-    def eventFilter(self, obj, event):
-        if event.type() in (QtCore.QEvent.Type.PaletteChange, QtCore.QEvent.Type.ApplicationPaletteChange):
-            self.apply_theme()
-        return super().eventFilter(obj, event)
 
     def apply_theme(self):
         palette = QtWidgets.QApplication.palette()
@@ -165,7 +152,17 @@ class PlotController(QtCore.QObject):
         text_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
         grid_color = palette.color(QtGui.QPalette.ColorRole.PlaceholderText)
 
+        base_color = palette.color(QtGui.QPalette.ColorRole.Base)
+        highlight_color = palette.color(QtGui.QPalette.ColorRole.Highlight)
+
+        # 1. Update pyqtgraph plot background
         self.widget.setBackground(bg_color)
+
+        # 2. Update the surrounding QFrame container background to match
+        if hasattr(self, 'container'):
+            self.container.setStyleSheet(
+                f"#PlotContainer {{ border: 1px solid gray; margin: 2px; background-color: {bg_color.name()}; }}")
+
         canvas = self.widget.getPlotItem()
         grid_pen = pg.mkPen(color=grid_color, width=1)
 
@@ -181,6 +178,27 @@ class PlotController(QtCore.QObject):
         title_style = {'color': text_color.name(), 'size': '12pt'}
         canvas.setTitle(self.spec['title'], **title_style)
         self.playhead.setPen(pg.mkPen(text_color, width=2))
+
+        # 3. Update the dropdown list dynamically
+        if hasattr(self, 'selector'):
+            self.selector.setStyleSheet(f"""
+                QComboBox {{ 
+                    border: 1px solid gray; 
+                    padding: 2px; 
+                    background-color: {bg_color.name()}; 
+                    color: {text_color.name()}; 
+                }}
+                QComboBox QAbstractItemView {{ 
+                    background-color: {base_color.name()}; 
+                    color: {text_color.name()}; 
+                    selection-background-color: {highlight_color.name()}; 
+                }}
+            """)
+
+        # 4. Update the checkboxes text color
+        if hasattr(self, 'toggles'):
+            for cb in self.toggles:
+                cb.setStyleSheet(f"color: {text_color.name()};")
 
     def _apply_optimizations(self):
         has_dynamic_colors = any('colorSource' in curve for curve in self.spec['curves'].values())

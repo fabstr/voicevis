@@ -118,30 +118,27 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         targets_menu.addAction("Export targets...", self.export_targets)
 
         # --- View Menu ---
-        plots_menu = self.menu_bar.addMenu("&Plots")
-        reset_zoom_action = plots_menu.addAction("&Reset zoom")
+        view_menu = self.menu_bar.addMenu("&View")
+
+        reset_zoom_action = view_menu.addAction("&Reset zoom")
         reset_zoom_action.triggered.connect(self.handle_reset_zoom)
 
-        reset_plots_action = plots_menu.addAction("Reset plots")
+        reset_plots_action = view_menu.addAction("Reset plot spacing")
         reset_plots_action.triggered.connect(self.handle_reset_plots)
 
-        show_all_plots_action = plots_menu.addAction("Show all plots")
-        show_all_plots_action.triggered.connect(self.show_all_plots)
+        view_menu.addSeparator()
 
-        plots_menu.addSeparator()
-
-        samples_menu = self.menu_bar.addMenu("&Sample texts")
-        sample_texts_action = samples_menu.addAction("Sample Texts Editor")
+        sample_texts_action = view_menu.addAction("Sample Texts")
         sample_texts_action.triggered.connect(self.show_sample_text_window)
 
-        # --- View Menu (Theme Settings) ---
-        view_menu = self.menu_bar.addMenu("&View")
+        view_menu.addSeparator()
+
         self.theme_group = QtGui.QActionGroup(self)
         self.theme_group.setExclusive(True)
 
-        self.action_os_default = QtGui.QAction("OS Default", self, checkable=True)
-        self.action_light = QtGui.QAction("Light Mode", self, checkable=True)
-        self.action_dark = QtGui.QAction("Dark Mode", self, checkable=True)
+        self.action_os_default = QtGui.QAction("Colour scheme: OS Default", self, checkable=True)
+        self.action_light = QtGui.QAction("Colour scheme: Light Mode", self, checkable=True)
+        self.action_dark = QtGui.QAction("Colour scheme: Dark Mode", self, checkable=True)
 
         self.theme_group.addAction(self.action_os_default)
         self.theme_group.addAction(self.action_light)
@@ -191,14 +188,28 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playback_btn.clicked.connect(self.handle_playback)
         top_buttons_layout.addWidget(self.playback_btn)
 
-        self.add_row_btn = QtWidgets.QPushButton("Add Row")
+        # --- Push everything following this to the right ---
+        top_buttons_layout.addStretch()
+
+        # Row layout controls
+        self.add_row_btn = QtWidgets.QPushButton("Add row")
         self.add_row_btn.clicked.connect(self.add_plot_row)
         top_buttons_layout.addWidget(self.add_row_btn)
 
-        self.remove_row_btn = QtWidgets.QPushButton("Remove Row")
+        self.remove_row_btn = QtWidgets.QPushButton("Remove row")
         self.remove_row_btn.clicked.connect(self.remove_plot_row)
         top_buttons_layout.addWidget(self.remove_row_btn)
 
+        # Column layout controls
+        self.add_col_btn = QtWidgets.QPushButton("Add column")
+        self.add_col_btn.clicked.connect(self.add_plot_column)
+        top_buttons_layout.addWidget(self.add_col_btn)
+
+        self.remove_col_btn = QtWidgets.QPushButton("Remove column")
+        self.remove_col_btn.clicked.connect(self.remove_plot_column)
+        top_buttons_layout.addWidget(self.remove_col_btn)
+
+        # Plot item size slider
         self.size_label = QtWidgets.QLabel("Global point size:")
         top_buttons_layout.addWidget(self.size_label)
 
@@ -212,19 +223,18 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.size_slider.valueChanged.connect(self.handle_symbol_size_change)
         top_buttons_layout.addWidget(self.size_slider)
 
-        top_buttons_layout.addStretch()
         self.layout.addLayout(top_buttons_layout)
 
     def setupPlots(self):
         self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        self.left_col = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
-        self.right_col = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
-
-        self.plot_splitter.addWidget(self.left_col)
-        self.plot_splitter.addWidget(self.right_col)
         self.layout.addWidget(self.plot_splitter)
 
         self.plot_cells = []
+        self.columns = []  # Tracks dynamic QSplitter columns
+
+        # Default to 2 columns
+        self._create_column()
+        self._create_column()
 
         available_plots = list(spec.keys())
         p1 = available_plots[0] if len(available_plots) > 0 else None
@@ -232,8 +242,24 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         p3 = available_plots[2] if len(available_plots) > 2 else p1
         p4 = available_plots[3] if len(available_plots) > 3 else p1
 
-        self.add_plot_row(p1, p2)
-        self.add_plot_row(p3, p4)
+        # Populate the initial 2x2 grid
+        self._add_specific_row([p1, p2])
+        self._add_specific_row([p3, p4])
+
+    def _create_column(self):
+        col = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
+        self.plot_splitter.addWidget(col)
+        self.columns.append(col)
+        return col
+
+    def _add_specific_row(self, plot_names):
+        """Helper to inject specific plots into a new row during initialization."""
+        for i, col in enumerate(self.columns):
+            name = plot_names[i] if i < len(plot_names) else plot_names[-1]
+            controller = self.create_plot_cell(name)
+            self.plot_cells.append(controller)
+            col.addWidget(controller.container)
+        self.sync_all_x_axes()
 
     def create_plot_cell(self, plot_name):
         if not plot_name: return None
@@ -247,27 +273,70 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             change_plot_callback=self.handle_plot_selection,
             initial_size=initial_size
         )
-
         return controller
 
-    def add_plot_row(self, left_name=None, right_name=None):
-        if not left_name: left_name = list(spec.keys())[0]
-        if not right_name: right_name = list(spec.keys())[0]
+    def add_plot_row(self):
+        """Adds a new row across all existing columns."""
+        available_plots = list(spec.keys())
+        default_plot = available_plots[0] if available_plots else None
 
-        left_controller = self.create_plot_cell(left_name)
-        right_controller = self.create_plot_cell(right_name)
-
-        self.plot_cells.append(left_controller)
-        self.plot_cells.append(right_controller)
-
-        self.left_col.addWidget(left_controller.container)
-        self.right_col.addWidget(right_controller.container)
+        for col in self.columns:
+            controller = self.create_plot_cell(default_plot)
+            self.plot_cells.append(controller)
+            col.addWidget(controller.container)
 
         self.sync_all_x_axes()
         self.update_plots()
 
         if hasattr(self, 'size_slider'):
             self.handle_symbol_size_change(self.size_slider.value())
+
+    def remove_plot_row(self):
+        """Removes the bottom row across all columns."""
+        # Keep at least 1 row
+        if len(self.columns) == 0 or self.columns[0].count() <= 1:
+            return
+
+        widgets_to_remove = []
+        for col in self.columns:
+            last_widget = col.widget(col.count() - 1)
+            widgets_to_remove.append(last_widget)
+            last_widget.deleteLater()
+
+        self.plot_cells = [c for c in self.plot_cells if c.container not in widgets_to_remove]
+
+    def add_plot_column(self):
+        """Adds a new column on the right side, matching the current number of rows."""
+        num_rows = self.columns[0].count() if self.columns else 1
+        available_plots = list(spec.keys())
+        default_plot = available_plots[0] if available_plots else None
+
+        new_col = self._create_column()
+
+        for _ in range(num_rows):
+            controller = self.create_plot_cell(default_plot)
+            self.plot_cells.append(controller)
+            new_col.addWidget(controller.container)
+
+        self.sync_all_x_axes()
+        self.update_plots()
+
+        if hasattr(self, 'size_slider'):
+            self.handle_symbol_size_change(self.size_slider.value())
+
+    def remove_plot_column(self):
+        """Removes the right-most column."""
+        # Keep at least 1 column
+        if len(self.columns) <= 1:
+            return
+
+        col_to_remove = self.columns.pop()
+
+        # Identify all controllers within this column
+        widgets_to_remove = [col_to_remove.widget(i) for i in range(col_to_remove.count())]
+        self.plot_cells = [c for c in self.plot_cells if c.container not in widgets_to_remove]
+
+        col_to_remove.deleteLater()
 
     def handle_plot_selection(self, old_controller, new_plot_name):
         if old_controller.plot_name == new_plot_name:
@@ -295,7 +364,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             if parent_layout:
                 parent_layout.replaceWidget(old_controller.container, new_controller.container)
 
-        # Explicitly show the new container (QSplitter sometimes leaves them hidden)
+        # Explicitly show the new container
         new_controller.container.show()
 
         # Update tracking list
@@ -315,21 +384,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.sync_all_x_axes()
         self.update_plots()
 
-        # 5. FIX: Force the camera to frame the newly drawn data!
+        # 5. Force the camera to frame the newly drawn data
         new_controller.reset_zoom()
         new_controller.set_symbol_size(current_size)
 
-    def remove_plot_row(self):
-        if self.left_col.count() > 1 and self.right_col.count() > 1:
-            left_widget = self.left_col.widget(self.left_col.count() - 1)
-            right_widget = self.right_col.widget(self.right_col.count() - 1)
-
-            self.plot_cells = [c for c in self.plot_cells if c.container not in (left_widget, right_widget)]
-
-            left_widget.deleteLater()
-            right_widget.deleteLater()
-
     def sync_all_x_axes(self):
+        """Cross-links panning/zooming for all active plots."""
         target_widget = None
         for controller in self.plot_cells:
             if controller.plot_name == 'Loudness':
@@ -357,7 +417,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             QtGui.QGuiApplication.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Dark)
 
     def changeEvent(self, event):
-        if event.type() == QtCore.QEvent.Type.PaletteChange:
+        # Trigger on both local and application-wide palette changes
+        if event.type() in (QtCore.QEvent.Type.PaletteChange, QtCore.QEvent.Type.ApplicationPaletteChange):
             palette = self.palette()
             icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
 
@@ -367,17 +428,24 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
             self.save_icon = qta.icon('fa5s.save', color=icon_color)
 
-            if "Record" in self.record_stop_btn.toolTip():
-                self.record_stop_btn.setIcon(self.record_icon)
-            else:
-                self.record_stop_btn.setIcon(self.stop_icon)
+            # Safely check if the UI elements have been created yet to prevent startup crashes
+            if hasattr(self, 'record_stop_btn'):
+                if "Record" in self.record_stop_btn.toolTip():
+                    self.record_stop_btn.setIcon(self.record_icon)
+                else:
+                    self.record_stop_btn.setIcon(self.stop_icon)
 
-            if "Play" in self.playback_btn.toolTip():
-                self.playback_btn.setIcon(self.play_icon)
-            else:
-                self.playback_btn.setIcon(self.pause_icon)
+            if hasattr(self, 'playback_btn'):
+                if "Play" in self.playback_btn.toolTip():
+                    self.playback_btn.setIcon(self.play_icon)
+                else:
+                    self.playback_btn.setIcon(self.pause_icon)
 
-            self.save_btn.setIcon(self.save_icon)
+            # Explicitly push theme update down to all plot controllers
+            if hasattr(self, 'plot_cells'):
+                for controller in self.plot_cells:
+                    if hasattr(controller, 'apply_theme'):
+                        controller.apply_theme()
 
         super().changeEvent(event)
 
@@ -702,74 +770,24 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 controller.set_plot_visible(checked)
 
     def handle_reset_plots(self):
-        if hasattr(self, 'left_col') and hasattr(self, 'right_col'):
+        # --- 1. Distribute Draggable Sizes Equally ---
+        col_count = len(self.columns)
+        if col_count > 0:
             total_width = self.plot_splitter.width()
-            self.plot_splitter.setSizes([int(total_width / 2), int(total_width / 2)])
+            self.plot_splitter.setSizes([int(total_width / col_count)] * col_count)
 
-            left_height = self.left_col.height()
-            right_height = self.right_col.height()
+            for col in self.columns:
+                row_count = col.count()
+                if row_count > 0:
+                    total_height = col.height()
+                    col.setSizes([int(total_height / row_count)] * row_count)
 
-            left_stretch_total, right_stretch_total = 0, 0
-            left_specs, right_specs = [], []
-
-            left_turn = True
-            for plot_name, plot_spec in spec.items():
-                stretch = plot_spec.get('stretch', default_stretch)
-                if left_turn:
-                    left_stretch_total += stretch
-                    left_specs.append(stretch)
-                else:
-                    right_stretch_total += stretch
-                    right_specs.append(stretch)
-                left_turn = not left_turn
-
-            if left_stretch_total > 0:
-                self.left_col.setSizes([int((s / left_stretch_total) * left_height) for s in left_specs])
-            if right_stretch_total > 0:
-                self.right_col.setSizes([int((s / right_stretch_total) * right_height) for s in right_specs])
-
+        # --- 2. Reset Component Visibilities & Menu Sync ---
         for plot_key, plot_spec in spec.items():
             is_visible = not plot_spec.get('hidden', False)
             self.handle_toggle_plot(plot_key, is_visible)
             if plot_key in self.menu_toggle_actions['plots']:
                 self.menu_toggle_actions['plots'][plot_key].setChecked(is_visible)
-
-        if hasattr(self, 'plot_cells'):
-            for controller in self.plot_cells:
-                for cb in getattr(controller, 'toggles', []):
-                    cb.setChecked(True)
-
-    def show_all_plots(self):
-        if hasattr(self, 'left_col') and hasattr(self, 'right_col'):
-            total_width = self.plot_splitter.width()
-            self.plot_splitter.setSizes([int(total_width / 2), int(total_width / 2)])
-
-            left_height = self.left_col.height()
-            right_height = self.right_col.height()
-
-            left_stretch_total, right_stretch_total = 0, 0
-            left_specs, right_specs = [], []
-
-            left_turn = True
-            for plot_name, plot_spec in spec.items():
-                stretch = plot_spec.get('stretch', default_stretch)
-                if left_turn:
-                    left_stretch_total += stretch
-                    left_specs.append(stretch)
-                else:
-                    right_stretch_total += stretch
-                    right_specs.append(stretch)
-                left_turn = not left_turn
-
-            if left_stretch_total > 0:
-                self.left_col.setSizes([int((s / left_stretch_total) * left_height) for s in left_specs])
-            if right_stretch_total > 0:
-                self.right_col.setSizes([int((s / right_stretch_total) * right_height) for s in right_specs])
-
-        for plot_key, plot_spec in spec.items():
-            self.handle_toggle_plot(plot_key, True)
-            if plot_key in self.menu_toggle_actions['plots']:
-                self.menu_toggle_actions['plots'][plot_key].setChecked(True)
 
         if hasattr(self, 'plot_cells'):
             for controller in self.plot_cells:
