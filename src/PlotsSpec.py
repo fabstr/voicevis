@@ -28,7 +28,7 @@ spec = {
         'mouse_enabled_y': False,
         'y_min': 0,
         'y_max': 1,
-        'hidden': True,
+        'hidden': False,
         'curves': {
             'pitch': {
                 'size': defaultSize,
@@ -142,7 +142,7 @@ spec = {
 
     'F3_Pitch_rel_amplitude': {
         'title': 'F3 / Pitch rel amp',
-        'hidden': False,
+        'hidden': True,
         'y_min': -120,
         'y_max': 30,
         'curves': {
@@ -157,7 +157,7 @@ spec = {
 
     'F2_Pitch_rel_amplitude': {
         'title': 'F2 / Pitch rel amp',
-        'hidden': False,
+        'hidden': True,
         'y_min': -120,
         'y_max': 20,
         'curves': {
@@ -172,7 +172,7 @@ spec = {
 
     'F1_Pitch_rel_amplitude': {
         'title': 'F1 / Pitch rel amp',
-        'hidden': False,
+        'hidden': True,
         'y_min': -120,
         'y_max': 20,
         'curves': {
@@ -238,7 +238,7 @@ spec = {
         'title': 'Size',
         'y_min': -15,
         'y_max': 25  ,
-        'hidden': True,
+        'hidden': False,
         'curves': {
             'size': {
                 'size': defaultSize+1,
@@ -256,7 +256,7 @@ spec = {
         'title': 'Weight',
         'y_min': 0,
         'y_max': 8.0e-7,
-        'hidden': True,
+        'hidden': False,
         'curves': {
             'weight': {
                 'size': defaultSize+1,
@@ -295,6 +295,7 @@ spec = {
             'y_max': 8000,  # Displays up to 8kHz by default
             'mouse_enabled_x': True,
             'mouse_enabled_y': True,
+            'hidden': True,
             'curves': {
                 'spectrogram': {
                     'analysisResult': 'spectrogram',
@@ -304,4 +305,22 @@ spec = {
             },
             'linkX': 'Loudness' # Synchronize zooming/panning with the other plots
         },
+
+    "logRelF0_H1_A3_sma3nz": {
+        'title': 'logRelF0_H1_A3_sma3nz',
+        'y_min': -20,
+        'y_max': 50,
+        'hidden': False,
+        'curves': {
+            'weight': {
+                'size': defaultSize+1,
+                'colour': weight,
+                'analysisResult': 'logRelF0_H1_A3_sma3nz'
+            }
+        },
+        'targets': {
+            'Weight': {'colour': target_band}
+        },
+        'linkX': 'Loudness',
+    },
 }

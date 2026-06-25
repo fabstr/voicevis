@@ -129,6 +129,8 @@ class AudioFeatureExtractor:
                                                     y=df['F2amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
             F3_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered,
                                                     y=df['F3amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+            logRelF0_H1_A3_sma3nz=SignalTimeSeries(x=t_filtered,
+                                                        y=df['logRelF0-H1-A3_sma3nz'].to_numpy()[valid_mask]),
 
             loudness=SignalTimeSeries(x=t_filtered, y=loudness_raw[valid_mask]),
 

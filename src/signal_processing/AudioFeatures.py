@@ -46,6 +46,8 @@ class AudioFeatures:
     F1_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
     F1_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
+    logRelF0_H1_A3_sma3nz: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+
     F2_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F2_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
     F2_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
