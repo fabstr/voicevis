@@ -173,7 +173,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.play_icon = qta.icon('fa5s.play', color=icon_color)
         self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
         self.save_icon = qta.icon('fa5s.save', color=icon_color)
-        self.clear_icon =  qta.icon('fa5s.trash', color=icon_color)
+        self.clear_icon = qta.icon('fa5s.trash', color=icon_color)
 
         self.record_stop_btn = QtWidgets.QPushButton()
         self.record_stop_btn.setFixedSize(40, 40)
@@ -195,11 +195,26 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.clear_btn.setFixedSize(40, 40)
         self.clear_btn.setIcon(self.clear_icon)
         self.clear_btn.setIconSize(QtCore.QSize(20, 20))
-        self.clear_btn.setToolTip("Play/Pause")
+        self.clear_btn.setToolTip("Clear")
         self.clear_btn.clicked.connect(self.handle_clear)
         top_buttons_layout.addWidget(self.clear_btn)
 
-        # --- Push everything following this to the right ---
+        # --- First Stretch to push the time widget to the center ---
+        top_buttons_layout.addStretch()
+
+        # --- Time Display/Edit ---
+        self.time_label = QtWidgets.QLabel("Time:")
+
+        self.time_edit = QtWidgets.QLineEdit("00:00:00.000")
+        self.time_edit.setFixedWidth(110)
+        self.time_edit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.time_edit.returnPressed.connect(self.handle_time_edited)
+
+        # Add them directly to the main layout
+        top_buttons_layout.addWidget(self.time_label)
+        top_buttons_layout.addWidget(self.time_edit)
+
+        # --- Second Stretch to keep the time widget centered ---
         top_buttons_layout.addStretch()
 
         # Row layout controls
@@ -787,6 +802,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             total_duration = self.audio_data.size() / (2 * self.sampling_rate)
             self.analysedAudioFeatures.length_seconds = max(self.analysedAudioFeatures.length_seconds, total_duration)
 
+        # --- Update Time Display ---
+        # Only update the text if the user hasn't clicked into the box to type
+        if hasattr(self, 'time_edit') and not self.time_edit.hasFocus():
+            self.time_edit.setText(self.format_time(self.current_playback_time))
+
         # --- Sync with Controllers ---
         for controller in self.plot_cells:
             controller.set_playhead_value(self.current_playback_time)
@@ -1264,6 +1284,68 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Load Error",
                                                f"An error occurred while loading the layout:\n{str(e)}")
+
+    def format_time(self, seconds: float) -> str:
+        """Converts seconds into HH:MM:SS.ms string."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        millis = int((seconds - int(seconds)) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+
+    def parse_time(self, time_str: str) -> float:
+        """Parses flexible time strings (e.g., S.ms, MM:SS.ms, HH:MM:SS.ms) into total seconds."""
+        try:
+            time_str = time_str.strip()
+            if not time_str:
+                return 0.0
+
+            parts = time_str.split(':')
+            total_seconds = 0.0
+
+            if len(parts) == 1:
+                # Format: SS.ms
+                total_seconds = float(parts[0])
+            elif len(parts) == 2:
+                # Format: MM:SS.ms
+                total_seconds = int(parts[0]) * 60 + float(parts[1])
+            elif len(parts) >= 3:
+                # Format: HH:MM:SS.ms
+                total_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+
+            return total_seconds
+        except ValueError:
+            # Fallback to 0 if the user typed random text
+            return 0.0
+
+    def handle_time_edited(self):
+        """Called when the user hits Enter inside the time text box."""
+        # Don't allow seeking while actively recording
+        if self.is_recording:
+            self.time_edit.setText(self.format_time(self.current_playback_time))
+            self.time_edit.clearFocus()
+            return
+
+        time_str = self.time_edit.text()
+        new_time = self.parse_time(time_str)
+
+        # Bound the time to the available audio file length
+        max_time = getattr(self.analysedAudioFeatures, 'length_seconds', 0.0) or 0.0
+        if max_time > 0:
+            new_time = max(0.0, min(new_time, max_time))
+
+        self.current_playback_time = new_time
+
+        # Drop focus so the auto-updater can take control again
+        self.time_edit.clearFocus()
+
+        # Trigger the seek
+        if self.is_playing:
+            self.seek_and_play()
+        else:
+            self.update_playhead()
+            # Force the text box to show the exact bounded time
+            self.time_edit.setText(self.format_time(self.current_playback_time))
 
 
 if __name__ == '__main__':

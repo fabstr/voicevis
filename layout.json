@@ -31,9 +31,9 @@
                 }
             ],
             "sizes": [
-                585,
-                584,
-                789
+                578,
+                577,
+                779
             ]
         },
         {
@@ -53,7 +53,7 @@
                 },
                 {
                     "name": "Formants",
-                    "local_size": 5,
+                    "local_size": 3,
                     "toggles": {
                         "F1": true,
                         "F2": true,
@@ -65,16 +65,16 @@
                 }
             ],
             "sizes": [
-                473,
-                985,
-                500
+                467,
+                973,
+                494
             ]
         },
         {
             "plots": [
                 {
                     "name": "F1/Pitch",
-                    "local_size": 5,
+                    "local_size": 3,
                     "toggles": {
                         "F1/Pitch": true,
                         "F1/Pitch BW": false
@@ -98,9 +98,9 @@
                 }
             ],
             "sizes": [
-                653,
-                652,
-                653
+                645,
+                644,
+                645
             ]
         }
     ]
