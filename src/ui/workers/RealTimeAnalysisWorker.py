@@ -3,7 +3,8 @@ import queue
 import numpy as np
 from PyQt6 import QtCore
 
-from signal_processing.AudioFeatures import FeatureSnapshot
+from signal_processing.AudioFeatures import FeatureSnapshot, SpectrogramData
+from signal_processing.AudioFeatureExtractor import nperseg, noverlap
 
 
 class RealTimeAnalysisWorker(QtCore.QThread):
@@ -20,15 +21,18 @@ class RealTimeAnalysisWorker(QtCore.QThread):
         self.window_size_samples = int(self.sample_rate * 0.5)
         self.sliding_buffer = np.zeros(self.window_size_samples, dtype=np.float32)
 
-        # [NEW] Set an analysis step size (e.g., 100ms = 10 FPS)
+        # Set an analysis step size (e.g., 100ms = 10 FPS)
         self.analysis_step_samples = int(self.sample_rate * 0.033)
         self.samples_since_last_analysis = 0
         self.total_samples_processed = 0
 
+        self.nperseg = nperseg
+        self.noverlap = noverlap
+
     def run(self):
         while self.is_running or not self.audio_queue.empty():
             try:
-                # [NEW] Drain the queue to prevent the worker from falling behind
+                # Drain the queue to prevent the worker from falling behind
                 chunks = []
 
                 # Block on the first get to avoid CPU spinning when idle
@@ -60,13 +64,25 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                 # Wait until buffer is at least half full to avoid early noise
                 if self.total_samples_processed > (self.window_size_samples / 2):
 
-                    # [NEW] Throttling: Only run the heavy analysis if our step threshold is met
+                    # Throttling: Only run the heavy analysis if our step threshold is met
                     if self.samples_since_last_analysis >= self.analysis_step_samples:
                         self.samples_since_last_analysis = 0  # Reset counter
 
                         results = self.extractor.analyzePCM(self.sliding_buffer, self.sample_rate)
 
                         if results and hasattr(results, 'pitch') and len(results.pitch.x) > 0:
+
+                            # --- LIVE SPECTROGRAM SLICING ---
+                            # Extract only the latest column (time bin) of the spectrogram matrix
+                            latest_spec = None
+                            if hasattr(results, 'spectrogram') and results.spectrogram.magnitude_db.size > 0:
+                                latest_spec = SpectrogramData(
+                                    x=np.array([current_time]),  # Sync to the current snapshot time
+                                    y=results.spectrogram.y,  # Keep the frequency bins intact
+                                    magnitude_db=results.spectrogram.magnitude_db[:, -1:]  # Slice the last column
+                                )
+                            # --------------------------------
+
                             latest_point = FeatureSnapshot(
                                 time=current_time,
 
@@ -94,6 +110,8 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                                 F2_IBW=results.F2_IBW.y[-1] if len(results.F2_IBW.y) > 0 else None,
                                 F3_IBW=results.F3_IBW.y[-1] if len(results.F3_IBW.y) > 0 else None,
                                 size=results.size.y[-1] if len(results.size.y) > 0 else None,
+
+                                spectrogram=latest_spec
                             )
                             self.new_data_point.emit(latest_point)
 

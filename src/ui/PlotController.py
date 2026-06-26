@@ -276,13 +276,18 @@ class PlotController(QtCore.QObject):
         if not curve: return
 
         if curve.get('is_spectrogram'):
-            if data_container is not None and hasattr(data_container, 'magnitude_db'):
-                img = curve['image_item']
+            img = curve['image_item']
+            # Draw if data exists, clear if it doesn't
+            if data_container is not None and hasattr(data_container, 'magnitude_db') and data_container.magnitude_db.size > 0:
                 img.setImage(data_container.magnitude_db.T, autoLevels=True)
                 t_max = data_container.x[-1] if len(data_container.x) > 0 else 1.0
                 f_max = data_container.y[-1] if len(data_container.y) > 0 else 1.0
                 img.setRect(QtCore.QRectF(0, 0, t_max, f_max))
+            else:
+                img.clear()
             return
+
+        # ... [keep the rest of your existing set_curve_data code] ...
 
         x_arr = np.array(x, dtype=float)
         y_arr = np.array(y, dtype=float)
@@ -330,7 +335,8 @@ class PlotController(QtCore.QObject):
 
     def append_curve_point(self, curve_name: str, snapshot: FeatureSnapshot, audio_features_ctx):
         curve = self.curves.get(curve_name)
-        if not curve or curve.get('is_spectrogram'):
+
+        if not curve:
             return
 
         result_key = curve['analysisResult']
@@ -338,12 +344,37 @@ class PlotController(QtCore.QObject):
             return
 
         data_container = getattr(audio_features_ctx, result_key)
-        new_y_val = getattr(snapshot, result_key)
-        if snapshot.time is None or new_y_val is None:
+        new_data = getattr(snapshot, result_key)
+
+        if snapshot.time is None or new_data is None:
             return
 
+        # --- LIVE SPECTROGRAM HANDLING ---
+            # --- LIVE SPECTROGRAM HANDLING ---
+        if curve.get('is_spectrogram'):
+            if not hasattr(new_data, 'magnitude_db') or new_data.magnitude_db.size == 0:
+                return
+
+            # First slice initialization
+            if len(data_container.x) == 0:
+                data_container.x = np.array([snapshot.time])
+                data_container.y = new_data.y  # Frequency bins
+                data_container.magnitude_db = new_data.magnitude_db.reshape(-1, 1)
+            # Append new time column
+            else:
+                data_container.x = np.append(data_container.x, snapshot.time)
+                new_col = new_data.magnitude_db.reshape(-1, 1)
+
+                # Guard rail to ensure frequency resolution hasn't changed mid-recording
+                if new_col.shape[0] == data_container.magnitude_db.shape[0]:
+                    data_container.magnitude_db = np.hstack((data_container.magnitude_db, new_col))
+
+            self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
+            return
+
+        # --- EXISTING 1D HANDLING ---
         data_container.x = np.append(data_container.x, snapshot.time)
-        data_container.y = np.append(data_container.y, new_y_val)
+        data_container.y = np.append(data_container.y, new_data)
         self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
 
     def update_target_bands(self, config: TargetConfig):

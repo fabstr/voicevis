@@ -94,3 +94,4 @@ class FeatureSnapshot:
     F3_IBW: Optional[float] = None
 
     size: Optional[float] = None
+    spectrogram: Optional[SpectrogramData] = None

@@ -11,6 +11,8 @@ from PlotsSpec import outliers_m
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, BandwidthTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
 
+nperseg = 2048
+noverlap = 1536
 
 class AudioFeatureExtractor:
 
@@ -156,7 +158,7 @@ class AudioFeatureExtractor:
 
         # --- NEW SPECTROGRAM CALCULATION ---
         # Using a standard 1024-point Hanning window for speech/audio
-        f_spec, t_spec, Sxx = spectrogram(pcm_data, fs=sampling_rate, window='hann', nperseg=2048, noverlap=1536)
+        f_spec, t_spec, Sxx = spectrogram(pcm_data, fs=sampling_rate, window='hann', nperseg=nperseg, noverlap=noverlap)
 
         # Convert magnitude to log scale (Decibels), strictly clipping to prevent log(0) errors
         Sxx_db = 10 * np.log10(np.clip(Sxx, 1e-10, None))

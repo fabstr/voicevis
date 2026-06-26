@@ -171,6 +171,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.play_icon = qta.icon('fa5s.play', color=icon_color)
         self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
         self.save_icon = qta.icon('fa5s.save', color=icon_color)
+        self.clear_icon =  qta.icon('fa5s.trash', color=icon_color)
 
         self.record_stop_btn = QtWidgets.QPushButton()
         self.record_stop_btn.setFixedSize(40, 40)
@@ -187,6 +188,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.playback_btn.setToolTip("Play/Pause")
         self.playback_btn.clicked.connect(self.handle_playback)
         top_buttons_layout.addWidget(self.playback_btn)
+
+        self.clear_btn = QtWidgets.QPushButton()
+        self.clear_btn.setFixedSize(40, 40)
+        self.clear_btn.setIcon(self.clear_icon)
+        self.clear_btn.setIconSize(QtCore.QSize(20, 20))
+        self.clear_btn.setToolTip("Play/Pause")
+        self.clear_btn.clicked.connect(self.handle_clear)
+        top_buttons_layout.addWidget(self.clear_btn)
 
         # --- Push everything following this to the right ---
         top_buttons_layout.addStretch()
@@ -417,7 +426,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             QtGui.QGuiApplication.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Dark)
 
     def changeEvent(self, event):
-        # Trigger on both local and application-wide palette changes
         if event.type() in (QtCore.QEvent.Type.PaletteChange, QtCore.QEvent.Type.ApplicationPaletteChange):
             palette = self.palette()
             icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
@@ -427,8 +435,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.play_icon = qta.icon('fa5s.play', color=icon_color)
             self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
             self.save_icon = qta.icon('fa5s.save', color=icon_color)
+            self.clear_icon = qta.icon('fa5s.trash', color=icon_color)  # <-- Add this
 
-            # Safely check if the UI elements have been created yet to prevent startup crashes
             if hasattr(self, 'record_stop_btn'):
                 if "Record" in self.record_stop_btn.toolTip():
                     self.record_stop_btn.setIcon(self.record_icon)
@@ -440,6 +448,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     self.playback_btn.setIcon(self.play_icon)
                 else:
                     self.playback_btn.setIcon(self.pause_icon)
+
+            if hasattr(self, 'clear_btn'):  # <-- Add this
+                self.clear_btn.setIcon(self.clear_icon)
+
+            if hasattr(self, 'save_btn'):
+                self.save_btn.setIcon(self.save_icon)
 
             # Explicitly push theme update down to all plot controllers
             if hasattr(self, 'plot_cells'):
@@ -695,6 +709,41 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.seek_and_play()
         else:
             self.stop_playback()
+
+    def handle_clear(self):
+        """Stops playback/recording, clears audio buffers, and resets all plots."""
+        # 1. Stop any active media
+        if self.is_playing:
+            self.stop_playback()
+        if self.is_recording:
+            self.record_stop()
+            self.is_recording = False
+
+        # 2. Reset audio buffers and internal states
+        self.file_path = None
+        self.analysedAudioFeatures = AudioFeatures()
+        self.audio_data.clear()
+        self.current_playback_time = 0
+
+        if hasattr(self, 'recording_start_offset'):
+            self.recording_start_offset = 0
+
+        # 3. Clear UI annotations
+        self.clear_annotations()
+
+        # 4. Wipe all visual curves from the screen
+        if hasattr(self, 'plot_cells'):
+            for controller in self.plot_cells:
+                for curve_name in controller.curves.keys():
+                    # Pushing empty arrays forces pyqtgraph to clear the drawn lines/scatters
+                    controller.set_curve_data(curve_name, [], [])
+
+                # Reset playhead line to the beginning
+                controller.set_playhead_value(0)
+
+        # 5. Reset camera boundaries
+        self.handle_reset_zoom()
+        print("All data cleared.")
 
     def stop_playback(self):
         self.is_playing = False
