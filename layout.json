@@ -1,0 +1,107 @@
+{
+    "global_size": 3,
+    "main_splitter_sizes": [
+        1255,
+        1333,
+        1224
+    ],
+    "columns": [
+        {
+            "plots": [
+                {
+                    "name": "Loudness",
+                    "local_size": 3,
+                    "toggles": {
+                        "Loudness": true
+                    }
+                },
+                {
+                    "name": "Size",
+                    "local_size": 3,
+                    "toggles": {
+                        "Size": true
+                    }
+                },
+                {
+                    "name": "Weight",
+                    "local_size": 3,
+                    "toggles": {
+                        "Weight": true
+                    }
+                }
+            ],
+            "sizes": [
+                585,
+                584,
+                789
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "Pitch",
+                    "local_size": 3,
+                    "toggles": {
+                        "Pitch": true,
+                        "Pitch BW": false
+                    }
+                },
+                {
+                    "name": "Spectrogram",
+                    "local_size": 3,
+                    "toggles": {}
+                },
+                {
+                    "name": "Formants",
+                    "local_size": 5,
+                    "toggles": {
+                        "F1": true,
+                        "F2": true,
+                        "F3": true,
+                        "F1 BW": false,
+                        "F2 BW": false,
+                        "F3 BW": false
+                    }
+                }
+            ],
+            "sizes": [
+                473,
+                985,
+                500
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "F1/Pitch",
+                    "local_size": 5,
+                    "toggles": {
+                        "F1/Pitch": true,
+                        "F1/Pitch BW": false
+                    }
+                },
+                {
+                    "name": "F2/Pitch",
+                    "local_size": 3,
+                    "toggles": {
+                        "F2/Pitch": true,
+                        "F2/Pitch BW": false
+                    }
+                },
+                {
+                    "name": "F3/Pitch",
+                    "local_size": 3,
+                    "toggles": {
+                        "F3/Pitch": true,
+                        "F3/Pitch BW": false
+                    }
+                }
+            ],
+            "sizes": [
+                653,
+                652,
+                653
+            ]
+        }
+    ]
+}

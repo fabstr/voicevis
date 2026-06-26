@@ -8,8 +8,8 @@
         },
         {
             "name": "pitch",
-            "min": 150.0,
-            "max": 300.0,
+            "min": 200.0,
+            "max": 240.0,
             "enabled": true
         },
         {
