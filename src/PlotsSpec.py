@@ -265,7 +265,7 @@ spec = {
         'y_max': 25,
         'curves': {
             'Fullness': {
-                'size': defaultSize + 2,
+                'size': defaultSize,
                 'colour': white,  # Fallback color
                 'analysisResult': 'size', # Y-axis
                 'colorSource': 'weight'   # Z-axis (Color)
@@ -293,15 +293,32 @@ spec = {
             'linkX': 'Loudness' # Synchronize zooming/panning with the other plots
         },
 
-    "logRelF0_H1_A3_sma3nz": {
-        'title': 'logRelF0_H1_A3_sma3nz',
+    "H1_H2": {
+        'title': 'H1_H2',
         'y_min': -20,
         'y_max': 50,
         'curves': {
-            'logRelF0_H1_A3_sma3nz': {
-                'size': defaultSize+1,
+            'H1_H2': {
+                'size': defaultSize,
                 'colour': weight,
-                'analysisResult': 'logRelF0_H1_A3_sma3nz'
+                'analysisResult': 'H1_H2'
+            }
+        },
+        'targets': {
+            'Weight': {'colour': target_band}
+        },
+        'linkX': 'Loudness',
+    },
+
+    "H1_A3": {
+        'title': 'H1_A3',
+        'y_min': 0,
+        'y_max': 50,
+        'curves': {
+            'H1_A3': {
+                'size': defaultSize,
+                'colour': weight,
+                'analysisResult': 'H1_A3'
             }
         },
         'targets': {

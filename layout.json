@@ -1,9 +1,9 @@
 {
     "global_size": 3,
     "main_splitter_sizes": [
-        1255,
-        1333,
-        1224
+        615,
+        660,
+        615
     ],
     "columns": [
         {
@@ -28,12 +28,20 @@
                     "toggles": {
                         "Weight": true
                     }
+                },
+                {
+                    "name": "Fullness",
+                    "local_size": 3,
+                    "toggles": {
+                        "Fullness": true
+                    }
                 }
             ],
             "sizes": [
-                578,
-                577,
-                779
+                482,
+                483,
+                482,
+                482
             ]
         },
         {
@@ -62,12 +70,20 @@
                         "F2 BW": false,
                         "F3 BW": false
                     }
+                },
+                {
+                    "name": "H1_H2",
+                    "local_size": 3,
+                    "toggles": {
+                        "H1_H2": true
+                    }
                 }
             ],
             "sizes": [
-                467,
-                973,
-                494
+                482,
+                483,
+                482,
+                482
             ]
         },
         {
@@ -95,12 +111,20 @@
                         "F3/Pitch": true,
                         "F3/Pitch BW": false
                     }
+                },
+                {
+                    "name": "H1_A3",
+                    "local_size": 3,
+                    "toggles": {
+                        "H1_A3": true
+                    }
                 }
             ],
             "sizes": [
-                645,
-                644,
-                645
+                482,
+                483,
+                482,
+                482
             ]
         }
     ]

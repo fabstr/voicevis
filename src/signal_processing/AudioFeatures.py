@@ -32,6 +32,8 @@ class AudioFeatures:
 
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    H1_H2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    H1_A3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     # Formants & Initial Bandwidths (IBW)
     F1: SignalTimeSeries = field(default_factory=SignalTimeSeries)
@@ -45,8 +47,6 @@ class AudioFeatures:
     F1_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F1_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
     F1_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-
-    logRelF0_H1_A3_sma3nz: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     F2_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F2_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
@@ -80,6 +80,8 @@ class FeatureSnapshot:
 
     # Spectral Slopes
     weight: float
+    H1_H2: float
+    H1_A3: float
 
     # Formant to pitch ratios and BW
     F1_Pitch: Optional[float] = None

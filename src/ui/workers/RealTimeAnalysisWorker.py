@@ -97,6 +97,8 @@ class RealTimeAnalysisWorker(QtCore.QThread):
 
                                 # Weight
                                 weight=results.weight.y[-1],
+                                H1_H2=results.H1_H2.y[-1],
+                                H1_A3=results.H1_A3.y[-1],
 
                                 F1_Pitch=results.F1_Pitch.y[-1] if len(results.F1_Pitch.y) > 0 else None,
                                 F2_Pitch=results.F2_Pitch.y[-1] if len(results.F2_Pitch.y) > 0 else None,
