@@ -955,6 +955,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             controller.update_target_bands(new_config)
 
         self.analysedAudioFeatures.size = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
+        self.analysedAudioFeatures.size2 = self.audioFeatureExtractor.recalculate_size2(self.analysedAudioFeatures)
+
         self.update_plots()
 
     #################### Mouse & keyboard actions ####################

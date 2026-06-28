@@ -82,6 +82,23 @@ spec = {
         'linkX': 'Loudness',
     },
 
+    "Size2": {
+        'title': 'Size2',
+        'y_min': -1000,
+        'y_max': 1000,
+        'curves': {
+            'Size2': {
+                'size': defaultSize,
+                'colour': size,
+                'analysisResult': 'size2'
+            }
+        },
+        'targets': {
+            'Size': {'colour': target_band}
+        },
+        'linkX': 'Loudness',
+    },
+
     "Weight": {
         'title': 'Weight',
         'y_min': 0,

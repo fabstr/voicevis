@@ -11,11 +11,14 @@ class TargetConfig:
         {"name": "f1", "min": 300.0, "max": 500.0, "enabled": True},
         {"name": "f2", "min": 1300.0, "max": 1700.0, "enabled": True},
         {"name": "f3", "min": 2550.0, "max": 2750.0, "enabled": True},
-        {"name": "f3_pitch", "min": 1.0, "max": 50.0, "enabled": True},
-        {"name": "f2_pitch", "min": 1.0, "max": 30.0, "enabled": True},
         {"name": "f1_pitch", "min": 1.0, "max": 15.0, "enabled": True},
+        {"name": "f2_pitch", "min": 1.0, "max": 30.0, "enabled": True},
+        {"name": "f3_pitch", "min": 1.0, "max": 50.0, "enabled": True},
         {"name": "size", "min": -500.0, "max": 1000.0, "enabled": True},
-        {"name": "weight", "min": 0.0, "max": 4.0e-7, "enabled": True}
+        {"name": "size2", "min": -500.0, "max": 500.0, "enabled": True},
+        {"name": "weight", "min": 0.0, "max": 4.0e-7, "enabled": True},
+        {"name": "H1_H2", "min": -10, "max": 20, "enabled": True},
+        {"name": "H1_A3", "min": 0, "max": 30, "enabled": True},
     ])
 
     def get_bounds(self, name: str) -> Optional[tuple]:

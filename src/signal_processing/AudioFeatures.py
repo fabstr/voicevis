@@ -57,6 +57,7 @@ class AudioFeatures:
     F3_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     size: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    size2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     size_vs_weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     spectrogram: SpectrogramData = field(default_factory=SpectrogramData)

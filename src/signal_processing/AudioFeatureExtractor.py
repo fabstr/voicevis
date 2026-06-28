@@ -240,6 +240,7 @@ class AudioFeatureExtractor:
 
             self.cachedResults = result
             result.size = self.recalculate_size(result)
+            result.size2 = self.recalculate_size2(result)
 
         else:
             # print("Silent/unvoiced frame skipped safely.")
@@ -272,6 +273,33 @@ class AudioFeatureExtractor:
                                 f3_max)
 
         size = SignalTimeSeries(x=results.F1_Pitch_BW.x, y=size_y)
+        return size
+
+    def recalculate_size2(self, results: AudioFeatures) -> SignalTimeSeries:
+        if self.target_config is None:
+            return SignalTimeSeries()
+
+        # Safely unpack the tuple bounds using the target list keys
+        f1_bounds = self.target_config.get_bounds("f1")
+        f2_bounds = self.target_config.get_bounds("f2")
+        f3_bounds = self.target_config.get_bounds("f3")
+
+        # Provide safe code fallbacks if the profile keys don't match up cleanly
+        f1_min, f1_max, _ = f1_bounds if f1_bounds else (1.0, 15.0, False)
+        f2_min, f2_max, _ = f2_bounds if f2_bounds else (1.0, 30.0, False)
+        f3_min, f3_max, _ = f3_bounds if f3_bounds else (1.0, 50.0, False)
+
+        size_y = calculate_size(results.F1.y,
+                                results.F2.y,
+                                results.F3.y,
+                                f1_min,
+                                f1_max,
+                                f2_min,
+                                f2_max,
+                                f3_min,
+                                f3_max)
+
+        size = SignalTimeSeries(x=results.F1.x, y=size_y)
         return size
 
 def calculate_bw_and_cf(x_time, y_freq, y_mag, window_size=500, step_size=100):

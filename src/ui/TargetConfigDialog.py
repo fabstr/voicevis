@@ -42,8 +42,11 @@ class TargetConfigDialog(QtWidgets.QDialog):
             "f1_pitch": ("F1_Pitch", 1.0, 15.0),
             "f2_pitch": ("F2_Pitch", 1.0, 30.0),
             "f3_pitch": ("F3_Pitch", 1.0, 50.0),
-            "size": ("Size", -500.0, 1000.0),
+            "size": ("Size", -30.0, 30.0),
+            "size2": ("Size2", -500.0, 500.0),
             "weight": ("Weight", 0.0, 4.0e-7),
+            "H1_H2": ("H1_H2", -10.0, 20),
+            "H1_A3": ("H1_A3", 0.0, 30),
         }
 
         row = 1
