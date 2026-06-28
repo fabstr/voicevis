@@ -1,11 +1,83 @@
 import numpy as np
 import pyqtgraph as pg
+import qtawesome as qta
+from PyQt6 import QtWidgets, QtGui, QtCore
+
+from signal_processing.AudioFeatures import FeatureSnapshot
+from signal_processing.TargetConfig import TargetConfig
+from ui import AnnotationMarker
+import numpy as np
+import pyqtgraph as pg
+import qtawesome as qta
 from PyQt6 import QtWidgets, QtGui, QtCore
 
 from signal_processing.AudioFeatures import FeatureSnapshot
 from signal_processing.TargetConfig import TargetConfig
 from ui import AnnotationMarker
 
+
+class DirectionalViewBox(pg.ViewBox):
+    """
+    A custom ViewBox that intercepts the RectMode scaling to force
+    true 1D visual selection and 1D zooming.
+    """
+
+    def __init__(self, *args, **kwds):
+        super().__init__(*args, **kwds)
+        self.zoom_axis = None  # Can be 'x', 'y', or None
+
+    def updateScaleBox(self, p1, p2):
+        """Visually stretch the yellow selection box to span the locked axis."""
+        if self.zoom_axis == 'x':
+            y_min, y_max = self.boundingRect().top(), self.boundingRect().bottom()
+            p1 = QtCore.QPointF(p1.x(), y_min)
+            p2 = QtCore.QPointF(p2.x(), y_max)
+        elif self.zoom_axis == 'y':
+            x_min, x_max = self.boundingRect().left(), self.boundingRect().right()
+            p1 = QtCore.QPointF(x_min, p1.y())
+            p2 = QtCore.QPointF(x_max, p2.y())
+        super().updateScaleBox(p1, p2)
+
+    def setRange(self, rect=None, xRange=None, yRange=None, *args, **kwds):
+        """Intercept the zoom application to only apply to the selected axis."""
+        if self.zoom_axis is not None:
+            if rect is not None:
+                # The user drew a zoom box. Intercept the QRectF and overwrite
+                # the unselected axis with our current view limits.
+                current_rect = self.viewRect()
+
+                if self.zoom_axis == 'x':
+                    rect = QtCore.QRectF(
+                        rect.left(), current_rect.top(),
+                        rect.width(), current_rect.height()
+                    )
+                elif self.zoom_axis == 'y':
+                    rect = QtCore.QRectF(
+                        current_rect.left(), rect.top(),
+                        current_rect.width(), rect.height()
+                    )
+            else:
+                # Zoom triggered via code or other means
+                if self.zoom_axis == 'x':
+                    yRange = self.viewRange()[1]
+                elif self.zoom_axis == 'y':
+                    xRange = self.viewRange()[0]
+
+        # Pass the sanitized arguments up to pyqtgraph to handle normally
+        super().setRange(rect=rect, xRange=xRange, yRange=yRange, *args, **kwds)
+
+
+class TimeAxisItem(pg.AxisItem):
+    """Custom AxisItem to format raw seconds into mm:ss.xxx string format."""
+
+    def tickStrings(self, values, scale, spacing):
+        strings = []
+        for v in values:
+            val = max(0.0, float(v))
+            minutes = int(val // 60)
+            seconds = val % 60
+            strings.append(f"{minutes:02d}:{seconds:06.2f}")
+        return strings
 
 class TimeAxisItem(pg.AxisItem):
     """Custom AxisItem to format raw seconds into mm:ss.xxx string format."""
@@ -34,9 +106,11 @@ class PlotController(QtCore.QObject):
         self.click_callback = click_callback
         self.change_plot_callback = change_plot_callback
 
-        # 1. Initialize Core Plot Widget
+        # 1. Initialize Core Plot Widget WITH our Custom ViewBox
         time_axis = TimeAxisItem(orientation='bottom')
+        custom_vb = DirectionalViewBox()
         self.widget = pg.PlotWidget(
+            viewBox=custom_vb,
             title=self.spec['title'],
             axisItems={'bottom': time_axis}
         )
@@ -58,7 +132,7 @@ class PlotController(QtCore.QObject):
             lambda event: self.click_callback(event, self.widget, self.spec['title'])
         )
 
-        # 3. Build the Wrapper UI (Frame, ComboBox, Checkboxes, Slider)
+        # 3. Build the Wrapper UI
         self._build_wrapper_ui(initial_size)
 
         # 4. Apply the theme safely ONCE during initialization
@@ -68,7 +142,6 @@ class PlotController(QtCore.QObject):
             self.container.setVisible(False)
 
     def _build_wrapper_ui(self, initial_size):
-        """Constructs the outer QFrame, top control bar, and embeds the plot widget."""
         self.container = QtWidgets.QFrame()
         self.container.setObjectName("PlotContainer")
         self.container.setStyleSheet("#PlotContainer { border: 1px solid gray; margin: 2px; }")
@@ -87,10 +160,24 @@ class PlotController(QtCore.QObject):
         self.selector.setCurrentText(self.plot_name)
         self.selector.blockSignals(False)
 
-        # NOTE: Removed self.selector.setStyleSheet(...) from here!
-
         self.selector.currentTextChanged.connect(lambda new_name: self.change_plot_callback(self, new_name))
         top_bar_layout.addWidget(self.selector)
+
+        # --- Zoom Controls (X / Y) ---
+        self.btn_zoom_x = QtWidgets.QPushButton()
+        self.btn_zoom_y = QtWidgets.QPushButton()
+
+        self.btn_zoom_x.setCheckable(True)
+        self.btn_zoom_y.setCheckable(True)
+        self.btn_zoom_x.setToolTip("Drag to zoom X-axis")
+        self.btn_zoom_y.setToolTip("Drag to zoom Y-axis")
+
+        self.btn_zoom_x.toggled.connect(self._toggle_zoom_x)
+        self.btn_zoom_y.toggled.connect(self._toggle_zoom_y)
+
+        top_bar_layout.addWidget(self.btn_zoom_x)
+        top_bar_layout.addWidget(self.btn_zoom_y)
+
         top_bar_layout.addStretch()
 
         # --- Dynamic Checkboxes ---
@@ -120,14 +207,66 @@ class PlotController(QtCore.QObject):
         self.widget.setStyleSheet("border: none;")
         layout.addWidget(self.widget, stretch=1)
 
+    # --- Zoom Tool Logic ---
+
+    def _toggle_zoom_x(self, checked):
+        if checked:
+            self.btn_zoom_y.blockSignals(True)
+            self.btn_zoom_y.setChecked(False)
+            self.btn_zoom_y.blockSignals(False)
+        self._update_mouse_mode()
+
+    def _toggle_zoom_y(self, checked):
+        if checked:
+            self.btn_zoom_x.blockSignals(True)
+            self.btn_zoom_x.setChecked(False)
+            self.btn_zoom_x.blockSignals(False)
+        self._update_mouse_mode()
+
+    def _update_mouse_mode(self):
+        vb = self.widget.getViewBox()
+
+        if self.btn_zoom_x.isChecked():
+            vb.zoom_axis = 'x'
+            vb.setMouseMode(pg.ViewBox.RectMode)
+            self.widget.setMouseEnabled(x=True, y=False)
+        elif self.btn_zoom_y.isChecked():
+            vb.zoom_axis = 'y'
+            vb.setMouseMode(pg.ViewBox.RectMode)
+            self.widget.setMouseEnabled(x=False, y=True)
+        else:
+            vb.zoom_axis = None
+            vb.setMouseMode(pg.ViewBox.PanMode)
+            self._configure_mouse_behavior()
+
+        # Update icons to match the new toggle state
+        self._update_zoom_icons()
+
+    def _update_zoom_icons(self):
+        """Forces the correct icon color based on selection state and Qt palette."""
+        if not hasattr(self, 'btn_zoom_x'):
+            return
+
+        palette = QtWidgets.QApplication.palette()
+        # Default text color (dark in light theme, light in dark theme)
+        text_color = palette.color(QtGui.QPalette.ColorRole.WindowText).name()
+        # Color guaranteed to contrast with the highlight color
+        highlight_text = palette.color(QtGui.QPalette.ColorRole.HighlightedText).name()
+
+        color_x = highlight_text if self.btn_zoom_x.isChecked() else text_color
+        color_y = highlight_text if self.btn_zoom_y.isChecked() else text_color
+
+        self.btn_zoom_x.setIcon(qta.icon('fa5s.arrows-alt-h', color=color_x))
+        self.btn_zoom_y.setIcon(qta.icon('fa5s.arrows-alt-v', color=color_y))
+
+    # -----------------------
+
     def _populate_checkboxes(self):
-        """Generates checkboxes based on the curves configured in the spec."""
         self.toggles = []
         for curve_key, curve_spec in self.spec.get('curves', {}).items():
             if curve_spec.get('is_spectrogram'):
                 continue
 
-            # Format label cleanly
             if curve_spec.get("BW", False):
                 label_text = curve_key.replace('_IBW', ' BW').replace('_BW', ' BW')
             else:
@@ -136,7 +275,6 @@ class PlotController(QtCore.QObject):
             cb = QtWidgets.QCheckBox(label_text)
             cb.setChecked(True)
 
-            # Bind the toggle directly to this controller's visibility methods
             if curve_spec.get("BW", False):
                 cb.toggled.connect(lambda checked, ck=curve_key: self.set_bandwidth_visible(ck, checked))
             else:
@@ -144,7 +282,6 @@ class PlotController(QtCore.QObject):
 
             self.checkbox_layout.addWidget(cb)
             self.toggles.append(cb)
-
 
     def apply_theme(self):
         palette = QtWidgets.QApplication.palette()
@@ -155,10 +292,8 @@ class PlotController(QtCore.QObject):
         base_color = palette.color(QtGui.QPalette.ColorRole.Base)
         highlight_color = palette.color(QtGui.QPalette.ColorRole.Highlight)
 
-        # 1. Update pyqtgraph plot background
         self.widget.setBackground(bg_color)
 
-        # 2. Update the surrounding QFrame container background to match
         if hasattr(self, 'container'):
             self.container.setStyleSheet(
                 f"#PlotContainer {{ border: 1px solid gray; margin: 2px; background-color: {bg_color.name()}; }}")
@@ -179,7 +314,6 @@ class PlotController(QtCore.QObject):
         canvas.setTitle(self.spec['title'], **title_style)
         self.playhead.setPen(pg.mkPen(text_color, width=2))
 
-        # 3. Update the dropdown list dynamically
         if hasattr(self, 'selector'):
             self.selector.setStyleSheet(f"""
                 QComboBox {{ 
@@ -195,7 +329,29 @@ class PlotController(QtCore.QObject):
                 }}
             """)
 
-        # 4. Update the checkboxes text color
+        # Button stylesheet mapping directly to standard QPalette roles
+        if hasattr(self, 'btn_zoom_x'):
+            btn_style = f"""
+                QPushButton {{
+                    background-color: {base_color.name()};
+                    border: 1px solid gray;
+                    padding: 4px 8px;
+                    border-radius: 3px;
+                }}
+                QPushButton:checked {{
+                    background-color: {highlight_color.name()};
+                    border: 1px solid {highlight_color.name()};
+                }}
+                QPushButton:hover:!checked {{
+                    background-color: {bg_color.name()};
+                }}
+            """
+            self.btn_zoom_x.setStyleSheet(btn_style)
+            self.btn_zoom_y.setStyleSheet(btn_style)
+
+            # Immediately force the icon colors to match the new theme
+            self._update_zoom_icons()
+
         if hasattr(self, 'toggles'):
             for cb in self.toggles:
                 cb.setStyleSheet(f"color: {text_color.name()};")
@@ -277,8 +433,8 @@ class PlotController(QtCore.QObject):
 
         if curve.get('is_spectrogram'):
             img = curve['image_item']
-            # Draw if data exists, clear if it doesn't
-            if data_container is not None and hasattr(data_container, 'magnitude_db') and data_container.magnitude_db.size > 0:
+            if data_container is not None and hasattr(data_container,
+                                                      'magnitude_db') and data_container.magnitude_db.size > 0:
                 img.setImage(data_container.magnitude_db.T, autoLevels=True)
                 t_max = data_container.x[-1] if len(data_container.x) > 0 else 1.0
                 f_max = data_container.y[-1] if len(data_container.y) > 0 else 1.0
@@ -286,8 +442,6 @@ class PlotController(QtCore.QObject):
             else:
                 img.clear()
             return
-
-        # ... [keep the rest of your existing set_curve_data code] ...
 
         x_arr = np.array(x, dtype=float)
         y_arr = np.array(y, dtype=float)
@@ -335,44 +489,33 @@ class PlotController(QtCore.QObject):
 
     def append_curve_point(self, curve_name: str, snapshot: FeatureSnapshot, audio_features_ctx):
         curve = self.curves.get(curve_name)
-
-        if not curve:
-            return
+        if not curve: return
 
         result_key = curve['analysisResult']
-        if not hasattr(audio_features_ctx, result_key) or not hasattr(snapshot, result_key):
-            return
+        if not hasattr(audio_features_ctx, result_key) or not hasattr(snapshot, result_key): return
 
         data_container = getattr(audio_features_ctx, result_key)
         new_data = getattr(snapshot, result_key)
 
-        if snapshot.time is None or new_data is None:
-            return
+        if snapshot.time is None or new_data is None: return
 
-        # --- LIVE SPECTROGRAM HANDLING ---
-            # --- LIVE SPECTROGRAM HANDLING ---
         if curve.get('is_spectrogram'):
-            if not hasattr(new_data, 'magnitude_db') or new_data.magnitude_db.size == 0:
-                return
+            if not hasattr(new_data, 'magnitude_db') or new_data.magnitude_db.size == 0: return
 
-            # First slice initialization
             if len(data_container.x) == 0:
                 data_container.x = np.array([snapshot.time])
-                data_container.y = new_data.y  # Frequency bins
+                data_container.y = new_data.y
                 data_container.magnitude_db = new_data.magnitude_db.reshape(-1, 1)
-            # Append new time column
             else:
                 data_container.x = np.append(data_container.x, snapshot.time)
                 new_col = new_data.magnitude_db.reshape(-1, 1)
 
-                # Guard rail to ensure frequency resolution hasn't changed mid-recording
                 if new_col.shape[0] == data_container.magnitude_db.shape[0]:
                     data_container.magnitude_db = np.hstack((data_container.magnitude_db, new_col))
 
             self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
             return
 
-        # --- EXISTING 1D HANDLING ---
         data_container.x = np.append(data_container.x, snapshot.time)
         data_container.y = np.append(data_container.y, new_data)
         self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
@@ -414,6 +557,11 @@ class PlotController(QtCore.QObject):
                     item.scatter.setSize(target_size)
 
     def reset_zoom(self):
+        # Deselect tools so auto-range isn't immediately fought by mouse modes
+        if hasattr(self, 'btn_zoom_x'):
+            self.btn_zoom_x.setChecked(False)
+            self.btn_zoom_y.setChecked(False)
+
         y_min = self.spec.get('y_min')
         y_max = self.spec.get('y_max')
         if y_min is not None and y_max is not None:

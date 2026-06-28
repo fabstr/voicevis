@@ -1,18 +1,20 @@
 {
     "global_size": 3,
     "main_splitter_sizes": [
-        615,
-        660,
-        615
+        947,
+        947,
+        947,
+        516,
+        445
     ],
     "columns": [
         {
             "plots": [
                 {
-                    "name": "Loudness",
+                    "name": "Fullness",
                     "local_size": 3,
                     "toggles": {
-                        "Loudness": true
+                        "Fullness": true
                     }
                 },
                 {
@@ -28,20 +30,12 @@
                     "toggles": {
                         "Weight": true
                     }
-                },
-                {
-                    "name": "Fullness",
-                    "local_size": 3,
-                    "toggles": {
-                        "Fullness": true
-                    }
                 }
             ],
             "sizes": [
-                482,
-                483,
-                482,
-                482
+                653,
+                652,
+                653
             ]
         },
         {
@@ -70,20 +64,12 @@
                         "F2 BW": false,
                         "F3 BW": false
                     }
-                },
-                {
-                    "name": "H1_H2",
-                    "local_size": 3,
-                    "toggles": {
-                        "H1_H2": true
-                    }
                 }
             ],
             "sizes": [
-                482,
-                483,
-                482,
-                482
+                364,
+                941,
+                653
             ]
         },
         {
@@ -111,6 +97,59 @@
                         "F3/Pitch": true,
                         "F3/Pitch BW": false
                     }
+                }
+            ],
+            "sizes": [
+                653,
+                652,
+                653
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "F1_Pitch_rel_amplitude",
+                    "local_size": 3,
+                    "toggles": {
+                        "F1_Pitch_rel_amplitude": true
+                    }
+                },
+                {
+                    "name": "F2_Pitch_rel_amplitude",
+                    "local_size": 3,
+                    "toggles": {
+                        "F2_Pitch_rel_amplitude": true
+                    }
+                },
+                {
+                    "name": "F3_Pitch_rel_amplitude",
+                    "local_size": 3,
+                    "toggles": {
+                        "F3_Pitch_rel_amplitude": true
+                    }
+                }
+            ],
+            "sizes": [
+                653,
+                652,
+                653
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "Loudness",
+                    "local_size": 3,
+                    "toggles": {
+                        "Loudness": true
+                    }
+                },
+                {
+                    "name": "H1_H2",
+                    "local_size": 3,
+                    "toggles": {
+                        "H1_H2": true
+                    }
                 },
                 {
                     "name": "H1_A3",
@@ -121,10 +160,9 @@
                 }
             ],
             "sizes": [
-                482,
-                483,
-                482,
-                482
+                653,
+                652,
+                653
             ]
         }
     ]

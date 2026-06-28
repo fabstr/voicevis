@@ -174,6 +174,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
         self.save_icon = qta.icon('fa5s.save', color=icon_color)
         self.clear_icon = qta.icon('fa5s.trash', color=icon_color)
+        self.reset_zoom_icon = qta.icon('fa6s.maximize', color=icon_color)
 
         self.record_stop_btn = QtWidgets.QPushButton()
         self.record_stop_btn.setFixedSize(40, 40)
@@ -198,6 +199,14 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.clear_btn.setToolTip("Clear")
         self.clear_btn.clicked.connect(self.handle_clear)
         top_buttons_layout.addWidget(self.clear_btn)
+
+        self.reset_zoom_btn = QtWidgets.QPushButton()
+        self.reset_zoom_btn.setFixedSize(40, 40)
+        self.reset_zoom_btn.setIcon(self.reset_zoom_icon)
+        self.reset_zoom_btn.setIconSize(QtCore.QSize(20, 20))
+        self.reset_zoom_btn.setToolTip("Reset zoom")
+        self.reset_zoom_btn.clicked.connect(self.handle_reset_zoom)
+        top_buttons_layout.addWidget(self.reset_zoom_btn)
 
         # --- First Stretch to push the time widget to the center ---
         top_buttons_layout.addStretch()
