@@ -11,6 +11,5 @@ dist/
 accent_gmu_edu/
 examples/
 ffmpeg*
-resources/
 _version.py
 plots/
