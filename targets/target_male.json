@@ -59,6 +59,24 @@
             "min": 0.0,
             "max": 1e-06,
             "enabled": true
+        },
+        {
+            "name": "h1_h2",
+            "min": -1.78,
+            "max": 14.3,
+            "enabled": true
+        },
+        {
+            "name": "h1_h3",
+            "min": -4.64,
+            "max": 19.3,
+            "enabled": true
+        },
+        {
+            "name": "h1_h4",
+            "min": -6.43,
+            "max": 25.4,
+            "enabled": true
         }
     ]
 }

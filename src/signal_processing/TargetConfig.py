@@ -18,6 +18,8 @@ class TargetConfig:
         {"name": "size2", "min": -500.0, "max": 500.0, "enabled": True},
         {"name": "weight", "min": 0.0, "max": 4.0e-7, "enabled": True},
         {"name": "H1_H2", "min": -10, "max": 20, "enabled": True},
+        {"name": "H1_H3", "min": -10, "max": 20, "enabled": True},
+        {"name": "H1_H4", "min": -10, "max": 20, "enabled": True},
         {"name": "H1_A3", "min": 0, "max": 30, "enabled": True},
     ])
 

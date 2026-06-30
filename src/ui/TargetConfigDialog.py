@@ -46,6 +46,8 @@ class TargetConfigDialog(QtWidgets.QDialog):
             "size2": ("Size2", -500.0, 500.0),
             "weight": ("Weight", 0.0, 4.0e-7),
             "H1_H2": ("H1_H2", -10.0, 20),
+            "H1_H3": ("H1_H3", -10.0, 20),
+            "H1_H4": ("H1_H4", -10.0, 20),
             "H1_A3": ("H1_A3", 0.0, 30),
         }
 

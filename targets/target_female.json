@@ -59,6 +59,36 @@
             "min": 0.0,
             "max": 2e-07,
             "enabled": true
+        },
+        {
+            "name": "size2",
+            "min": -500.0,
+            "max": 500.0,
+            "enabled": true
+        },
+        {
+            "name": "h1_h2",
+            "min": -7.7,
+            "max": 21.7,
+            "enabled": true
+        },
+        {
+            "name": "h1_h3",
+            "min": -8.0,
+            "max": 31.2,
+            "enabled": true
+        },
+        {
+            "name": "h1_h4",
+            "min": -2.55,
+            "max": 37.89,
+            "enabled": true
+        },
+        {
+            "name": "h1_a3",
+            "min": 0.0,
+            "max": 30.0,
+            "enabled": true
         }
     ]
 }

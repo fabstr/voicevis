@@ -322,7 +322,7 @@ spec = {
             }
         },
         'targets': {
-            'Weight': {'colour': target_band}
+            'H1_H2': {'colour': target_band}
         },
         'linkX': 'Loudness',
     },
@@ -339,7 +339,7 @@ spec = {
             }
         },
         'targets': {
-            'Weight': {'colour': target_band}
+            'H1_H3': {'colour': target_band}
         },
         'linkX': 'Loudness',
     },
@@ -356,7 +356,7 @@ spec = {
             }
         },
         'targets': {
-            'Weight': {'colour': target_band}
+            'H1_H4': {'colour': target_band}
         },
         'linkX': 'Loudness',
     },
@@ -373,7 +373,7 @@ spec = {
             }
         },
         'targets': {
-            'Weight': {'colour': target_band}
+            'H1_A3': {'colour': target_band}
         },
         'linkX': 'Loudness',
     },
