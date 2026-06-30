@@ -327,6 +327,40 @@ spec = {
         'linkX': 'Loudness',
     },
 
+    "H1_H3": {
+        'title': 'H1_H3',
+        'y_min': -20,
+        'y_max': 50,
+        'curves': {
+            'H1_H3': {
+                'size': defaultSize,
+                'colour': weight,
+                'analysisResult': 'H1_H3'
+            }
+        },
+        'targets': {
+            'Weight': {'colour': target_band}
+        },
+        'linkX': 'Loudness',
+    },
+
+    "H1_H4": {
+        'title': 'H1_H4',
+        'y_min': -20,
+        'y_max': 50,
+        'curves': {
+            'H1_H4': {
+                'size': defaultSize,
+                'colour': weight,
+                'analysisResult': 'H1_H4'
+            }
+        },
+        'targets': {
+            'Weight': {'colour': target_band}
+        },
+        'linkX': 'Loudness',
+    },
+
     "H1_A3": {
         'title': 'H1_A3',
         'y_min': 0,

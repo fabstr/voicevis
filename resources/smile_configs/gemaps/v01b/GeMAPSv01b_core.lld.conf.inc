@@ -303,7 +303,7 @@ f0ElementNameIsFull = 1
 magSpecFieldName = pcm_fftMag
 magSpecFieldNameIsFull = 1
 nHarmonics = 100
-harmonicDifferences = H1-H2;H1-A3
+harmonicDifferences = H1-H2;H1-H3;H1-H4;H1-A3
 harmonicDifferencesLog = 1
 nHarmonicMagnitudes = 0
 firstHarmonicMagnitude = 1
@@ -379,8 +379,8 @@ newNames = Loudness;alphaRatio;hammarbergIndex;slope0-500;slope500-1500
 reader.dmLevel = gemapsv01b_logPitch;gemapsv01b_jitterShimmer;gemapsv01b_harmonics;gemapsv01b_formants
 writer.dmLevel = gemapsv01b_lldsetF
 \{\cm[bufferModeRbConf]}
-selected = F0finalLog;jitterLocal;shimmerLocalDB;HarmonicsToNoiseRatioACFLogdB;HarmonicDifferenceLogRelH1-H2;HarmonicDifferenceLogRelH1-A3;formantFreqLpc[1];formantBandwidthLpc[1];FormantAmplitudeByMaxHarmonicLogRelF0[1];formantFreqLpc[2];FormantAmplitudeByMaxHarmonicLogRelF0[2];formantFreqLpc[3];FormantAmplitudeByMaxHarmonicLogRelF0[3]
-newNames = F0semitoneFrom27.5Hz;jitterLocal;shimmerLocaldB;HNRdBACF;logRelF0-H1-H2;logRelF0-H1-A3;F1frequency;F1bandwidth;F1amplitudeLogRelF0;F2frequency;F2amplitudeLogRelF0;F3frequency;F3amplitudeLogRelF0
+selected = F0finalLog;jitterLocal;shimmerLocalDB;HarmonicsToNoiseRatioACFLogdB;HarmonicDifferenceLogRelH1-H2;HarmonicDifferenceLogRelH1-H3;HarmonicDifferenceLogRelH1-H4;HarmonicDifferenceLogRelH1-A3;formantFreqLpc[1];formantBandwidthLpc[1];FormantAmplitudeByMaxHarmonicLogRelF0[1];formantFreqLpc[2];FormantAmplitudeByMaxHarmonicLogRelF0[2];formantFreqLpc[3];FormantAmplitudeByMaxHarmonicLogRelF0[3]
+newNames = F0semitoneFrom27.5Hz;jitterLocal;shimmerLocaldB;HNRdBACF;logRelF0-H1-H2;logRelF0-H1-H3;logRelF0-H1-H4;logRelF0-H1-A3;F1frequency;F1bandwidth;F1amplitudeLogRelF0;F2frequency;F2amplitudeLogRelF0;F3frequency;F3amplitudeLogRelF0
 
 [gemapsv01b_lldSetSelectorLogF0:cDataSelector]
 reader.dmLevel = gemapsv01b_logPitch
@@ -405,8 +405,8 @@ outputVal=0.0
 reader.dmLevel = gemapsv01b_jitterShimmer;gemapsv01b_harmonics;gemapsv01b_formantsNz
 writer.dmLevel = gemapsv01b_lldSetNoF0AndLoudnessNz
 \{\cm[bufferModeRbConf]}
-selected = jitterLocal;shimmerLocalDB;HarmonicsToNoiseRatioACFLogdB;HarmonicDifferenceLogRelH1-H2;HarmonicDifferenceLogRelH1-A3;formantFreqLpc[1];formantBandwidthLpc[1];FormantAmplitudeByMaxHarmonicLogRelF0[1];formantFreqLpc[2];FormantAmplitudeByMaxHarmonicLogRelF0[2];formantFreqLpc[3];FormantAmplitudeByMaxHarmonicLogRelF0[3]
-newNames = jitterLocal;shimmerLocaldB;HNRdBACF;logRelF0-H1-H2;logRelF0-H1-A3;F1frequency;F1bandwidth;F1amplitudeLogRelF0;F2frequency;F2amplitudeLogRelF0;F3frequency;F3amplitudeLogRelF0
+selected = jitterLocal;shimmerLocalDB;HarmonicsToNoiseRatioACFLogdB;HarmonicDifferenceLogRelH1-H2;HarmonicDifferenceLogRelH1-H3;HarmonicDifferenceLogRelH1-H4;HarmonicDifferenceLogRelH1-A3;formantFreqLpc[1];formantBandwidthLpc[1];FormantAmplitudeByMaxHarmonicLogRelF0[1];formantFreqLpc[2];FormantAmplitudeByMaxHarmonicLogRelF0[2];formantFreqLpc[3];FormantAmplitudeByMaxHarmonicLogRelF0[3]
+newNames = jitterLocal;shimmerLocaldB;HNRdBACF;logRelF0-H1-H2;logRelF0-H1-H3;logRelF0-H1-H4;logRelF0-H1-A3;F1frequency;F1bandwidth;F1amplitudeLogRelF0;F2frequency;F2amplitudeLogRelF0;F3frequency;F3amplitudeLogRelF0
 
 // select logspectral for voiced sounds
 [gemapsv01b_logSpectralVoiced:cValbasedSelector]

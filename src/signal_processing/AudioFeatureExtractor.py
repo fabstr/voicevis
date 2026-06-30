@@ -45,8 +45,10 @@ class AudioFeatureExtractor:
 
     def __init__(self, targets: TargetConfig = TargetConfig()):
         self.smile = opensmile.Smile(
-            feature_set=opensmile.FeatureSet.eGeMAPSv02,
+            feature_set='resources/smile_configs/egemaps/v02/eGeMAPSv02.conf',
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
+            # feature_set=opensmile.FeatureSet.eGeMAPSv02,
+            # feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
         )
         self.target_config = targets
         self.cachedResults = None
@@ -129,6 +131,8 @@ class AudioFeatureExtractor:
             F2_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F2amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
             F3_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F3amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
             H1_H2=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-H2_sma3nz'].to_numpy()[valid_mask]),
+            H1_H3=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-H3_sma3nz'].to_numpy()[valid_mask]),
+            H1_H4=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-H4_sma3nz'].to_numpy()[valid_mask]),
             H1_A3=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-A3_sma3nz'].to_numpy()[valid_mask]),
 
             loudness=SignalTimeSeries(x=t_filtered, y=loudness_raw[valid_mask]),
