@@ -267,18 +267,10 @@ class PlotController(QtCore.QObject):
             if curve_spec.get('is_spectrogram'):
                 continue
 
-            if curve_spec.get("BW", False):
-                label_text = curve_key.replace('_IBW', ' BW').replace('_BW', ' BW')
-            else:
-                label_text = curve_key
-
-            cb = QtWidgets.QCheckBox(label_text)
+            cb = QtWidgets.QCheckBox(curve_key)
             cb.setChecked(True)
 
-            if curve_spec.get("BW", False):
-                cb.toggled.connect(lambda checked, ck=curve_key: self.set_bandwidth_visible(ck, checked))
-            else:
-                cb.toggled.connect(lambda checked, ck=curve_key: self.set_curve_visible(ck, checked))
+            cb.toggled.connect(lambda checked, ck=curve_key: self.set_curve_visible(ck, checked))
 
             self.checkbox_layout.addWidget(cb)
             self.toggles.append(cb)
@@ -384,32 +376,15 @@ class PlotController(QtCore.QObject):
                 self.curves[name]['image_item'] = img
                 continue
 
-            if "BW" in curve_spec and curve_spec["BW"]:
-                self.curves[name]['has_bw'] = True
-                transparent_pen = pg.mkPen(color=(0, 0, 0, 0), width=1)
-                min_curve = pg.PlotCurveItem([], pen=transparent_pen)
-                max_curve = pg.PlotCurveItem([], pen=transparent_pen)
-
-                self.curves[name]['bw_curve_min'] = min_curve
-                self.curves[name]['bw_curve_max'] = max_curve
-
-                fill_item = pg.FillBetweenItem(min_curve, max_curve, brush=pg.mkBrush(curve_spec['colour']))
-                self.curves[name]['fill_band'] = fill_item
-
-                self.widget.addItem(min_curve)
-                self.widget.addItem(max_curve)
-                self.widget.addItem(fill_item)
-                fill_item.setZValue(-10)
-            else:
-                edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
-                self.curves[name]['curve'] = self.widget.plot(
-                    [], symbol="o", pen=None,
-                    symbolBrush=curve_spec['colour'],
-                    symbolPen=edge_pen,
-                    symbolSize=curve_spec['size']
-                )
-                if 'colorSource' in curve_spec:
-                    self.curves[name]['colorSource'] = curve_spec['colorSource']
+            edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
+            self.curves[name]['curve'] = self.widget.plot(
+                [], symbol="o", pen=None,
+                symbolBrush=curve_spec['colour'],
+                symbolPen=edge_pen,
+                symbolSize=curve_spec['size']
+            )
+            if 'colorSource' in curve_spec:
+                self.curves[name]['colorSource'] = curve_spec['colorSource']
 
     def _build_target_bands(self):
         for target_name, target_spec in self.spec.get('targets', {}).items():
@@ -446,27 +421,7 @@ class PlotController(QtCore.QObject):
         x_arr = np.array(x, dtype=float)
         y_arr = np.array(y, dtype=float)
 
-        if curve.get('has_bw'):
-            if data_container and hasattr(data_container, 'BW') and len(data_container.BW) == len(y_arr):
-                bw_arr = np.array(data_container.BW, dtype=float)
-            else:
-                bw_arr = np.zeros_like(y_arr)
-
-            new_upper = y_arr + (bw_arr / 2)
-            new_lower = y_arr - (bw_arr / 2)
-
-            gap_threshold = 0.15
-            if len(x_arr) > 1:
-                gaps = np.where(np.diff(x_arr) > gap_threshold)[0] + 1
-                if len(gaps) > 0:
-                    x_arr = np.insert(x_arr, gaps, np.nan)
-                    new_upper = np.insert(new_upper, gaps, np.nan)
-                    new_lower = np.insert(new_lower, gaps, np.nan)
-
-            curve['bw_curve_min'].setData(x=x_arr, y=new_lower)
-            curve['bw_curve_max'].setData(x=x_arr, y=new_upper)
-
-        elif 'colorSource' in curve and audio_features_ctx:
+        if 'colorSource' in curve and audio_features_ctx:
             z_feature = curve['colorSource']
             if hasattr(audio_features_ctx, z_feature):
                 z_data = getattr(audio_features_ctx, z_feature)
@@ -537,13 +492,6 @@ class PlotController(QtCore.QObject):
     def set_curve_visible(self, curve_name: str, visible: bool):
         if curve_name in self.curves and 'curve' in self.curves[curve_name]:
             self.curves[curve_name]['curve'].setVisible(visible)
-
-    def set_bandwidth_visible(self, curve_name: str, visible: bool):
-        if curve_name in self.curves and self.curves[curve_name].get('has_bw'):
-            c = self.curves[curve_name]
-            c['bw_curve_min'].setVisible(visible)
-            c['bw_curve_max'].setVisible(visible)
-            c['fill_band'].setVisible(visible)
 
     def set_symbol_size(self, size_value: int):
         target_size = size_value

@@ -28,10 +28,11 @@ class SpectrogramData:
 class AudioFeatures:
     # Core Acoustic Features
     pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
 
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight2_range: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H4: SignalTimeSeries = field(default_factory=SignalTimeSeries)
@@ -39,27 +40,20 @@ class AudioFeatures:
 
     # Formants & Initial Bandwidths (IBW)
     F1: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F1_IBW: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F2_IBW: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F3_IBW: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     # Pitch-Relative Formants (Standard & Bandwidth variants)
     F1_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F1_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
     F1_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     F2_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F2_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
     F2_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     F3_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F3_Pitch_BW: BandwidthTimeSeries = field(default_factory=BandwidthTimeSeries)
     F3_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     size: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    size2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     size_vs_weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     spectrogram: SpectrogramData = field(default_factory=SpectrogramData)
@@ -92,13 +86,6 @@ class FeatureSnapshot:
     F1_Pitch: Optional[float] = None
     F2_Pitch: Optional[float] = None
     F3_Pitch: Optional[float] = None
-    F1_Pitch_BW: Optional[float] = None
-    F2_Pitch_BW: Optional[float] = None
-    F3_Pitch_BW: Optional[float] = None
-
-    F1_IBW: Optional[float] = None
-    F2_IBW: Optional[float] = None
-    F3_IBW: Optional[float] = None
 
     size: Optional[float] = None
     spectrogram: Optional[SpectrogramData] = None

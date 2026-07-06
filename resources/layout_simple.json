@@ -1,0 +1,54 @@
+{
+    "global_size": 5,
+    "main_splitter_sizes": [
+        1086,
+        1085
+    ],
+    "columns": [
+        {
+            "plots": [
+                {
+                    "name": "Loudness",
+                    "local_size": 5,
+                    "toggles": {
+                        "Loudness": true
+                    }
+                },
+                {
+                    "name": "Weight",
+                    "local_size": 5,
+                    "toggles": {
+                        "Weight": true
+                    }
+                }
+            ],
+            "sizes": [
+                693,
+                691
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "Pitch",
+                    "local_size": 5,
+                    "toggles": {
+                        "Pitch": true,
+                        "Pitch BW": false
+                    }
+                },
+                {
+                    "name": "Size",
+                    "local_size": 5,
+                    "toggles": {
+                        "Size": true
+                    }
+                }
+            ],
+            "sizes": [
+                693,
+                691
+            ]
+        }
+    ]
+}

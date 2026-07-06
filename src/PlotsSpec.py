@@ -27,7 +27,7 @@ spec = {
         'mouse_enabled_x': True,
         'mouse_enabled_y': False,
         'y_min': 0,
-        'y_max': 1,
+        'y_max': 10,
         'curves': {
             'Loudness': {
                 'size': defaultSize,
@@ -52,12 +52,6 @@ spec = {
                 'colour': pitch,
                 'analysisResult': 'pitch',
             },
-            'Pitch_BW': {
-                'size': defaultSize,
-                'colour': white,
-                'analysisResult': 'Pitch_BW',
-                'BW': True
-            }
         },
         'targets': {
             'Pitch': {'colour': target_band}
@@ -74,23 +68,6 @@ spec = {
                 'size': defaultSize,
                 'colour': size,
                 'analysisResult': 'size'
-            }
-        },
-        'targets': {
-            'Size': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
-    },
-
-    "Size2": {
-        'title': 'Size2',
-        'y_min': -1000,
-        'y_max': 1000,
-        'curves': {
-            'Size2': {
-                'size': defaultSize,
-                'colour': size,
-                'analysisResult': 'size2'
             }
         },
         'targets': {
@@ -137,24 +114,6 @@ spec = {
                 'colour': f3,
                 'analysisResult': 'F3'
             },
-            'F1 BW': {
-                'size': defaultSize,
-                'colour': white,
-                'analysisResult': 'F1_IBW',
-                'BW': True
-            },
-            'F2 BW': {
-                'size': defaultSize,
-                'colour': white,
-                'analysisResult': 'F2_IBW',
-                'BW': True
-            },
-            'F3 BW': {
-                'size': defaultSize,
-                'colour': white,
-                'analysisResult': 'F3_IBW',
-                'BW': True
-            }
         },
         'targets': {
             'F1': {'colour': target_band},
@@ -173,12 +132,6 @@ spec = {
                 'size': defaultSize,
                 'colour': f3_pitch,
                 'analysisResult': 'F3_Pitch'
-            },
-            "F3/Pitch BW": {
-                'size': defaultSize,
-                'colour': white,
-                'analysisResult': 'F3_Pitch_BW',
-                'BW': True
             },
         },
         'targets': {
@@ -240,12 +193,6 @@ spec = {
                 'colour': f2_pitch,
                 'analysisResult': 'F2_Pitch'
             },
-            "F2/Pitch BW": {
-                'size': defaultSize,
-                'colour': white,
-                'analysisResult': 'F2_Pitch_BW',
-                'BW': True
-            },
         },
         'targets': {
             'F2_Pitch': {'colour': target_band}
@@ -262,12 +209,6 @@ spec = {
                 'size': defaultSize,
                 'colour': f1_pitch,
                 'analysisResult': 'F1_Pitch'
-            },
-            "F1/Pitch BW": {
-                'size': defaultSize,
-                'colour': white,
-                'analysisResult': 'F1_Pitch_BW',
-                'BW': True
             },
         },
         'targets': {
@@ -312,8 +253,8 @@ spec = {
 
     "H1_H2": {
         'title': 'H1_H2',
-        'y_min': -20,
-        'y_max': 50,
+        'y_min': -50,
+        'y_max': 20,
         'curves': {
             'H1_H2': {
                 'size': defaultSize,
@@ -329,8 +270,8 @@ spec = {
 
     "H1_H3": {
         'title': 'H1_H3',
-        'y_min': -20,
-        'y_max': 50,
+        'y_min': -50,
+        'y_max': 20,
         'curves': {
             'H1_H3': {
                 'size': defaultSize,
@@ -346,8 +287,8 @@ spec = {
 
     "H1_H4": {
         'title': 'H1_H4',
-        'y_min': -20,
-        'y_max': 50,
+        'y_min': -50,
+        'y_max': 20,
         'curves': {
             'H1_H4': {
                 'size': defaultSize,
@@ -363,8 +304,8 @@ spec = {
 
     "H1_A3": {
         'title': 'H1_A3',
-        'y_min': 0,
-        'y_max': 50,
+        'y_min': -50,
+        'y_max': 20,
         'curves': {
             'H1_A3': {
                 'size': defaultSize,
@@ -376,5 +317,40 @@ spec = {
             'H1_A3': {'colour': target_band}
         },
         'linkX': 'Loudness',
+    },
+
+    'weight2_range': {
+        'title': 'weight2_range',
+        'y_min': 0,
+        'y_max': 300,
+        'curves': {
+            'weight2_range': {
+                'size': defaultSize,
+                'colour': white,  # Fallback color
+                'analysisResult': 'weight2_range', # Y-axis
+            }
+        },
+        'targets': {
+            'weight2_range': {'colour': target_band}
+        },
+        'linkX': 'Loudness'
+    },
+
+    'Weight2': {
+        'title': 'Weight2',
+        'y_min': 0,
+        'y_max': .2,
+        'curves': {
+            'Weight2': {
+                'size': defaultSize,
+                'colour': white,  # Fallback color
+                'analysisResult': 'weight2', # Y-axis
+            #    'colorSource': 'weight2_range'   # Z-axis (Color)
+            }
+        },
+        'targets': {
+            'Weight2': {'colour': target_band}
+        },
+        'linkX': 'Loudness'
     },
 }

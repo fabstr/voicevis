@@ -62,20 +62,20 @@
         },
         {
             "name": "h1_h2",
-            "min": -1.78,
-            "max": 14.3,
+            "min": -14.3,
+            "max": 1.78,
             "enabled": true
         },
         {
             "name": "h1_h3",
-            "min": -4.64,
-            "max": 19.3,
+            "min": -19.3,
+            "max": 4.64,
             "enabled": true
         },
         {
             "name": "h1_h4",
-            "min": -6.43,
-            "max": 25.4,
+            "min": -25.4,
+            "max": 6.43,
             "enabled": true
         }
     ]

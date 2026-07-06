@@ -1,32 +1,31 @@
 {
-    "global_size": 3,
+    "global_size": 5,
     "main_splitter_sizes": [
-        947,
-        947,
-        947,
-        516,
-        445
+        952,
+        952,
+        951,
+        952
     ],
     "columns": [
         {
             "plots": [
                 {
-                    "name": "Size2",
-                    "local_size": 3,
+                    "name": "Loudness",
+                    "local_size": 5,
                     "toggles": {
-                        "Size2": true
+                        "Loudness": true
                     }
                 },
                 {
                     "name": "Size",
-                    "local_size": 3,
+                    "local_size": 5,
                     "toggles": {
                         "Size": true
                     }
                 },
                 {
                     "name": "Weight",
-                    "local_size": 3,
+                    "local_size": 5,
                     "toggles": {
                         "Weight": true
                     }
@@ -42,7 +41,7 @@
             "plots": [
                 {
                     "name": "Pitch",
-                    "local_size": 3,
+                    "local_size": 5,
                     "toggles": {
                         "Pitch": true,
                         "Pitch BW": false
@@ -50,12 +49,12 @@
                 },
                 {
                     "name": "Spectrogram",
-                    "local_size": 3,
+                    "local_size": 5,
                     "toggles": {}
                 },
                 {
                     "name": "Formants",
-                    "local_size": 3,
+                    "local_size": 5,
                     "toggles": {
                         "F1": true,
                         "F2": true,
@@ -67,35 +66,35 @@
                 }
             ],
             "sizes": [
-                360,
-                929,
+                645,
+                644,
                 645
             ]
         },
         {
             "plots": [
                 {
-                    "name": "F1/Pitch",
-                    "local_size": 3,
+                    "name": "F3/Pitch",
+                    "local_size": 5,
                     "toggles": {
-                        "F1/Pitch": true,
-                        "F1/Pitch BW": false
+                        "F3/Pitch": true,
+                        "F3/Pitch BW": false
                     }
                 },
                 {
                     "name": "F2/Pitch",
-                    "local_size": 3,
+                    "local_size": 5,
                     "toggles": {
                         "F2/Pitch": true,
                         "F2/Pitch BW": false
                     }
                 },
                 {
-                    "name": "F3/Pitch",
-                    "local_size": 3,
+                    "name": "F1/Pitch",
+                    "local_size": 5,
                     "toggles": {
-                        "F3/Pitch": true,
-                        "F3/Pitch BW": false
+                        "F1/Pitch": true,
+                        "F1/Pitch BW": false
                     }
                 }
             ],
@@ -108,54 +107,24 @@
         {
             "plots": [
                 {
-                    "name": "F1_Pitch_rel_amplitude",
-                    "local_size": 3,
+                    "name": "H1_H4",
+                    "local_size": 5,
                     "toggles": {
-                        "F1_Pitch_rel_amplitude": true
+                        "H1_H4": true
                     }
                 },
                 {
-                    "name": "F2_Pitch_rel_amplitude",
-                    "local_size": 3,
+                    "name": "H1_H3",
+                    "local_size": 5,
                     "toggles": {
-                        "F2_Pitch_rel_amplitude": true
-                    }
-                },
-                {
-                    "name": "F3_Pitch_rel_amplitude",
-                    "local_size": 3,
-                    "toggles": {
-                        "F3_Pitch_rel_amplitude": true
-                    }
-                }
-            ],
-            "sizes": [
-                645,
-                644,
-                645
-            ]
-        },
-        {
-            "plots": [
-                {
-                    "name": "Loudness",
-                    "local_size": 3,
-                    "toggles": {
-                        "Loudness": true
+                        "H1_H3": true
                     }
                 },
                 {
                     "name": "H1_H2",
-                    "local_size": 3,
+                    "local_size": 5,
                     "toggles": {
                         "H1_H2": true
-                    }
-                },
-                {
-                    "name": "H1_A3",
-                    "local_size": 3,
-                    "toggles": {
-                        "H1_A3": true
                     }
                 }
             ],

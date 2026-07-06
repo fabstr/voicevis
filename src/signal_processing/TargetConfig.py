@@ -31,6 +31,25 @@ class TargetConfig:
                 return t["min"], t["max"], t.get("enabled", True)
         return None
 
+    def get_mean(self, name: str) -> Optional[float]:
+        """Utility to safely pull out min by target name."""
+        name_lower = name.lower()
+        for t in self.targets:
+            if t["name"].lower() == name_lower:
+                return (t["min"] + t["max"]) / 2
+        return None
+
+    def has_all_bounds(self, names: list[str]) -> bool:
+        for name in names:
+            name_lower = name.lower()
+            found = False
+            for t in self.targets:
+                if t["name"].lower() == name_lower:
+                    found = True
+            if not found:
+                return False
+        return True
+
     def set_bounds(self, name: str, min_val: float, max_val: float, enabled: bool = True):
         """Utility to safely modify boundaries and target toggles by name."""
         name_lower = name.lower()

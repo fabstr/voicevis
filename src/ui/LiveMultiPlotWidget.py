@@ -11,9 +11,9 @@ from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import qtawesome as qta
 
 
-from PlotsSpec import spec, defaultSize, default_stretch
-from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
-from signal_processing.AudioFeatures import AudioFeatures, BandwidthTimeSeries, FeatureSnapshot
+from PlotsSpec import spec, defaultSize
+from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig, calculate_size
+from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
 from ui.PlotController import PlotController
@@ -954,8 +954,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 band['enabled'] = True
             controller.update_target_bands(new_config)
 
-        self.analysedAudioFeatures.size = self.audioFeatureExtractor.recalculate_size(self.analysedAudioFeatures)
-        self.analysedAudioFeatures.size2 = self.audioFeatureExtractor.recalculate_size2(self.analysedAudioFeatures)
+        self.analysedAudioFeatures.size = calculate_size(self.analysedAudioFeatures,  self.audioFeatureExtractor.target_config)
 
         self.update_plots()
 

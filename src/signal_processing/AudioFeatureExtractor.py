@@ -7,8 +7,7 @@ import wave
 
 from scipy.signal import stft, spectrogram
 
-from PlotsSpec import outliers_m
-from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, BandwidthTimeSeries, SpectrogramData
+from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
 
 nperseg = 2048
@@ -32,6 +31,8 @@ class AudioFeatureExtractor:
     #     shimmerLocaldB_sma3nz
     #     HNRdBACF_sma3nz
     #     logRelF0-H1-H2_sma3nz
+    #     logRelF0-H1-H3_sma3nz
+    #     logRelF0-H1-H4_sma3nz
     #     logRelF0-H1-A3_sma3nz
     #     F1frequency_sma3nz
     #     F1bandwidth_sma3nz
@@ -44,344 +45,139 @@ class AudioFeatureExtractor:
     #     F3amplitudeLogRelF0_sma3nz
 
     def __init__(self, targets: TargetConfig = TargetConfig()):
+        """
+        Constructor for AudioFeatureExtractor.
+
+        A custom configuration has been defined for Opensmile to compute more harmonics.
+
+        :param targets: The default target config to use when analysis requires targets to compare against.
+        """
         self.smile = opensmile.Smile(
             feature_set='resources/smile_configs/egemaps/v02/eGeMAPSv02.conf',
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
-            # feature_set=opensmile.FeatureSet.eGeMAPSv02,
-            # feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
         )
         self.target_config = targets
-        self.cachedResults = None
 
     def analyzePCM(self, pcm_data, sampling_rate) -> AudioFeatures:
+        """
+        Perform analysis on samples.
+
+        :param pcm_data:
+        :param sampling_rate:
+        :return:
+        """
         df = self.smile.process_signal(pcm_data, sampling_rate)
         audio_length = len(pcm_data) / float(sampling_rate)
         return self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
 
     def analyzeFile(self, path) -> AudioFeatures:
-        if (path.endswith('.wav')):
+        """
+        Analyse a complete audio file, wav and mp3 files are supported.
+
+        :param path: The wav/mp3 file to analyse.
+        :return:
+        """
+        if path.endswith('.wav'):
             samples, sampling_rate, audio_length = load_pcm_from_wave(path)
-            
-            # Peak amplitude normalization
-            max_val = np.max(np.abs(samples))
-            if max_val > 0:
-                samples = samples / max_val
-
-            start_time = time.perf_counter()
             df = self.smile.process_signal(samples, sampling_rate)
-            elapsed_time = time.perf_counter() - start_time
-            # print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
-
             return self.extractFeatures(df, sampling_rate, audio_length, samples)
 
-        elif (path.endswith('.mp3')):
-
-            start_time = time.perf_counter()
-            pcm_data, sampling_rate = convertMp3ToPcm(path)
-            elapsed_time = time.perf_counter() - start_time
-            # print(f"MP3 convertion time: {elapsed_time:.4f} seconds.")
-
-            # Peak amplitude normalization
-            max_val = np.max(np.abs(pcm_data))
-            if max_val > 0:
-                pcm_data = pcm_data / max_val
-
-            start_time = time.perf_counter()
-            df = self.smile.process_signal(pcm_data, sampling_rate)
-            elapsed_time = time.perf_counter() - start_time
-            # print(f"Opensmile analysis time: {elapsed_time:.4f} seconds.")
-
-            audio_length = len(pcm_data) / float(sampling_rate)
-            return self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
+        elif path.endswith('.mp3'):
+            samples, sampling_rate = convertMp3ToPcm(path)
+            audio_length = len(samples) / float(sampling_rate)
         else:
             print("Unknown file extension")
             return AudioFeatures()
 
-    def extractFeatures(self, df, sampling_rate, audio_length, pcm_data) -> AudioFeatures:
-        start_time = time.perf_counter()
+        # Peak amplitude normalization
+        max_val = np.max(np.abs(samples))
+        if max_val > 0:
+            samples = samples / max_val
 
-        # 1. Vectorized calculations directly on the DataFrame
+        df = self.smile.process_signal(samples, sampling_rate)
+        return self.extractFeatures(df, sampling_rate, audio_length, samples)
+
+    def extractFeatures(self, df, sampling_rate, audio_length, pcm_data) -> AudioFeatures:
+        # Extract timepoints
         timepoints = df.index.get_level_values('start').total_seconds().to_numpy()
 
-        # Calculate pitch using vectorized numpy math
+        # Calculate pitch by converting semitones to frequencies
         semitones = df['F0semitoneFrom27.5Hz_sma3nz'].to_numpy()
         pitch = 27.5 * (2 ** (semitones / 12))
 
-        # Extract formants and features as fast NumPy arrays
+        # Extract formants
         f1 = df['F1frequency_sma3nz'].to_numpy()
         f2 = df['F2frequency_sma3nz'].to_numpy()
         f3 = df['F3frequency_sma3nz'].to_numpy()
-        loudness_raw = df['Loudness_sma3'].to_numpy()
 
-        # Determine a floor threshold
-        loudness_floor = -0.8
+        # Extract loudness
+        loudness = df['Loudness_sma3'].to_numpy()
 
-        # Vectorized Filtering
-        valid_mask = (pitch > 65) & (pitch < 500) & (f1 > 0) & (loudness_raw > loudness_floor)
+        # Define a filter to remove rubbish data points, we want to skip obviously incorrect pitches and too quite areas
+        valid_mask = (pitch > 65) & \
+                     (pitch < 500) \
+                     & (f1 > 0) \
+                     & (loudness > -0.8)
+
+        # Apply the filter and extract the valid time points
         t_filtered = timepoints[valid_mask]
 
         # 3. Construct the result dictionary using filtered arrays
         result = AudioFeatures(
-            pitch=SignalTimeSeries(x=t_filtered, y=pitch[valid_mask]),
-            F1=SignalTimeSeries(x=t_filtered, y=f1[valid_mask]),
-            F2=SignalTimeSeries(x=t_filtered, y=f2[valid_mask]),
-            F3=SignalTimeSeries(x=t_filtered, y=f3[valid_mask]),
-
-            F1_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F1amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
-            F2_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F2amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
-            F3_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F3amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
-            H1_H2=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-H2_sma3nz'].to_numpy()[valid_mask]),
-            H1_H3=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-H3_sma3nz'].to_numpy()[valid_mask]),
-            H1_H4=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-H4_sma3nz'].to_numpy()[valid_mask]),
-            H1_A3=SignalTimeSeries(x=t_filtered, y=df['logRelF0-H1-A3_sma3nz'].to_numpy()[valid_mask]),
-
-            loudness=SignalTimeSeries(x=t_filtered, y=loudness_raw[valid_mask]),
-
             sample_rate=sampling_rate,
-            length_seconds=audio_length
+            length_seconds=audio_length,
+
+            pitch=SignalTimeSeries(x=t_filtered, y=pitch[valid_mask]),
+            loudness=SignalTimeSeries(x=t_filtered, y=loudness[valid_mask]),
+            weight=calculate_weight(pcm_data, sampling_rate, t_filtered),
+            spectrogram=calculate_spectrogram(pcm_data, sampling_rate),
+
+            F1=SignalTimeSeries(x=t_filtered, y=f1[valid_mask]),
+            F1_Pitch=SignalTimeSeries(x=t_filtered, y=f1[valid_mask] / pitch[valid_mask]),
+            F1_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F1amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+
+            F2=SignalTimeSeries(x=t_filtered, y=f2[valid_mask]),
+            F2_Pitch=SignalTimeSeries(x=t_filtered, y=f2[valid_mask] / pitch[valid_mask]),
+            F2_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F2amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+
+            F3=SignalTimeSeries(x=t_filtered, y=f3[valid_mask]),
+            F3_Pitch=SignalTimeSeries(x=t_filtered, y=f3[valid_mask] / pitch[valid_mask]),
+            F3_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F3amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+
+            H1_H2=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-H2_sma3nz'].to_numpy()[valid_mask])),
+            H1_H3=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-H3_sma3nz'].to_numpy()[valid_mask])),
+            H1_H4=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-H4_sma3nz'].to_numpy()[valid_mask])),
+            H1_A3=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-A3_sma3nz'].to_numpy()[valid_mask])),
         )
 
-        # Calculate Weight (i.e. spectral slopes (continuous))
-        t_weight, weight = calculate_spectral_slope(pcm_data, sampling_rate, nperseg=2048, noverlap=1024)
-
-        # ------------------------------------------------------------------
-        # CRITICAL FIX: Interpolate slopes to match the filtered timepoints
-        # ------------------------------------------------------------------
-        if len(t_weight) > 0 and len(t_filtered) > 0:
-            matched_weight = np.interp(t_filtered, t_weight, weight)
-        else:
-            matched_weight = np.zeros_like(t_filtered)
-
-        # Now slopes perfectly matches the length and timeline of everything else
-        result.weight = SignalTimeSeries(x=t_filtered, y=matched_weight)
-
-
-
-        # --- NEW SPECTROGRAM CALCULATION ---
-        # Using a standard 1024-point Hanning window for speech/audio
-        f_spec, t_spec, Sxx = spectrogram(pcm_data, fs=sampling_rate, window='hann', nperseg=nperseg, noverlap=noverlap)
-
-        # Convert magnitude to log scale (Decibels), strictly clipping to prevent log(0) errors
-        Sxx_db = 10 * np.log10(np.clip(Sxx, 1e-10, None))
-
-        result.spectrogram = SpectrogramData(x=t_spec, y=f_spec, magnitude_db=Sxx_db)
-        # -----------------------------------
-
-
-
-        if len(t_filtered) > 0:
-            # 4. Handle Outliers (Note: reject_outliers should now accept/return SignalTimeSeries)
-            # result.pitch = reject_outliers(result.pitch)
-
-            # 5. Vectorized Min-Max Normalization for Loudness
-            l_arr = result.loudness.y
-            l_min, l_max = l_arr.min(), l_arr.max()
-            if l_max != l_min:
-                result.loudness.y = (l_arr - l_min) / (l_max - l_min)
-
-            elapsed_time = time.perf_counter() - start_time
-            # print(f"Post opensmile analysis time: {elapsed_time:.4f} seconds.")
-
-            # Compute IBW for the formant ratios
-            window_size_samples = 5
-            step_size_samples = 1
-
-            start_time_bw = time.perf_counter()
-
-            # Note: If calculate_bw_and_cf returns a dict like {"x":..., "y":..., "BW":...},
-            # unpack it into the dataclass fields as shown below.
-
-
-            bw_pitch = calculate_bw_and_cf(
-                result.pitch.x, result.pitch.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.Pitch_BW = BandwidthTimeSeries(x=bw_pitch["x"], y=bw_pitch["y"], BW=bw_pitch["BW"])
-
-            bw_f1 = calculate_bw_and_cf(
-                result.F1.x, result.F1.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F1_IBW = BandwidthTimeSeries(x=bw_f1["x"], y=bw_f1["y"], BW=bw_f1["BW"])
-
-            bw_f2 = calculate_bw_and_cf(
-                result.F2.x, result.F2.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F2_IBW = BandwidthTimeSeries(x=bw_f2["x"], y=bw_f2["y"], BW=bw_f2["BW"])
-
-            bw_f3 = calculate_bw_and_cf(
-                result.F3.x, result.F3.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F3_IBW = BandwidthTimeSeries(x=bw_f3["x"], y=bw_f3["y"], BW=bw_f3["BW"])
-
-            # Formant / Pitch Ratios
-            result.F1_Pitch = SignalTimeSeries(x=t_filtered, y=f1[valid_mask] / pitch[valid_mask])
-            bw_f1_pitch = calculate_bw_and_cf(
-                result.F1_Pitch.x, result.F1_Pitch.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F1_Pitch_BW = BandwidthTimeSeries(x=bw_f1_pitch["x"], y=bw_f1_pitch["y"], BW=bw_f1_pitch["BW"])
-
-            result.F2_Pitch = SignalTimeSeries(x=t_filtered, y=f2[valid_mask] / pitch[valid_mask])
-            bw_f2_pitch = calculate_bw_and_cf(
-                result.F2_Pitch.x, result.F2_Pitch.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F2_Pitch_BW = BandwidthTimeSeries(x=bw_f2_pitch["x"], y=bw_f2_pitch["y"], BW=bw_f2_pitch["BW"])
-
-            result.F3_Pitch = SignalTimeSeries(x=t_filtered, y=f3[valid_mask] / pitch[valid_mask])
-            bw_f3_pitch = calculate_bw_and_cf(
-                result.F3_Pitch.x, result.F3_Pitch.y, result.loudness.y,
-                window_size=window_size_samples, step_size=step_size_samples
-            )
-            result.F3_Pitch_BW = BandwidthTimeSeries(x=bw_f3_pitch["x"], y=bw_f3_pitch["y"], BW=bw_f3_pitch["BW"])
-
-
-            elapsed_time_bw = time.perf_counter() - start_time_bw
-            # print(f"BW and CF: {elapsed_time_bw:.4f} seconds.")
-
-            self.cachedResults = result
-            result.size = self.recalculate_size(result)
-            result.size2 = self.recalculate_size2(result)
-
-        else:
-            # print("Silent/unvoiced frame skipped safely.")
-            elapsed_time_bw = 0
+        result.weight2 = calculate_weight2(result.H1_H2, result.H1_H3, result.H1_H4, self.target_config)
+        result.size = calculate_size(result, self.target_config)
 
         return result
 
-    def recalculate_size(self, results: AudioFeatures) -> SignalTimeSeries:
-        if self.target_config is None:
-            return SignalTimeSeries()
+def calculate_size(results: AudioFeatures, target_config) -> SignalTimeSeries:
+    if target_config is None or len(results.pitch.x) == 0:
+        return SignalTimeSeries()
 
-        # Safely unpack the tuple bounds using the target list keys
-        f1_bounds = self.target_config.get_bounds("f1_pitch")
-        f2_bounds = self.target_config.get_bounds("f2_pitch")
-        f3_bounds = self.target_config.get_bounds("f3_pitch")
+    if not target_config.has_all_bounds(["f1_pitch", "f2_pitch", "f3_pitch"]):
+        print("No target defined for F1, F2 or F3. Size cannot be calculated.")
+        return SignalTimeSeries()
 
-        # Provide safe code fallbacks if the profile keys don't match up cleanly
-        f1_min, f1_max, _ = f1_bounds if f1_bounds else (1.0, 15.0, False)
-        f2_min, f2_max, _ = f2_bounds if f2_bounds else (1.0, 30.0, False)
-        f3_min, f3_max, _ = f3_bounds if f3_bounds else (1.0, 50.0, False)
+    # Calculate signed error vectors (Actual - Target)
+    err_F1 = calculate_target_error(results.F1_Pitch.y, target_config.get_mean("f1_pitch"))
+    err_F2 = calculate_target_error(results.F2_Pitch.y, target_config.get_mean("f2_pitch"))
+    err_F3 = calculate_target_error(results.F3_Pitch.y, target_config.get_mean("f3_pitch"))
 
-        size_y = calculate_size(results.F1_Pitch_BW.y,
-                                results.F2_Pitch_BW.y,
-                                results.F3_Pitch_BW.y,
-                                f1_min,
-                                f1_max,
-                                f2_min,
-                                f2_max,
-                                f3_min,
-                                f3_max)
+    # Stack them into a 2D array of shape (3, time_steps)
+    stacked_errors = np.vstack([err_F1, err_F2, err_F3])
 
-        size = SignalTimeSeries(x=results.F1_Pitch_BW.x, y=size_y)
-        return size
+    # Calculate standard RMS magnitude (always positive)
+    # and extract the net direction of the errors at each timestamp
+    rms_magnitude = np.sqrt(np.mean(stacked_errors ** 2, axis=0))
+    net_direction = np.sign(np.sum(stacked_errors, axis=0))
+    size_y = net_direction * rms_magnitude
 
-    def recalculate_size2(self, results: AudioFeatures) -> SignalTimeSeries:
-        if self.target_config is None:
-            return SignalTimeSeries()
-
-        # Safely unpack the tuple bounds using the target list keys
-        f1_bounds = self.target_config.get_bounds("f1")
-        f2_bounds = self.target_config.get_bounds("f2")
-        f3_bounds = self.target_config.get_bounds("f3")
-
-        # Provide safe code fallbacks if the profile keys don't match up cleanly
-        f1_min, f1_max, _ = f1_bounds if f1_bounds else (1.0, 15.0, False)
-        f2_min, f2_max, _ = f2_bounds if f2_bounds else (1.0, 30.0, False)
-        f3_min, f3_max, _ = f3_bounds if f3_bounds else (1.0, 50.0, False)
-
-        size_y = calculate_size(results.F1.y,
-                                results.F2.y,
-                                results.F3.y,
-                                f1_min,
-                                f1_max,
-                                f2_min,
-                                f2_max,
-                                f3_min,
-                                f3_max)
-
-        size = SignalTimeSeries(x=results.F1.x, y=size_y)
-        return size
-
-def calculate_bw_and_cf(x_time, y_freq, y_mag, window_size=500, step_size=100):
-    """Performs a sliding window analysis over 1D spectral arrays to compute
-
-    the center frequency and RMS bandwidth over time.
-    """
-    out_times = []
-    out_center_freqs = []
-    out_bandwidths = []
-
-    num_elements = len(y_mag)
-
-    if num_elements < window_size:
-        window_size = num_elements
-
-    # Slide across the array indices
-    for start_idx in range(0, num_elements - window_size + 1, step_size):
-        end_idx = start_idx + window_size
-
-        # CRITICAL FIX: Slice ALL arrays using the exact same indices
-        # This guarantees window_freqs and window_mags have identical shapes (e.g., shape: (200,))
-        window_freqs = y_freq[start_idx:end_idx]
-        window_mags = y_mag[start_idx:end_idx]
-
-        # Calculate the time point corresponding to the center of this window
-        mid_idx = start_idx + (window_size // 2)
-        current_time = x_time[mid_idx]
-
-        # --- Core Calculations with -20dB Filter ---
-        power = window_mags ** 2
-        peak_power = np.max(power)
-        threshold = 0.01 * peak_power  # -20dB filter
-
-        # Clean the noise, keeping the exact same array shape
-        clean_power = np.where(power >= threshold, power, 0.0)
-        total_power = np.sum(clean_power)
-
-        if total_power == 0:
-            continue
-
-        # Element-wise operations (Safe now because shapes are identical)
-        center_freq = np.sum(window_freqs * clean_power) / total_power
-
-        freq_deviations_squared = (window_freqs - center_freq) ** 2
-        variance = np.sum(freq_deviations_squared * clean_power) / total_power
-        rms_bandwidth = np.sqrt(variance)
-
-        # Save calculations
-        out_times.append(current_time)
-        out_center_freqs.append(center_freq)
-        out_bandwidths.append(rms_bandwidth)
-
-    return {
-        "x": out_times,
-        "y": out_center_freqs,
-        "BW": out_bandwidths,
-    }
-
-
-def reject_outliers(pair: SignalTimeSeries, m: float = outliers_m) -> SignalTimeSeries:
-    # 1. Calculate absolute deviation from the median
-    y_data = pair.y
-    d = np.abs(y_data - np.median(y_data))
-    mdev = np.median(d)
-
-    # 2. Calculate scaled deviation score
-    s = d / mdev if mdev else np.zeros(len(d))
-
-    # 3. Create a vectorized boolean mask for points below the threshold
-    valid_mask = s < m
-
-    # 4. Return a brand new SignalTimeSeries using fast NumPy indexing
-    return SignalTimeSeries(
-        x=pair.x[valid_mask],
-        y=y_data[valid_mask]
-    )
-
+    return SignalTimeSeries(x=results.F1_Pitch.x, y=size_y)
 
 def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512):
     """
@@ -423,7 +219,7 @@ def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512
 
 def load_pcm_from_wave(file_path):
     with wave.open(file_path, 'rb') as wav_file:
-        # 1. Extract audio metadata
+        # Extract audio metadata
         n_channels = wav_file.getnchannels()
         samp_width = wav_file.getsampwidth()
         frame_rate = wav_file.getframerate()
@@ -463,42 +259,6 @@ def load_pcm_from_wave(file_path):
 
         return audio_samples, frame_rate, audio_length
 
-def calculate_size(
-        F1,
-        F2,
-        F3,
-        f1_min,
-        f1_max,
-        f2_min,
-        f2_max,
-        f3_min,
-        f3_max):
-    """
-    Calculates the Signed RMS Error time series for three features
-    based on their respective min/max target boundaries.
-    """
-    f1_target = (f1_max + f1_min) / 2
-    f2_target = (f2_max + f2_min) / 2
-    f3_target = (f3_max + f3_min) / 2
-    # 1. Calculate signed error vectors (Actual - Target)
-    err_F1 = calculate_target_error(F1, f1_target)
-    err_F2 = calculate_target_error(F2, f2_target)
-    err_F3 = calculate_target_error(F3, f3_target)
-
-    # 2. Stack them into a 2D array of shape (3, time_steps)
-    stacked_errors = np.vstack([err_F1, err_F2, err_F3])
-
-    # 3. Calculate standard RMS magnitude (always positive)
-    rms_magnitude = np.sqrt(np.mean(stacked_errors ** 2, axis=0))
-
-    # 4. Extract the net direction of the errors at each timestamp
-    net_direction = np.sign(np.sum(stacked_errors, axis=0))
-
-    # 5. Combine magnitude and direction
-    signed_rms_time_series = net_direction * rms_magnitude
-
-    return signed_rms_time_series
-
 
 def calculate_target_error(vector, target):
     """
@@ -533,4 +293,27 @@ def convertMp3ToPcm(mp3_path):
     # openSMILE expects standard normalized float32/64 audio signals
     signal = pcm_data.astype(np.float32) / 32768.0
     return signal, sampling_rate
+
+def calculate_weight2(H1_H2: SignalTimeSeries, H1_H3: SignalTimeSeries, H1_H4: SignalTimeSeries, targets: TargetConfig, window_duration = 10):
+    # TODO fix
+    return SignalTimeSeries()
+
+def calculate_weight(samples, sampling_rate, timepoints) -> SignalTimeSeries:
+    t_weight, weight = calculate_spectral_slope(samples, sampling_rate, nperseg=2048, noverlap=1024)
+
+    #  Interpolate slopes to match the filtered timepoints
+    if len(t_weight) > 0 and len(timepoints) > 0:
+        matched_weight = np.interp(timepoints, t_weight, weight)
+    else:
+        matched_weight = np.zeros_like(timepoints)
+
+    return SignalTimeSeries(x=timepoints, y=matched_weight)
+
+def calculate_spectrogram(samples, sampling_rate) -> SpectrogramData:
+    f_spec, t_spec, Sxx = spectrogram(samples, fs=sampling_rate, window='hann', nperseg=nperseg, noverlap=noverlap)
+
+    # Convert magnitude to log scale (Decibels), strictly clipping to prevent log(0) errors
+    Sxx_db = 10 * np.log10(np.clip(Sxx, 1e-10, None))
+
+    return SpectrogramData(x=t_spec, y=f_spec, magnitude_db=Sxx_db)
 
