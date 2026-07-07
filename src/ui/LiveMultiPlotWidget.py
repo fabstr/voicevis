@@ -977,10 +977,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.analysedAudioFeatures.F3_Pitch.y,
             self.audioFeatureExtractor.target_config)
 
-        (self.analysedAudioFeatures.weight_instantaneous,
-         self.analysedAudioFeatures.weight_0_1s,
-         self.analysedAudioFeatures.weight_1s,
-         self.analysedAudioFeatures.weight_5s) = calculate_weight(
+        self.analysedAudioFeatures.weight_instantaneous = calculate_weight(
             self.analysedAudioFeatures.H1_H2.x,
             self.analysedAudioFeatures.H1_H2.y,
             self.analysedAudioFeatures.H1_H3.y,

@@ -10,10 +10,10 @@
         {
             "plots": [
                 {
-                    "name": "Loudness",
+                    "name": "Pitch",
                     "local_size": 5,
                     "toggles": {
-                        "Loudness": true
+                        "Pitch": true
                     }
                 },
                 {
@@ -27,24 +27,26 @@
                     "name": "Weight",
                     "local_size": 5,
                     "toggles": {
-                        "Weight": true
+                        "Weight": true,
+                        "0.1 s average weight": false,
+                        "1 s average weight": false,
+                        "5 s average weight": true
                     }
                 }
             ],
             "sizes": [
-                645,
-                644,
-                645
+                653,
+                652,
+                653
             ]
         },
         {
             "plots": [
                 {
-                    "name": "Pitch",
+                    "name": "Loudness",
                     "local_size": 5,
                     "toggles": {
-                        "Pitch": true,
-                        "Pitch BW": false
+                        "Loudness": true
                     }
                 },
                 {
@@ -58,17 +60,14 @@
                     "toggles": {
                         "F1": true,
                         "F2": true,
-                        "F3": true,
-                        "F1 BW": false,
-                        "F2 BW": false,
-                        "F3 BW": false
+                        "F3": true
                     }
                 }
             ],
             "sizes": [
-                645,
-                644,
-                645
+                653,
+                652,
+                653
             ]
         },
         {
@@ -77,31 +76,28 @@
                     "name": "F3/Pitch",
                     "local_size": 5,
                     "toggles": {
-                        "F3/Pitch": true,
-                        "F3/Pitch BW": false
+                        "F3/Pitch": true
                     }
                 },
                 {
                     "name": "F2/Pitch",
                     "local_size": 5,
                     "toggles": {
-                        "F2/Pitch": true,
-                        "F2/Pitch BW": false
+                        "F2/Pitch": true
                     }
                 },
                 {
                     "name": "F1/Pitch",
                     "local_size": 5,
                     "toggles": {
-                        "F1/Pitch": true,
-                        "F1/Pitch BW": false
+                        "F1/Pitch": true
                     }
                 }
             ],
             "sizes": [
-                645,
-                644,
-                645
+                653,
+                652,
+                653
             ]
         },
         {
@@ -129,9 +125,9 @@
                 }
             ],
             "sizes": [
-                645,
-                644,
-                645
+                653,
+                652,
+                653
             ]
         }
     ]

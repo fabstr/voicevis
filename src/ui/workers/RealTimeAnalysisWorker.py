@@ -22,7 +22,7 @@ class RealTimeAnalysisWorker(QtCore.QThread):
         self.sliding_buffer = np.zeros(self.window_size_samples, dtype=np.float32)
 
         # Set an analysis step size (e.g., 100ms = 10 FPS)
-        self.analysis_step_samples = int(self.sample_rate * 0.033)
+        self.analysis_step_samples = int(self.sample_rate * 0.01)
         self.samples_since_last_analysis = 0
         self.total_samples_processed = 0
 
@@ -85,10 +85,10 @@ class RealTimeAnalysisWorker(QtCore.QThread):
 
                             latest_point = FeatureSnapshot(
                                 time=current_time,
-
-                                # Independent Plots
-                                loudness=results.loudness.y[-1],
                                 pitch=results.pitch.y[-1],
+                                loudness=results.loudness.y[-1],
+                                slopes=results.slopes.y[-1],
+                                weight_instantaneous=results.weight_instantaneous.y[-1],
 
                                 # Individual Formants
                                 F1=results.F1.y[-1],
@@ -96,7 +96,6 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                                 F3=results.F3.y[-1],
 
                                 # Weight
-                                weight=results.weight.y[-1],
                                 H1_H2=results.H1_H2.y[-1],
                                 H1_H3=results.H1_H3.y[-1],
                                 H1_H4=results.H1_H4.y[-1],

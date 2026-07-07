@@ -32,9 +32,6 @@ class AudioFeatures:
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     slopes: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     weight_instantaneous: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight_0_1s: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight_1s: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight_5s: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     H1_H2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
@@ -67,7 +64,7 @@ class FeatureSnapshot:
 
     pitch: float
     loudness: float
-    weight: float
+    weight_instantaneous: float
     slopes: float
     H1_H2: float
     H1_H3: float

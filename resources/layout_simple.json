@@ -1,8 +1,8 @@
 {
     "global_size": 5,
     "main_splitter_sizes": [
-        1086,
-        1085
+        1909,
+        1908
     ],
     "columns": [
         {
@@ -15,6 +15,28 @@
                     }
                 },
                 {
+                    "name": "Pitch",
+                    "local_size": 5,
+                    "toggles": {
+                        "Pitch": true
+                    }
+                }
+            ],
+            "sizes": [
+                983,
+                980
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "Size",
+                    "local_size": 5,
+                    "toggles": {
+                        "Size": true
+                    }
+                },
+                {
                     "name": "Weight",
                     "local_size": 5,
                     "toggles": {
@@ -23,31 +45,8 @@
                 }
             ],
             "sizes": [
-                693,
-                691
-            ]
-        },
-        {
-            "plots": [
-                {
-                    "name": "Pitch",
-                    "local_size": 5,
-                    "toggles": {
-                        "Pitch": true,
-                        "Pitch BW": false
-                    }
-                },
-                {
-                    "name": "Size",
-                    "local_size": 5,
-                    "toggles": {
-                        "Size": true
-                    }
-                }
-            ],
-            "sizes": [
-                693,
-                691
+                983,
+                980
             ]
         }
     ]

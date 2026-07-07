@@ -137,9 +137,6 @@ class AudioFeatureExtractor:
         f2_pitch_clean = f2_clean / pitch_clean
         f3_pitch_clean = f3_clean / pitch_clean
 
-        weight_instantaneous, weight_0_1s, weight_1s, weight_5s = calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean, self.target_config)
-
-
         # 3. Construct the result dictionary using filtered arrays
         result = AudioFeatures(
             sample_rate=sampling_rate,
@@ -147,10 +144,7 @@ class AudioFeatureExtractor:
 
             pitch=SignalTimeSeries(x=timepoints, y=pitch_clean),
             loudness=SignalTimeSeries(x=timepoints, y=loudness_clean),
-            weight_instantaneous=weight_instantaneous,
-            weight_0_1s=weight_0_1s,
-            weight_1s=weight_1s,
-            weight_5s=weight_5s,
+            weight_instantaneous=calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean, self.target_config),
             size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),
             spectrogram=calculate_spectrogram(pcm_data, sampling_rate),
             slopes=calculate_slopes(pcm_data, sampling_rate, timepoints),
@@ -333,31 +327,49 @@ def remove_local_outliers_robust(data_array, window=50, threshold=3.0):
 
 
 def calculate_range(y, window_size):
-    # Pad the start of the file with the mean of the first window_size (e.g. 5 s)
-    first_5s = y[:window_size]
+    def trailing_window():
+        # Pad the start of the file with the mean of the first window_size (e.g. 5 s)
+        first_5s = y[:window_size]
 
-    # Handle the edge case where the first 5 seconds is entirely silence/NaN
-    if np.isnan(first_5s).all():
-        first_5s_mean = 0  # Fallback value
-    else:
-        first_5s_mean = np.nanmean(first_5s)
+        # Handle the edge case where the first 5 seconds is entirely silence/NaN
+        if np.isnan(first_5s).all():
+            first_5s_mean = 0  # Fallback value
+        else:
+            first_5s_mean = np.nanmean(first_5s)
 
-    padded_y = np.pad(y, pad_width=(window_size - 1, 0), mode='constant', constant_values=first_5s_mean)
+        padded_y = np.pad(y, pad_width=(window_size - 1, 0), mode='constant', constant_values=first_5s_mean)
 
-    def robust_ptp(x):
-        if np.isnan(x).all():
-            return np.nan  # If the whole 5s window is silent, the range is NaN
+        def robust_ptp(x):
+            if np.isnan(x).all():
+                return np.nan  # If the whole 5s window is silent, the range is NaN
 
-        # Calculate the distance between the 95th and 5th percentiles.
-        # This inherently ignores extreme isolated spikes.
-        return np.nanpercentile(x, 95) - np.nanpercentile(x, 5)
+            # Calculate the distance between the 95th and 5th percentiles.
+            # This inherently ignores extreme isolated spikes.
+            return np.nanpercentile(x, 95) - np.nanpercentile(x, 5)
 
-    # 3. Compute the rolling range using the robust percentile function
-    rolling_range_series = pd.Series(padded_y).rolling(window=window_size, min_periods=1).apply(robust_ptp, raw=True)
+        # 3. Compute the rolling range using the robust percentile function
+        rolling_range_series = pd.Series(padded_y).rolling(window=window_size, min_periods=1).apply(robust_ptp, raw=True)
 
-    # Clean up created NaNs and convert back to numpy
-    range_array = rolling_range_series.to_numpy()[window_size - 1:]
-    return range_array
+        # Clean up created NaNs and convert back to numpy
+        range_array = rolling_range_series.to_numpy()[window_size - 1:]
+        return range_array
+
+    def centered_window():
+        def robust_ptp(x):
+            if np.isnan(x).all():
+                return np.nan
+            return np.nanpercentile(x, 95) - np.nanpercentile(x, 5)
+
+        # center=True eliminates the phase delay.
+        # min_periods=1 handles the edges automatically (it looks forward at the start).
+        rolling_range = pd.Series(y).rolling(
+            window=window_size,
+            center=True,
+            min_periods=1
+        ).apply(robust_ptp, raw=True)
+        return rolling_range
+
+    return centered_window()
 
 
 def calculate_weight(t, H1_H2, H1_H3, H1_H4, target_config: TargetConfig, window_duration = 1):
@@ -368,58 +380,34 @@ def calculate_weight(t, H1_H2, H1_H3, H1_H4, target_config: TargetConfig, window
         print("No target defined for H1_H2, H1_H3 or H1_H4. Weight cannot be calculated.")
         return SignalTimeSeries()
 
-    target_H1_H2_min, target_H1_H2_max, _ = target_config.get_bounds("H1_H2")
-    target_H1_H3_min, target_H1_H3_max, _ = target_config.get_bounds("H1_H3")
-    target_H1_H4_min, target_H1_H4_max, _ = target_config.get_bounds("H1_H4")
-    target_H1_H2_range = target_H1_H2_max - target_H1_H2_min
-    target_H1_H3_range = target_H1_H3_max - target_H1_H3_min
-    target_H1_H4_range = target_H1_H4_max - target_H1_H4_min
-
     fps = 100 # opensmile default, 100 fps
     window_size = window_duration * fps
 
-    weight_instantaneous = np.sqrt(
-        np.mean(
-            np.vstack([
-                calculate_range(H1_H2, 1),
-                calculate_range(H1_H3, 1),
-                calculate_range(H1_H4, 1)
-            ])**2, axis=0))
-
-    weight_0_1s_avg = np.sqrt(
-        np.mean(
-            np.vstack([
-                calculate_range(H1_H2, 10),
-                calculate_range(H1_H3, 10),
-                calculate_range(H1_H4, 10)
-            ])**2, axis=0))
-
-    weight_1s_avg = np.sqrt(
-        np.mean(
-            np.vstack([
-                calculate_range(H1_H2, 1*window_size),
-                calculate_range(H1_H3, 1*window_size),
-                calculate_range(H1_H4, 1*window_size)
-            ])**2, axis=0))
-
-    weight_5s_avg = np.sqrt(
-        np.mean(
-            np.vstack([
-                calculate_range(H1_H2, 5*window_size),
-                calculate_range(H1_H3, 5*window_size),
-                calculate_range(H1_H4, 5*window_size)
-            ])**2, axis=0))
-
-    # H1_H2_error = calculate_target_error(H1_H2_range, target_H1_H2_range)
-    # H1_H3_error = calculate_target_error(H1_H3_range, target_H1_H3_range)
-    # H1_H4_error = calculate_target_error(H1_H4_range, target_H1_H4_range)
+    weight_instantaneous = signed_rms([
+        H1_H2,
+        H1_H3,
+        H1_H4
+    ])
     #
-    # weight = signed_rms([H1_H2_error, H1_H3_error, H1_H4_error])
+    # weight_0_1s_avg = signed_rms([
+    #     calculate_range(H1_H2, 10),
+    #     calculate_range(H1_H3, 10),
+    #     calculate_range(H1_H4, 10)
+    # ])
     #
-    # # invert the values so that softer weight has smaller (negative) values
-    # weight = np.subtract(0, weight)
+    # weight_1s_avg = signed_rms([
+    #     calculate_range(H1_H2, 1*window_size),
+    #     calculate_range(H1_H3, 1*window_size),
+    #     calculate_range(H1_H4, 1*window_size)
+    # ])
+    #
+    # weight_5s_avg = signed_rms([
+    #     calculate_range(H1_H2, 5*window_size),
+    #     calculate_range(H1_H3, 5*window_size),
+    #     calculate_range(H1_H4, 5*window_size)
+    # ])
 
-    return SignalTimeSeries(x=t, y=weight_instantaneous), SignalTimeSeries(x=t, y=weight_0_1s_avg), SignalTimeSeries(x=t, y=weight_1s_avg), SignalTimeSeries(x=t, y=weight_5s_avg)
+    return SignalTimeSeries(x=t, y=weight_instantaneous)
 
 
 def signed_rms(array: np.ndarray) -> np.ndarray:

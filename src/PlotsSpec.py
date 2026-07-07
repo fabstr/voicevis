@@ -57,7 +57,7 @@ spec = {
     },
 
     'Weight': {
-        'title': 'Weight',
+        'title': 'Weight (softness)',
         'y_min': 0,
         'y_max': 50,
         'curves': {
@@ -65,21 +65,6 @@ spec = {
                 'size': defaultSize,
                 'colour': weight,
                 'analysisResult': 'weight_instantaneous',  # Y-axis
-            },
-            '0.1 s average weight': {
-                'size': defaultSize,
-                'colour': 'red',
-                'analysisResult': 'weight_0_1s',  # Y-axis
-            },
-            '1 s average weight': {
-                'size': defaultSize,
-                'colour': 'blue',
-                'analysisResult': 'weight_1s',  # Y-axis
-            },
-            '5 s average weight': {
-                'size': defaultSize,
-                'colour': 'white',
-                'analysisResult': 'weight_5s',  # Y-axis
             },
         },
         'targets': {
@@ -172,49 +157,6 @@ spec = {
         'linkX': 'Loudness'
     },
 
-    'F3_Pitch_rel_amplitude': {
-        'title': 'F3 / Pitch rel amp',
-        'y_min': -120,
-        'y_max': 30,
-        'curves': {
-            'F3_Pitch_rel_amplitude': {
-                'size': defaultSize,
-                'colour': f3_pitch,
-                'analysisResult': 'F3_Pitch_rel_amplitude'
-            },
-        },
-        'linkX': 'Loudness'
-    },
-
-    'F2_Pitch_rel_amplitude': {
-        'title': 'F2 / Pitch rel amp',
-        'y_min': -120,
-        'y_max': 20,
-        'curves': {
-            'F2_Pitch_rel_amplitude': {
-                'size': defaultSize,
-                'colour': f2_pitch,
-                'analysisResult': 'F2_Pitch_rel_amplitude'
-            },
-        },
-        'linkX': 'Loudness'
-    },
-
-    'F1_Pitch_rel_amplitude': {
-        'title': 'F1 / Pitch rel amp',
-        'y_min': -120,
-        'y_max': 20,
-        'curves': {
-            'F1_Pitch_rel_amplitude': {
-                'size': defaultSize,
-                'colour': f1_pitch,
-                'analysisResult': 'F1_Pitch_rel_amplitude'
-            },
-        },
-        'linkX': 'Loudness'
-    },
-
-
     'F2/Pitch': {
         'title': 'F2 / Pitch',
         'y_min': 1,
@@ -258,7 +200,7 @@ spec = {
                 'size': defaultSize,
                 'colour': white,  # Fallback color
                 'analysisResult': 'size', # Y-axis
-                'colorSource': 'weight'   # Z-axis (Color)
+                'colorSource': 'weight_instantaneous'   # Z-axis (Color)
             }
         },
         'targets': {

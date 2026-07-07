@@ -6,25 +6,70 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 from signal_processing.AudioFeatures import FeatureSnapshot
 from signal_processing.TargetConfig import TargetConfig
 from ui import AnnotationMarker
-import numpy as np
-import pyqtgraph as pg
-import qtawesome as qta
-from PyQt6 import QtWidgets, QtGui, QtCore
-
-from signal_processing.AudioFeatures import FeatureSnapshot
-from signal_processing.TargetConfig import TargetConfig
-from ui import AnnotationMarker
 
 
 class DirectionalViewBox(pg.ViewBox):
     """
     A custom ViewBox that intercepts the RectMode scaling to force
-    true 1D visual selection and 1D zooming.
+    true 1D visual selection and 1D zooming. Also supports a measurement
+    mode to calculate delta X and delta Y without Pythagorean distances.
     """
 
     def __init__(self, *args, **kwds):
         super().__init__(*args, **kwds)
         self.zoom_axis = None  # Can be 'x', 'y', or None
+        self.measure_mode = False
+        self.measure_start_pos = None
+
+        # Measurement Visuals
+        self.measure_rect = QtWidgets.QGraphicsRectItem()
+        pen = pg.mkPen('y', width=2, style=QtCore.Qt.PenStyle.DashLine)
+        self.measure_rect.setPen(pen)
+        self.addItem(self.measure_rect, ignoreBounds=True)
+        self.measure_rect.setVisible(False)
+
+        self.measure_text = pg.TextItem(color='y', anchor=(0, 1), fill=pg.mkBrush(0, 0, 0, 150))
+        self.addItem(self.measure_text, ignoreBounds=True)
+        self.measure_text.setVisible(False)
+
+    def mouseDragEvent(self, ev, axis=None):
+        if self.measure_mode:
+            ev.accept()
+            if ev.button() == QtCore.Qt.MouseButton.LeftButton:
+                if ev.isStart():
+                    self.measure_start_pos = self.mapSceneToView(ev.buttonDownScenePos())
+                    self.measure_rect.setVisible(True)
+                    self.measure_text.setVisible(True)
+                elif ev.isFinish():
+                    # Leave the measurement visuals on screen until tool is disabled or a new drag starts
+                    pass
+                else:
+                    if self.measure_start_pos is None:
+                        return
+
+                    current_pos = self.mapSceneToView(ev.scenePos())
+                    x1, y1 = self.measure_start_pos.x(), self.measure_start_pos.y()
+                    x2, y2 = current_pos.x(), current_pos.y()
+
+                    left, right = min(x1, x2), max(x1, x2)
+                    bottom, top = min(y1, y2), max(y1, y2)
+
+                    self.measure_rect.setRect(left, bottom, right - left, top - bottom)
+
+                    dx = right - left
+                    dy = top - bottom
+
+                    # Format delta X as mm:ss or raw seconds
+                    mins = int(dx // 60)
+                    secs = dx % 60
+                    time_str = f"{mins:02d}:{secs:06.2f}" if dx >= 60 else f"{dx:.3f}s"
+
+                    self.measure_text.setText(f"Δt: {time_str}\nΔy: {dy:.3f}")
+                    # Keep the text in the top-right corner of the drag box
+                    self.measure_text.setPos(right, top)
+            return
+
+        super().mouseDragEvent(ev, axis)
 
     def updateScaleBox(self, p1, p2):
         """Visually stretch the yellow selection box to span the locked axis."""
@@ -42,8 +87,6 @@ class DirectionalViewBox(pg.ViewBox):
         """Intercept the zoom application to only apply to the selected axis."""
         if self.zoom_axis is not None:
             if rect is not None:
-                # The user drew a zoom box. Intercept the QRectF and overwrite
-                # the unselected axis with our current view limits.
                 current_rect = self.viewRect()
 
                 if self.zoom_axis == 'x':
@@ -57,27 +100,13 @@ class DirectionalViewBox(pg.ViewBox):
                         current_rect.width(), rect.height()
                     )
             else:
-                # Zoom triggered via code or other means
                 if self.zoom_axis == 'x':
                     yRange = self.viewRange()[1]
                 elif self.zoom_axis == 'y':
                     xRange = self.viewRange()[0]
 
-        # Pass the sanitized arguments up to pyqtgraph to handle normally
         super().setRange(rect=rect, xRange=xRange, yRange=yRange, *args, **kwds)
 
-
-class TimeAxisItem(pg.AxisItem):
-    """Custom AxisItem to format raw seconds into mm:ss.xxx string format."""
-
-    def tickStrings(self, values, scale, spacing):
-        strings = []
-        for v in values:
-            val = max(0.0, float(v))
-            minutes = int(val // 60)
-            seconds = val % 60
-            strings.append(f"{minutes:02d}:{seconds:06.2f}")
-        return strings
 
 class TimeAxisItem(pg.AxisItem):
     """Custom AxisItem to format raw seconds into mm:ss.xxx string format."""
@@ -128,9 +157,8 @@ class PlotController(QtCore.QObject):
         self._build_target_bands()
         self._set_initial_bounds()
 
-        self.widget.scene().sigMouseClicked.connect(
-            lambda event: self.click_callback(event, self.widget, self.spec['title'])
-        )
+        # Intercept clicks using our internal handler to allow measurement suspension
+        self.widget.scene().sigMouseClicked.connect(self._handle_scene_click)
 
         # 3. Build the Wrapper UI
         self._build_wrapper_ui(initial_size)
@@ -140,6 +168,12 @@ class PlotController(QtCore.QObject):
 
         if self.spec.get('hidden', False):
             self.container.setVisible(False)
+
+    def _handle_scene_click(self, event):
+        """Gatekeeper for click events. Drops them if measuring."""
+        if self.btn_measure.isChecked():
+            return
+        self.click_callback(event, self.widget, self.spec['title'])
 
     def _build_wrapper_ui(self, initial_size):
         self.container = QtWidgets.QFrame()
@@ -163,20 +197,26 @@ class PlotController(QtCore.QObject):
         self.selector.currentTextChanged.connect(lambda new_name: self.change_plot_callback(self, new_name))
         top_bar_layout.addWidget(self.selector)
 
-        # --- Zoom Controls (X / Y) ---
+        # --- Interactive Tools (Zoom X / Zoom Y / Measure) ---
         self.btn_zoom_x = QtWidgets.QPushButton()
         self.btn_zoom_y = QtWidgets.QPushButton()
+        self.btn_measure = QtWidgets.QPushButton()
 
         self.btn_zoom_x.setCheckable(True)
         self.btn_zoom_y.setCheckable(True)
+        self.btn_measure.setCheckable(True)
+
         self.btn_zoom_x.setToolTip("Drag to zoom X-axis")
         self.btn_zoom_y.setToolTip("Drag to zoom Y-axis")
+        self.btn_measure.setToolTip("Measure Delta Time and Value")
 
         self.btn_zoom_x.toggled.connect(self._toggle_zoom_x)
         self.btn_zoom_y.toggled.connect(self._toggle_zoom_y)
+        self.btn_measure.toggled.connect(self._toggle_measure)
 
         top_bar_layout.addWidget(self.btn_zoom_x)
         top_bar_layout.addWidget(self.btn_zoom_y)
+        top_bar_layout.addWidget(self.btn_measure)
 
         top_bar_layout.addStretch()
 
@@ -207,57 +247,80 @@ class PlotController(QtCore.QObject):
         self.widget.setStyleSheet("border: none;")
         layout.addWidget(self.widget, stretch=1)
 
-    # --- Zoom Tool Logic ---
+    # --- Tool Mutually Exclusive Logic ---
+
+    def _uncheck_others(self, active_btn):
+        for btn in [self.btn_zoom_x, self.btn_zoom_y, self.btn_measure]:
+            if btn != active_btn and btn.isChecked():
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
 
     def _toggle_zoom_x(self, checked):
         if checked:
-            self.btn_zoom_y.blockSignals(True)
-            self.btn_zoom_y.setChecked(False)
-            self.btn_zoom_y.blockSignals(False)
+            self._uncheck_others(self.btn_zoom_x)
         self._update_mouse_mode()
 
     def _toggle_zoom_y(self, checked):
         if checked:
-            self.btn_zoom_x.blockSignals(True)
-            self.btn_zoom_x.setChecked(False)
-            self.btn_zoom_x.blockSignals(False)
+            self._uncheck_others(self.btn_zoom_y)
+        self._update_mouse_mode()
+
+    def _toggle_measure(self, checked):
+        if checked:
+            self._uncheck_others(self.btn_measure)
         self._update_mouse_mode()
 
     def _update_mouse_mode(self):
         vb = self.widget.getViewBox()
 
+        # Reset measuring state
+        vb.measure_mode = False
+
         if self.btn_zoom_x.isChecked():
             vb.zoom_axis = 'x'
             vb.setMouseMode(pg.ViewBox.RectMode)
             self.widget.setMouseEnabled(x=True, y=False)
+
         elif self.btn_zoom_y.isChecked():
             vb.zoom_axis = 'y'
             vb.setMouseMode(pg.ViewBox.RectMode)
             self.widget.setMouseEnabled(x=False, y=True)
+
+        elif self.btn_measure.isChecked():
+            vb.zoom_axis = None
+            vb.measure_mode = True
+            # Suspend standard panning functionality
+            self.widget.setMouseEnabled(x=False, y=False)
+
         else:
+            # Default state
             vb.zoom_axis = None
             vb.setMouseMode(pg.ViewBox.PanMode)
+            # Hide the measurement visuals when deactivated
+            vb.measure_rect.setVisible(False)
+            vb.measure_text.setVisible(False)
             self._configure_mouse_behavior()
 
         # Update icons to match the new toggle state
-        self._update_zoom_icons()
+        self._update_icons()
 
-    def _update_zoom_icons(self):
+    def _update_icons(self):
         """Forces the correct icon color based on selection state and Qt palette."""
         if not hasattr(self, 'btn_zoom_x'):
             return
 
         palette = QtWidgets.QApplication.palette()
-        # Default text color (dark in light theme, light in dark theme)
         text_color = palette.color(QtGui.QPalette.ColorRole.WindowText).name()
-        # Color guaranteed to contrast with the highlight color
         highlight_text = palette.color(QtGui.QPalette.ColorRole.HighlightedText).name()
 
         color_x = highlight_text if self.btn_zoom_x.isChecked() else text_color
         color_y = highlight_text if self.btn_zoom_y.isChecked() else text_color
+        color_m = highlight_text if self.btn_measure.isChecked() else text_color
 
         self.btn_zoom_x.setIcon(qta.icon('fa5s.arrows-alt-h', color=color_x))
         self.btn_zoom_y.setIcon(qta.icon('fa5s.arrows-alt-v', color=color_y))
+        self.btn_measure.setIcon(qta.icon('fa5s.ruler-combined', color=color_m))
 
     # -----------------------
 
@@ -269,7 +332,6 @@ class PlotController(QtCore.QObject):
 
             cb = QtWidgets.QCheckBox(curve_key)
             cb.setChecked(True)
-
             cb.toggled.connect(lambda checked, ck=curve_key: self.set_curve_visible(ck, checked))
 
             self.checkbox_layout.addWidget(cb)
@@ -340,9 +402,10 @@ class PlotController(QtCore.QObject):
             """
             self.btn_zoom_x.setStyleSheet(btn_style)
             self.btn_zoom_y.setStyleSheet(btn_style)
+            self.btn_measure.setStyleSheet(btn_style)
 
             # Immediately force the icon colors to match the new theme
-            self._update_zoom_icons()
+            self._update_icons()
 
         if hasattr(self, 'toggles'):
             for cb in self.toggles:
@@ -428,11 +491,11 @@ class PlotController(QtCore.QObject):
                 if len(z_data.x) > 0 and len(x_arr) > 0:
                     z_interp = np.interp(x_arr, z_data.x, z_data.y)
                     z_clipped = np.clip(z_interp, 0.0, 4e-7)
-                    z_norm = (z_clipped - 0.0) / (6e-7 - 0.0)
+                    z_norm = (z_clipped - 0.0) / (40 - 0.0)
                     z_restricted = 0.1 + (z_norm * 0.90)
 
                     cmap = pg.colormap.get('viridis')
-                    colors = cmap.map(z_restricted)
+                    colors = cmap.map(z_interp)
                     brushes = [pg.mkBrush(tuple(c)) for c in colors]
                     edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
 
@@ -509,6 +572,7 @@ class PlotController(QtCore.QObject):
         if hasattr(self, 'btn_zoom_x'):
             self.btn_zoom_x.setChecked(False)
             self.btn_zoom_y.setChecked(False)
+            self.btn_measure.setChecked(False)
 
         y_min = self.spec.get('y_min')
         y_max = self.spec.get('y_max')

@@ -58,14 +58,14 @@
         {
             "name": "weight",
             "min": 0.0,
-            "max": 1e-06,
+            "max": 18.0,
             "enabled": true
         },
         {
             "name": "weight2",
             "min": -20.0,
             "max": 20.0,
-            "enabled": true
+            "enabled": false
         },
         {
             "name": "h1_h2",
