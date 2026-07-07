@@ -98,19 +98,14 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                                 # Weight
                                 weight=results.weight.y[-1],
                                 H1_H2=results.H1_H2.y[-1],
+                                H1_H3=results.H1_H3.y[-1],
+                                H1_H4=results.H1_H4.y[-1],
                                 H1_A3=results.H1_A3.y[-1],
 
                                 F1_Pitch=results.F1_Pitch.y[-1] if len(results.F1_Pitch.y) > 0 else None,
                                 F2_Pitch=results.F2_Pitch.y[-1] if len(results.F2_Pitch.y) > 0 else None,
                                 F3_Pitch=results.F3_Pitch.y[-1] if len(results.F3_Pitch.y) > 0 else None,
 
-                                F1_Pitch_BW=results.F1_Pitch_BW.y[-1] if len(results.F1_Pitch_BW.y) > 0 else None,
-                                F2_Pitch_BW=results.F2_Pitch_BW.y[-1] if len(results.F2_Pitch_BW.y) > 0 else None,
-                                F3_Pitch_BW=results.F3_Pitch_BW.y[-1] if len(results.F3_Pitch_BW.y) > 0 else None,
-
-                                F1_IBW=results.F1_IBW.y[-1] if len(results.F1_IBW.y) > 0 else None,
-                                F2_IBW=results.F2_IBW.y[-1] if len(results.F2_IBW.y) > 0 else None,
-                                F3_IBW=results.F3_IBW.y[-1] if len(results.F3_IBW.y) > 0 else None,
                                 size=results.size.y[-1] if len(results.size.y) > 0 else None,
 
                                 spectrogram=latest_spec

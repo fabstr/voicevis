@@ -1,0 +1,71 @@
+{
+    "global_size": 2,
+    "main_splitter_sizes": [
+        1019,
+        876
+    ],
+    "columns": [
+        {
+            "plots": [
+                {
+                    "name": "Loudness",
+                    "local_size": 2,
+                    "toggles": {
+                        "Loudness": true
+                    }
+                },
+                {
+                    "name": "Size",
+                    "local_size": 2,
+                    "toggles": {
+                        "Size": true
+                    }
+                },
+                {
+                    "name": "Weight2",
+                    "local_size": 2,
+                    "toggles": {
+                        "Wight min": true,
+                        "Wight max": true,
+                        "Wight mean": true
+                    }
+                }
+            ],
+            "sizes": [
+                647,
+                650,
+                652
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "H1_H2",
+                    "local_size": 2,
+                    "toggles": {
+                        "H1_H2": true
+                    }
+                },
+                {
+                    "name": "H1_H3",
+                    "local_size": 2,
+                    "toggles": {
+                        "H1_H3": true
+                    }
+                },
+                {
+                    "name": "H1_H4",
+                    "local_size": 2,
+                    "toggles": {
+                        "H1_H4": true
+                    }
+                }
+            ],
+            "sizes": [
+                650,
+                647,
+                652
+            ]
+        }
+    ]
+}

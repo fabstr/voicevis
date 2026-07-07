@@ -30,31 +30,30 @@ class AudioFeatures:
     pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight2_range: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    slopes: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight_instantaneous: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight_0_1s: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight_1s: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight_5s: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+
     H1_H2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H4: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_A3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
-    # Formants & Initial Bandwidths (IBW)
     F1: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    F3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-
-    # Pitch-Relative Formants (Standard & Bandwidth variants)
     F1_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F1_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
+    F2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F2_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F2_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
+    F3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F3_Pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     F3_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     size: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    size_vs_weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     spectrogram: SpectrogramData = field(default_factory=SpectrogramData)
 
@@ -66,22 +65,20 @@ class AudioFeatures:
 class FeatureSnapshot:
     time: float
 
-    # Independent Plots
-    loudness: float
     pitch: float
-
-    # Individual Formants
-    F1: float
-    F2: float
-    F3: float
-
-    # Spectral Slopes
+    loudness: float
     weight: float
+    slopes: float
     H1_H2: float
     H1_H3: float
     H1_H4: float
     H1_A3: float
 
+    F1: float
+    F2: float
+    F3: float
+
+    # Spectral Slopes
     # Formant to pitch ratios and BW
     F1_Pitch: Optional[float] = None
     F2_Pitch: Optional[float] = None

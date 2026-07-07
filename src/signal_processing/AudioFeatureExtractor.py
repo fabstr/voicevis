@@ -3,6 +3,7 @@ import time
 import opensmile
 import miniaudio
 import numpy as np
+import pandas as pd
 import wave
 
 from scipy.signal import stft, spectrogram
@@ -119,44 +120,60 @@ class AudioFeatureExtractor:
                      & (f1 > 0) \
                      & (loudness > -0.8)
 
-        # Apply the filter and extract the valid time points
-        t_filtered = timepoints[valid_mask]
+        pitch_clean = np.where(valid_mask, pitch, np.nan)
+        loudness_clean = np.where(valid_mask, loudness, np.nan)
+        f1_clean = np.where(valid_mask, f1, np.nan)
+        f2_clean = np.where(valid_mask, f2, np.nan)
+        f3_clean = np.where(valid_mask, f3, np.nan)
+
+        # Do the same for your H1_H2, H1_H3, etc.
+        h1_h2_clean = remove_local_outliers_robust(np.where(valid_mask, df['logRelF0-H1-H2_sma3nz'].to_numpy(), np.nan))
+        h1_h3_clean = remove_local_outliers_robust(np.where(valid_mask, df['logRelF0-H1-H3_sma3nz'].to_numpy(), np.nan))
+        h1_h4_clean = remove_local_outliers_robust(np.where(valid_mask, df['logRelF0-H1-H4_sma3nz'].to_numpy(), np.nan))
+        h1_a3_clean = remove_local_outliers_robust(np.where(valid_mask, df['logRelF0-H1-A3_sma3nz'].to_numpy(), np.nan))
+
+        # It is assumed that this data don't need cleaning again
+        f1_pitch_clean = f1_clean / pitch_clean
+        f2_pitch_clean = f2_clean / pitch_clean
+        f3_pitch_clean = f3_clean / pitch_clean
+
+        weight_instantaneous, weight_0_1s, weight_1s, weight_5s = calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean, self.target_config)
+
 
         # 3. Construct the result dictionary using filtered arrays
         result = AudioFeatures(
             sample_rate=sampling_rate,
             length_seconds=audio_length,
 
-            pitch=SignalTimeSeries(x=t_filtered, y=pitch[valid_mask]),
-            loudness=SignalTimeSeries(x=t_filtered, y=loudness[valid_mask]),
-            weight=calculate_weight(pcm_data, sampling_rate, t_filtered),
+            pitch=SignalTimeSeries(x=timepoints, y=pitch_clean),
+            loudness=SignalTimeSeries(x=timepoints, y=loudness_clean),
+            weight_instantaneous=weight_instantaneous,
+            weight_0_1s=weight_0_1s,
+            weight_1s=weight_1s,
+            weight_5s=weight_5s,
+            size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),
             spectrogram=calculate_spectrogram(pcm_data, sampling_rate),
+            slopes=calculate_slopes(pcm_data, sampling_rate, timepoints),
 
-            F1=SignalTimeSeries(x=t_filtered, y=f1[valid_mask]),
-            F1_Pitch=SignalTimeSeries(x=t_filtered, y=f1[valid_mask] / pitch[valid_mask]),
-            F1_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F1amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+            F1=SignalTimeSeries(x=timepoints, y=f1_clean),
+            F2=SignalTimeSeries(x=timepoints, y=f2_clean),
+            F3=SignalTimeSeries(x=timepoints, y=f3_clean),
 
-            F2=SignalTimeSeries(x=t_filtered, y=f2[valid_mask]),
-            F2_Pitch=SignalTimeSeries(x=t_filtered, y=f2[valid_mask] / pitch[valid_mask]),
-            F2_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F2amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
+            F1_Pitch=SignalTimeSeries(x=timepoints, y=f1_pitch_clean),
+            F2_Pitch=SignalTimeSeries(x=timepoints, y=f2_pitch_clean),
+            F3_Pitch=SignalTimeSeries(x=timepoints, y=f3_pitch_clean),
 
-            F3=SignalTimeSeries(x=t_filtered, y=f3[valid_mask]),
-            F3_Pitch=SignalTimeSeries(x=t_filtered, y=f3[valid_mask] / pitch[valid_mask]),
-            F3_Pitch_rel_amplitude=SignalTimeSeries(x=t_filtered, y=df['F3amplitudeLogRelF0_sma3nz'].to_numpy()[valid_mask]),
-
-            H1_H2=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-H2_sma3nz'].to_numpy()[valid_mask])),
-            H1_H3=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-H3_sma3nz'].to_numpy()[valid_mask])),
-            H1_H4=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-H4_sma3nz'].to_numpy()[valid_mask])),
-            H1_A3=SignalTimeSeries(x=t_filtered, y=np.subtract(0, df['logRelF0-H1-A3_sma3nz'].to_numpy()[valid_mask])),
+            H1_H2=SignalTimeSeries(x=timepoints, y=h1_h2_clean),
+            H1_H3=SignalTimeSeries(x=timepoints, y=h1_h3_clean),
+            H1_H4=SignalTimeSeries(x=timepoints, y=h1_h4_clean),
+            H1_A3=SignalTimeSeries(x=timepoints, y=h1_a3_clean),
         )
 
-        result.weight2 = calculate_weight2(result.H1_H2, result.H1_H3, result.H1_H4, self.target_config)
-        result.size = calculate_size(result, self.target_config)
 
         return result
 
-def calculate_size(results: AudioFeatures, target_config) -> SignalTimeSeries:
-    if target_config is None or len(results.pitch.x) == 0:
+def calculate_size(t, F1_Pitch, F2_Pitch, F3_Pitch, target_config) -> SignalTimeSeries:
+    if target_config is None or len(t) == 0:
         return SignalTimeSeries()
 
     if not target_config.has_all_bounds(["f1_pitch", "f2_pitch", "f3_pitch"]):
@@ -164,20 +181,13 @@ def calculate_size(results: AudioFeatures, target_config) -> SignalTimeSeries:
         return SignalTimeSeries()
 
     # Calculate signed error vectors (Actual - Target)
-    err_F1 = calculate_target_error(results.F1_Pitch.y, target_config.get_mean("f1_pitch"))
-    err_F2 = calculate_target_error(results.F2_Pitch.y, target_config.get_mean("f2_pitch"))
-    err_F3 = calculate_target_error(results.F3_Pitch.y, target_config.get_mean("f3_pitch"))
+    err_F1 = calculate_target_error(F1_Pitch, target_config.get_mean("f1_pitch"))
+    err_F2 = calculate_target_error(F2_Pitch, target_config.get_mean("f2_pitch"))
+    err_F3 = calculate_target_error(F3_Pitch, target_config.get_mean("f3_pitch"))
 
-    # Stack them into a 2D array of shape (3, time_steps)
-    stacked_errors = np.vstack([err_F1, err_F2, err_F3])
+    size_y = signed_rms([err_F1, err_F2, err_F3])
 
-    # Calculate standard RMS magnitude (always positive)
-    # and extract the net direction of the errors at each timestamp
-    rms_magnitude = np.sqrt(np.mean(stacked_errors ** 2, axis=0))
-    net_direction = np.sign(np.sum(stacked_errors, axis=0))
-    size_y = net_direction * rms_magnitude
-
-    return SignalTimeSeries(x=results.F1_Pitch.x, y=size_y)
+    return SignalTimeSeries(x=t, y=size_y)
 
 def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512):
     """
@@ -294,20 +304,144 @@ def convertMp3ToPcm(mp3_path):
     signal = pcm_data.astype(np.float32) / 32768.0
     return signal, sampling_rate
 
-def calculate_weight2(H1_H2: SignalTimeSeries, H1_H3: SignalTimeSeries, H1_H4: SignalTimeSeries, targets: TargetConfig, window_duration = 10):
-    # TODO fix
-    return SignalTimeSeries()
 
-def calculate_weight(samples, sampling_rate, timepoints) -> SignalTimeSeries:
-    t_weight, weight = calculate_spectral_slope(samples, sampling_rate, nperseg=2048, noverlap=1024)
+def remove_local_outliers_robust(data_array, window=50, threshold=3.0):
+    """Replaces points with NaN using robust Median Absolute Deviation (MAD)."""
+    series = pd.Series(data_array)
+
+    # 1. Calculate local rolling median (immune to extreme outliers)
+    rolling_median = series.rolling(window=window, center=True, min_periods=1).median()
+
+    # 2. Calculate absolute deviations from the local median
+    deviations = np.abs(series - rolling_median)
+
+    # 3. Calculate the rolling MAD
+    # (Multiplying by 1.4826 scales MAD to be equivalent to a standard deviation for a normal distribution)
+    rolling_mad = deviations.rolling(window=window, center=True, min_periods=1).median() * 1.4826
+
+    # 4. Prevent division by zero in perfectly flat/silent sections
+    rolling_mad = rolling_mad.replace(0, np.nan)
+
+    # 5. Calculate robust Z-score
+    robust_z_scores = deviations / rolling_mad
+
+    # 6. Keep original data where robust Z-score is below threshold, otherwise set to NaN
+    # We use np.nan_to_num on the z-scores to handle any lingering NaNs from the division safely
+    cleaned_series = np.where(np.nan_to_num(robust_z_scores, nan=0.0) < threshold, data_array, np.nan)
+
+    return cleaned_series
+
+
+def calculate_range(y, window_size):
+    # Pad the start of the file with the mean of the first window_size (e.g. 5 s)
+    first_5s = y[:window_size]
+
+    # Handle the edge case where the first 5 seconds is entirely silence/NaN
+    if np.isnan(first_5s).all():
+        first_5s_mean = 0  # Fallback value
+    else:
+        first_5s_mean = np.nanmean(first_5s)
+
+    padded_y = np.pad(y, pad_width=(window_size - 1, 0), mode='constant', constant_values=first_5s_mean)
+
+    def robust_ptp(x):
+        if np.isnan(x).all():
+            return np.nan  # If the whole 5s window is silent, the range is NaN
+
+        # Calculate the distance between the 95th and 5th percentiles.
+        # This inherently ignores extreme isolated spikes.
+        return np.nanpercentile(x, 95) - np.nanpercentile(x, 5)
+
+    # 3. Compute the rolling range using the robust percentile function
+    rolling_range_series = pd.Series(padded_y).rolling(window=window_size, min_periods=1).apply(robust_ptp, raw=True)
+
+    # Clean up created NaNs and convert back to numpy
+    range_array = rolling_range_series.to_numpy()[window_size - 1:]
+    return range_array
+
+
+def calculate_weight(t, H1_H2, H1_H3, H1_H4, target_config: TargetConfig, window_duration = 1):
+    if target_config is None or len(t) == 0:
+        return SignalTimeSeries()
+
+    if not target_config.has_all_bounds(["H1_H2", "H1_H3", "H1_H4"]):
+        print("No target defined for H1_H2, H1_H3 or H1_H4. Weight cannot be calculated.")
+        return SignalTimeSeries()
+
+    target_H1_H2_min, target_H1_H2_max, _ = target_config.get_bounds("H1_H2")
+    target_H1_H3_min, target_H1_H3_max, _ = target_config.get_bounds("H1_H3")
+    target_H1_H4_min, target_H1_H4_max, _ = target_config.get_bounds("H1_H4")
+    target_H1_H2_range = target_H1_H2_max - target_H1_H2_min
+    target_H1_H3_range = target_H1_H3_max - target_H1_H3_min
+    target_H1_H4_range = target_H1_H4_max - target_H1_H4_min
+
+    fps = 100 # opensmile default, 100 fps
+    window_size = window_duration * fps
+
+    weight_instantaneous = np.sqrt(
+        np.mean(
+            np.vstack([
+                calculate_range(H1_H2, 1),
+                calculate_range(H1_H3, 1),
+                calculate_range(H1_H4, 1)
+            ])**2, axis=0))
+
+    weight_0_1s_avg = np.sqrt(
+        np.mean(
+            np.vstack([
+                calculate_range(H1_H2, 10),
+                calculate_range(H1_H3, 10),
+                calculate_range(H1_H4, 10)
+            ])**2, axis=0))
+
+    weight_1s_avg = np.sqrt(
+        np.mean(
+            np.vstack([
+                calculate_range(H1_H2, 1*window_size),
+                calculate_range(H1_H3, 1*window_size),
+                calculate_range(H1_H4, 1*window_size)
+            ])**2, axis=0))
+
+    weight_5s_avg = np.sqrt(
+        np.mean(
+            np.vstack([
+                calculate_range(H1_H2, 5*window_size),
+                calculate_range(H1_H3, 5*window_size),
+                calculate_range(H1_H4, 5*window_size)
+            ])**2, axis=0))
+
+    # H1_H2_error = calculate_target_error(H1_H2_range, target_H1_H2_range)
+    # H1_H3_error = calculate_target_error(H1_H3_range, target_H1_H3_range)
+    # H1_H4_error = calculate_target_error(H1_H4_range, target_H1_H4_range)
+    #
+    # weight = signed_rms([H1_H2_error, H1_H3_error, H1_H4_error])
+    #
+    # # invert the values so that softer weight has smaller (negative) values
+    # weight = np.subtract(0, weight)
+
+    return SignalTimeSeries(x=t, y=weight_instantaneous), SignalTimeSeries(x=t, y=weight_0_1s_avg), SignalTimeSeries(x=t, y=weight_1s_avg), SignalTimeSeries(x=t, y=weight_5s_avg)
+
+
+def signed_rms(array: np.ndarray) -> np.ndarray:
+    # Stack them into a 2D array of shape (n, time_steps)
+    stacked_errors = np.vstack(array)
+
+    # Calculate standard RMS magnitude (always positive)
+    # and extract the net direction of the errors at each timestamp
+    rms_magnitude = np.sqrt(np.mean(stacked_errors ** 2, axis=0))
+    net_direction = np.sign(np.sum(stacked_errors, axis=0))
+    return net_direction * rms_magnitude
+
+def calculate_slopes(samples, sampling_rate, timepoints) -> SignalTimeSeries:
+    t_slopes, slopes = calculate_spectral_slope(samples, sampling_rate, nperseg=2048, noverlap=1024)
 
     #  Interpolate slopes to match the filtered timepoints
-    if len(t_weight) > 0 and len(timepoints) > 0:
-        matched_weight = np.interp(timepoints, t_weight, weight)
+    if len(t_slopes) > 0 and len(timepoints) > 0:
+        matched_slopes = np.interp(timepoints, t_slopes, slopes)
     else:
-        matched_weight = np.zeros_like(timepoints)
+        matched_slopes = np.zeros_like(timepoints)
 
-    return SignalTimeSeries(x=timepoints, y=matched_weight)
+    return SignalTimeSeries(x=timepoints, y=matched_slopes)
 
 def calculate_spectrogram(samples, sampling_rate) -> SpectrogramData:
     f_spec, t_spec, Sxx = spectrogram(samples, fs=sampling_rate, window='hann', nperseg=nperseg, noverlap=noverlap)

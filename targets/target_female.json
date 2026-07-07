@@ -1,4 +1,5 @@
 {
+    "config_name": "Default female",
     "targets": [
         {
             "name": "loudness",
@@ -61,6 +62,12 @@
             "enabled": true
         },
         {
+            "name": "weight2",
+            "min": -30.0,
+            "max": 10.0,
+            "enabled": true
+        },
+        {
             "name": "size2",
             "min": -500.0,
             "max": 500.0,
@@ -68,26 +75,26 @@
         },
         {
             "name": "h1_h2",
-            "min": -21.7,
-            "max": 7.7,
+            "min": -10,
+            "max": 21.7,
             "enabled": true
         },
         {
             "name": "h1_h3",
-            "min": -31.2,
-            "max": 8.0,
+            "min": -8.0,
+            "max": 31.2,
             "enabled": true
         },
         {
             "name": "h1_h4",
-            "min": -37.89,
-            "max": 2.55,
+            "min": -2.55,
+            "max": 37.89,
             "enabled": true
         },
         {
             "name": "h1_a3",
-            "min": -30.0,
             "max": 0.0,
+            "min": 30.0,
             "enabled": true
         }
     ]

@@ -4,6 +4,7 @@ import time
 import os
 import json
 import shutil
+import tempfile
 
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
@@ -12,7 +13,7 @@ import qtawesome as qta
 
 
 from PlotsSpec import spec, defaultSize
-from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig, calculate_size
+from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig, calculate_size, calculate_weight
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
@@ -62,6 +63,12 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.menu_toggle_actions = {
             'plots': {}
         }
+
+        app = QtWidgets.QApplication.instance()
+        if app:
+            app.aboutToQuit.connect(self.save_state_on_exit)
+
+        self.restore_previous_state()
 
     def setup_audio(self):
         self.audio_format = QAudioFormat()
@@ -222,6 +229,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # Add them directly to the main layout
         top_buttons_layout.addWidget(self.time_label)
         top_buttons_layout.addWidget(self.time_edit)
+
+        # --- Target Name Label ---
+        self.target_name_label = QtWidgets.QLabel(f"|  Target: {self.target_config.config_name}")
+       # self.target_name_label.setStyleSheet("color: gray;")
+        top_buttons_layout.addWidget(self.target_name_label)
 
         # --- Second Stretch to keep the time widget centered ---
         top_buttons_layout.addStretch()
@@ -949,12 +961,31 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def set_target_config(self, new_config: TargetConfig):
         self.audioFeatureExtractor.target_config = new_config
 
+        # --- NEW: Update the display label ---
+        if hasattr(self, 'target_name_label'):
+            self.target_name_label.setText(f"|  Target: {new_config.config_name}")
+
         for controller in self.plot_cells:
             for band in controller.target_bands.values():
                 band['enabled'] = True
             controller.update_target_bands(new_config)
 
-        self.analysedAudioFeatures.size = calculate_size(self.analysedAudioFeatures,  self.audioFeatureExtractor.target_config)
+        self.analysedAudioFeatures.size = calculate_size(
+            self.analysedAudioFeatures.F1_Pitch.x,
+            self.analysedAudioFeatures.F1_Pitch.y,
+            self.analysedAudioFeatures.F2_Pitch.y,
+            self.analysedAudioFeatures.F3_Pitch.y,
+            self.audioFeatureExtractor.target_config)
+
+        (self.analysedAudioFeatures.weight_instantaneous,
+         self.analysedAudioFeatures.weight_0_1s,
+         self.analysedAudioFeatures.weight_1s,
+         self.analysedAudioFeatures.weight_5s) = calculate_weight(
+            self.analysedAudioFeatures.H1_H2.x,
+            self.analysedAudioFeatures.H1_H2.y,
+            self.analysedAudioFeatures.H1_H3.y,
+            self.analysedAudioFeatures.H1_H4.y,
+            self.audioFeatureExtractor.target_config)
 
         self.update_plots()
 
@@ -1142,8 +1173,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.help_window.raise_()
         self.help_window.activateWindow()
 
-    def save_layout(self):
-        """Iterates through current columns and rows to save active plots, spacing, and options to JSON."""
+    #################### Layout Management ####################
+
+    def get_current_layout_data(self):
+        """Extracts the current state of the plots, sizes, and toggles into a dictionary."""
         layout_data = {
             "global_size": self.size_slider.value() if hasattr(self, 'size_slider') else defaultSize,
             "main_splitter_sizes": self.plot_splitter.sizes(),
@@ -1157,20 +1190,15 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             }
             for i in range(col.count()):
                 widget = col.widget(i)
-                # Find the PlotController that owns this widget container
                 for controller in self.plot_cells:
                     if controller.container == widget:
-
-                        # 1. Extract curve toggle states using the checkbox text as the key
                         toggles_state = {}
                         for cb in getattr(controller, 'toggles', []):
                             toggles_state[cb.text()] = cb.isChecked()
 
-                        # 2. Extract local size slider value
                         local_size = controller.local_slider.value() if hasattr(controller,
                                                                                 'local_slider') else defaultSize
 
-                        # 3. Save as a dict instead of just a string
                         col_data["plots"].append({
                             "name": controller.plot_name,
                             "local_size": local_size,
@@ -1179,12 +1207,92 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                         break
 
             layout_data["columns"].append(col_data)
+        return layout_data
 
+    def apply_layout_data(self, layout_data):
+        """Applies a previously constructed layout_data dictionary to the UI."""
+        if "columns" not in layout_data:
+            raise ValueError("Invalid layout configuration format.")
+
+        # 1. Restore global point size
+        if "global_size" in layout_data and hasattr(self, 'size_slider'):
+            self.size_slider.blockSignals(True)
+            self.size_slider.setValue(layout_data["global_size"])
+            self.size_slider.blockSignals(False)
+
+        # 2. Clear current layout
+        for col in self.columns:
+            col.setParent(None)
+            col.deleteLater()
+        self.columns.clear()
+        self.plot_cells.clear()
+
+        available_plots = list(spec.keys())
+        fallback_plot = available_plots[0] if available_plots else None
+        is_legacy_format = len(layout_data["columns"]) > 0 and isinstance(layout_data["columns"][0], list)
+        vertical_sizes_to_apply = []
+
+        # 3. Rebuild layout
+        for col_data in layout_data["columns"]:
+            new_col = self._create_column()
+            plot_items = col_data if is_legacy_format else col_data.get("plots", [])
+
+            for plot_item in plot_items:
+                if isinstance(plot_item, dict):
+                    plot_name = plot_item.get("name", fallback_plot)
+                    local_size = plot_item.get("local_size", self.size_slider.value())
+                    toggles_state = plot_item.get("toggles", {})
+                else:
+                    plot_name = plot_item
+                    local_size = self.size_slider.value()
+                    toggles_state = {}
+
+                valid_plot = plot_name if plot_name in available_plots else fallback_plot
+
+                controller = self.create_plot_cell(valid_plot)
+                self.plot_cells.append(controller)
+                new_col.addWidget(controller.container)
+
+                if hasattr(controller, 'local_slider'):
+                    controller.local_slider.blockSignals(True)
+                    controller.local_slider.setValue(local_size)
+                    controller.local_slider.blockSignals(False)
+                if hasattr(controller, 'set_symbol_size'):
+                    controller.set_symbol_size(local_size)
+
+                if toggles_state:
+                    for cb in getattr(controller, 'toggles', []):
+                        if cb.text() in toggles_state:
+                            cb.setChecked(toggles_state[cb.text()])
+
+                controller.update_target_bands(self.audioFeatureExtractor.target_config)
+                if hasattr(controller, 'apply_theme'):
+                    controller.apply_theme()
+
+            if not is_legacy_format and "sizes" in col_data:
+                vertical_sizes_to_apply.append((new_col, col_data["sizes"]))
+
+        # 4. Synchronize state
+        self.sync_all_x_axes()
+        self.update_plots()
+
+        # 5. Restore Splitter Sizes safely
+        def apply_splitter_sizes():
+            for col_widget, sizes in vertical_sizes_to_apply:
+                col_widget.setSizes(sizes)
+
+            if not is_legacy_format and "main_splitter_sizes" in layout_data:
+                self.plot_splitter.setSizes(layout_data["main_splitter_sizes"])
+            else:
+                self.handle_reset_plots()
+
+        QtCore.QTimer.singleShot(0, apply_splitter_sizes)
+
+    def save_layout(self):
+        """Manual trigger to save layout to a JSON file."""
+        layout_data = self.get_current_layout_data()
         save_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "Save View Layout",
-            "",
-            "JSON Files (*.json);;All Files (*)"
+            self, "Save View Layout", "", "JSON Files (*.json);;All Files (*)"
         )
 
         if save_path:
@@ -1196,104 +1304,72 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                                                f"An error occurred while saving the layout:\n{str(e)}")
 
     def load_layout(self):
-        """Reads a JSON layout config and rebuilds the plot grid with spacing and plot options."""
+        """Manual trigger to load layout from a JSON file."""
         open_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "Load View Layout",
-            "",
-            "JSON Files (*.json);;All Files (*)"
+            self, "Load View Layout", "", "JSON Files (*.json);;All Files (*)"
         )
 
         if open_path:
             try:
                 with open(open_path, 'r') as f:
                     layout_data = json.load(f)
-
-                if "columns" not in layout_data:
-                    raise ValueError("Invalid layout file format.")
-
-                # 1. Restore the global point size first, without triggering global updates
-                if "global_size" in layout_data and hasattr(self, 'size_slider'):
-                    self.size_slider.blockSignals(True)
-                    self.size_slider.setValue(layout_data["global_size"])
-                    self.size_slider.blockSignals(False)
-
-                # 2. Clear the current layout entirely and immediately detach from UI
-                for col in self.columns:
-                    col.setParent(None)
-                    col.deleteLater()
-                self.columns.clear()
-                self.plot_cells.clear()
-
-                available_plots = list(spec.keys())
-                fallback_plot = available_plots[0] if available_plots else None
-
-                # Support legacy files
-                is_legacy_format = len(layout_data["columns"]) > 0 and isinstance(layout_data["columns"][0], list)
-                vertical_sizes_to_apply = []
-
-                # 3. Rebuild the layout from the JSON data
-                for col_data in layout_data["columns"]:
-                    new_col = self._create_column()
-                    plot_items = col_data if is_legacy_format else col_data.get("plots", [])
-
-                    for plot_item in plot_items:
-                        # Handle both the legacy string format and the new dictionary format
-                        if isinstance(plot_item, dict):
-                            plot_name = plot_item.get("name", fallback_plot)
-                            local_size = plot_item.get("local_size", self.size_slider.value())
-                            toggles_state = plot_item.get("toggles", {})
-                        else:
-                            plot_name = plot_item
-                            local_size = self.size_slider.value()
-                            toggles_state = {}
-
-                        valid_plot = plot_name if plot_name in available_plots else fallback_plot
-
-                        controller = self.create_plot_cell(valid_plot)
-                        self.plot_cells.append(controller)
-                        new_col.addWidget(controller.container)
-
-                        # Apply Local Plot Size (override what create_plot_cell gave it)
-                        if hasattr(controller, 'local_slider'):
-                            controller.local_slider.blockSignals(True)
-                            controller.local_slider.setValue(local_size)
-                            controller.local_slider.blockSignals(False)
-                        if hasattr(controller, 'set_symbol_size'):
-                            controller.set_symbol_size(local_size)
-
-                        # Apply Active Curve Toggles
-                        if toggles_state:
-                            for cb in getattr(controller, 'toggles', []):
-                                if cb.text() in toggles_state:
-                                    cb.setChecked(toggles_state[cb.text()])
-
-                        controller.update_target_bands(self.audioFeatureExtractor.target_config)
-                        if hasattr(controller, 'apply_theme'):
-                            controller.apply_theme()
-
-                    if not is_legacy_format and "sizes" in col_data:
-                        vertical_sizes_to_apply.append((new_col, col_data["sizes"]))
-
-                # 4. Synchronize state and push data
-                self.sync_all_x_axes()
-                self.update_plots()
-
-                # 5. Restore Splitter Sizes after the UI finishes drawing
-                def apply_splitter_sizes():
-                    for col_widget, sizes in vertical_sizes_to_apply:
-                        col_widget.setSizes(sizes)
-
-                    if not is_legacy_format and "main_splitter_sizes" in layout_data:
-                        self.plot_splitter.setSizes(layout_data["main_splitter_sizes"])
-                    else:
-                        self.handle_reset_plots()
-
-                QtCore.QTimer.singleShot(0, apply_splitter_sizes)
-
+                self.apply_layout_data(layout_data)
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Load Error",
                                                f"An error occurred while loading the layout:\n{str(e)}")
+
+    #################### Auto-Save / Auto-Restore Logic ####################
+
+    def save_state_on_exit(self):
+        """Triggered automatically when the application is about to quit."""
+        settings = QtCore.QSettings("AudioAnalyzer", "LiveMultiPlotWidget")
+        try:
+            # 1. Save Layout State
+            layout_data = self.get_current_layout_data()
+            settings.setValue("last_active_layout", json.dumps(layout_data))
+
+            # 2. Save Target Config State via a temporary file buffer
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+                tmp_path = tmp.name
+
+            self.audioFeatureExtractor.target_config.to_json(tmp_path)
+
+            with open(tmp_path, 'r', encoding='utf-8') as f:
+                target_json_str = f.read()
+
+            os.remove(tmp_path)  # Clean up the temp file
+            settings.setValue("last_target_config", target_json_str)
+
+        except Exception as e:
+            print(f"Failed to auto-save application state: {e}")
+
+    def restore_previous_state(self):
+        """Reads QSettings on startup to restore the last active layout and targets."""
+        settings = QtCore.QSettings("AudioAnalyzer", "LiveMultiPlotWidget")
+
+        # 1. Restore Target Config first
+        target_json_str = settings.value("last_target_config", "")
+        if target_json_str:
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+                    tmp.write(target_json_str.encode('utf-8'))
+                    tmp_path = tmp.name
+
+                new_config = TargetConfig.from_json(tmp_path)
+                self.set_target_config(new_config)
+
+                os.remove(tmp_path)  # Clean up the temp file
+            except Exception as e:
+                print(f"Failed to restore previous target config: {e}")
+
+        # 2. Restore Layout Config
+        layout_str = settings.value("last_active_layout", "")
+        if layout_str:
+            try:
+                layout_data = json.loads(layout_str)
+                self.apply_layout_data(layout_data)
+            except Exception as e:
+                print(f"Failed to restore previous layout: {e}")
 
     def format_time(self, seconds: float) -> str:
         """Converts seconds into HH:MM:SS.ms string."""

@@ -21,26 +21,6 @@ white         = "#88888888"
 target_band = "#88888833"
 
 spec = {
-    'Loudness': {
-        'title': 'Loudness',
-        'stretch': 1,
-        'mouse_enabled_x': True,
-        'mouse_enabled_y': False,
-        'y_min': 0,
-        'y_max': 10,
-        'curves': {
-            'Loudness': {
-                'size': defaultSize,
-                'colour': loudness,
-                'analysisResult': 'loudness'
-            }
-        },
-        'targets': {
-            'Loudness': {'colour': target_band}
-        },
-        'linkX': None
-    },
-
     'Pitch': {
         'title': 'Pitch (Hz)',
         'y_min': 0,
@@ -76,19 +56,71 @@ spec = {
         'linkX': 'Loudness',
     },
 
-    "Weight": {
+    'Weight': {
         'title': 'Weight',
         'y_min': 0,
-        'y_max': 8.0e-7,
+        'y_max': 50,
         'curves': {
             'Weight': {
                 'size': defaultSize,
                 'colour': weight,
-                'analysisResult': 'weight'
-            }
+                'analysisResult': 'weight_instantaneous',  # Y-axis
+            },
+            '0.1 s average weight': {
+                'size': defaultSize,
+                'colour': 'red',
+                'analysisResult': 'weight_0_1s',  # Y-axis
+            },
+            '1 s average weight': {
+                'size': defaultSize,
+                'colour': 'blue',
+                'analysisResult': 'weight_1s',  # Y-axis
+            },
+            '5 s average weight': {
+                'size': defaultSize,
+                'colour': 'white',
+                'analysisResult': 'weight_5s',  # Y-axis
+            },
         },
         'targets': {
             'Weight': {'colour': target_band}
+        },
+        'linkX': 'Loudness'
+    },
+
+    'Loudness': {
+        'title': 'Loudness',
+        'stretch': 1,
+        'mouse_enabled_x': True,
+        'mouse_enabled_y': False,
+        'y_min': 0,
+        'y_max': 10,
+        'curves': {
+            'Loudness': {
+                'size': defaultSize,
+                'colour': loudness,
+                'analysisResult': 'loudness'
+            }
+        },
+        'targets': {
+            'Loudness': {'colour': target_band}
+        },
+        'linkX': None
+    },
+
+    "Spectral slopes": {
+        'title': 'Spectral slopes',
+        'y_min': 0,
+        'y_max': 8.0e-7,
+        'curves': {
+            'Spectral slopes': {
+                'size': defaultSize,
+                'colour': 'red',
+                'analysisResult': 'slopes'
+            }
+        },
+        'targets': {
+            'slopes': {'colour': target_band}
         },
         'linkX': 'Loudness',
     },
@@ -253,8 +285,8 @@ spec = {
 
     "H1_H2": {
         'title': 'H1_H2',
-        'y_min': -50,
-        'y_max': 20,
+        'y_min': -20,
+        'y_max': 50,
         'curves': {
             'H1_H2': {
                 'size': defaultSize,
@@ -270,8 +302,8 @@ spec = {
 
     "H1_H3": {
         'title': 'H1_H3',
-        'y_min': -50,
-        'y_max': 20,
+        'y_min': -20,
+        'y_max': 50,
         'curves': {
             'H1_H3': {
                 'size': defaultSize,
@@ -287,8 +319,8 @@ spec = {
 
     "H1_H4": {
         'title': 'H1_H4',
-        'y_min': -50,
-        'y_max': 20,
+        'y_min': -20,
+        'y_max': 50,
         'curves': {
             'H1_H4': {
                 'size': defaultSize,
@@ -304,8 +336,8 @@ spec = {
 
     "H1_A3": {
         'title': 'H1_A3',
-        'y_min': -50,
-        'y_max': 20,
+        'y_min': -20,
+        'y_max': 50,
         'curves': {
             'H1_A3': {
                 'size': defaultSize,
@@ -317,40 +349,5 @@ spec = {
             'H1_A3': {'colour': target_band}
         },
         'linkX': 'Loudness',
-    },
-
-    'weight2_range': {
-        'title': 'weight2_range',
-        'y_min': 0,
-        'y_max': 300,
-        'curves': {
-            'weight2_range': {
-                'size': defaultSize,
-                'colour': white,  # Fallback color
-                'analysisResult': 'weight2_range', # Y-axis
-            }
-        },
-        'targets': {
-            'weight2_range': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
-    },
-
-    'Weight2': {
-        'title': 'Weight2',
-        'y_min': 0,
-        'y_max': .2,
-        'curves': {
-            'Weight2': {
-                'size': defaultSize,
-                'colour': white,  # Fallback color
-                'analysisResult': 'weight2', # Y-axis
-            #    'colorSource': 'weight2_range'   # Z-axis (Color)
-            }
-        },
-        'targets': {
-            'Weight2': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
     },
 }

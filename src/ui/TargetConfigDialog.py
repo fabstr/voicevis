@@ -13,7 +13,6 @@ class TargetConfigDialog(QtWidgets.QDialog):
         self.setWindowTitle("Set Targets")
         self.setMinimumWidth(400)
 
-        # Keep a deep copy of the original config so updates only commit on 'Accept'
         self.config = copy.deepcopy(current_config)
         self.gui_elements = {}
 
@@ -22,17 +21,28 @@ class TargetConfigDialog(QtWidgets.QDialog):
 
     def _init_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
+
+        # --- NEW: Config Name Editor ---
+        name_layout = QtWidgets.QHBoxLayout()
+        name_layout.addWidget(QtWidgets.QLabel("<b>Config Name:</b>"))
+        self.name_edit = QtWidgets.QLineEdit(self.config.config_name)
+        name_layout.addWidget(self.name_edit)
+        layout.addLayout(name_layout)
+
+        # Add a visual separator
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        layout.addWidget(line)
+
         form_layout = QtWidgets.QGridLayout()
         layout.addLayout(form_layout)
 
-        # Form Headers
         form_layout.addWidget(QtWidgets.QLabel("<b>Enable</b>"), 0, 0)
         form_layout.addWidget(QtWidgets.QLabel("<b>Target Field</b>"), 0, 1)
         form_layout.addWidget(QtWidgets.QLabel("<b>Target min</b>"), 0, 2)
         form_layout.addWidget(QtWidgets.QLabel("<b>Target max</b>"), 0, 3)
 
-        # Define structural mapping between TargetConfig properties and User-Facing Labels
-        # Layout: field_prefix: (Display Label, default_min, default_max)
         self.fields_definition = {
             "loudness": ("Loudness", 0.0, 1.0),
             "pitch": ("Pitch", 0.0, 350.0),
@@ -45,6 +55,7 @@ class TargetConfigDialog(QtWidgets.QDialog):
             "size": ("Size", -30.0, 30.0),
             "size2": ("Size2", -500.0, 500.0),
             "weight": ("Weight", 0.0, 4.0e-7),
+            "weight2": ("Weight2", -50, 50),
             "H1_H2": ("H1_H2", -10.0, 20),
             "H1_H3": ("H1_H3", -10.0, 20),
             "H1_H4": ("H1_H4", -10.0, 20),
@@ -64,7 +75,6 @@ class TargetConfigDialog(QtWidgets.QDialog):
             form_layout.addWidget(min_spin, row, 2)
             form_layout.addWidget(max_spin, row, 3)
 
-            # Store widget references mapped directly to the target config prefix identifier
             self.gui_elements[field_prefix] = {
                 'cb': cb,
                 'min': min_spin,
@@ -72,7 +82,6 @@ class TargetConfigDialog(QtWidgets.QDialog):
             }
             row += 1
 
-        # Dialog Controls Action Bar
         btn_layout = QtWidgets.QHBoxLayout()
         save_btn = QtWidgets.QPushButton("Apply && Close")
         cancel_btn = QtWidgets.QPushButton("Cancel")
@@ -84,7 +93,6 @@ class TargetConfigDialog(QtWidgets.QDialog):
         cancel_btn.clicked.connect(self.reject)
 
     def _load_config_into_ui(self):
-        """Populates UI Elements dynamically straight from TargetConfig properties."""
         for field_prefix, (_, default_min, default_max) in self.fields_definition.items():
             bounds = self.config.get_bounds(field_prefix)
 
@@ -98,7 +106,9 @@ class TargetConfigDialog(QtWidgets.QDialog):
             self.gui_elements[field_prefix]['max'].setValue(max_val)
 
     def get_confirmed_config(self) -> TargetConfig:
-        """Saves current GUI states back to target config payload attributes."""
+        # --- NEW: Save the edited config name (fallback to a default if user clears it) ---
+        self.config.config_name = self.name_edit.text().strip() or "Unnamed Target"
+
         for field_prefix in self.fields_definition.keys():
             widgets = self.gui_elements[field_prefix]
             self.config.set_bounds(

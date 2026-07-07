@@ -4,6 +4,8 @@ from typing import List, Dict, Any, Optional
 
 @dataclass
 class TargetConfig:
+    config_name: str = "Default Target"
+
     # Now tracking min, max, and explicit enabled parameters per target uniform list
     targets: List[Dict[str, Any]] = field(default_factory=lambda: [
         {"name": "loudness", "min": 0.0, "max": 1.0, "enabled": True},
@@ -75,17 +77,25 @@ class TargetConfig:
         return rounded
 
     def __str__(self):
-        return json.dumps({"targets": self._round_floats(self.targets)}, indent=4)
+        return json.dumps({
+            "config_name": self.config_name,
+            "targets": self._round_floats(self.targets)
+        }, indent=4)
 
     def to_json(self, file_path: str, indent: int = 4) -> None:
-        """Serializes the configuration instance to a JSON file."""
-        clean_data = {"targets": self._round_floats(self.targets)}
+        clean_data = {
+            "config_name": self.config_name,  # --- NEW ---
+            "targets": self._round_floats(self.targets)
+        }
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(clean_data, f, indent=indent)
 
     @classmethod
     def from_json(cls, file_path: str) -> 'TargetConfig':
-        """Loads a JSON configuration and returns a new TargetConfig instance."""
         with open(file_path, 'r', encoding='utf-8') as f:
             config_dict = json.load(f)
-        return cls(targets=config_dict.get("targets", []))
+        return cls(
+            # --- NEW: Fallback to 'Custom Target' if loading an old file ---
+            config_name=config_dict.get("config_name", "Custom Target"),
+            targets=config_dict.get("targets", [])
+        )
