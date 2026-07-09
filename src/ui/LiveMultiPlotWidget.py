@@ -1426,10 +1426,3 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         else:
             self.update_playhead()
             self.time_edit.setText(self.format_time(self.current_playback_time))
-
-
-if __name__ == '__main__':
-    app = QtWidgets.QApplication(sys.argv)
-    w = LiveMultiPlotWidget()
-    w.show()
-    sys.exit(app.exec())
