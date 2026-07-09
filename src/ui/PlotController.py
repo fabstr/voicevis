@@ -540,11 +540,13 @@ class PlotController(QtCore.QObject):
                     data_container.magnitude_db = np.hstack((data_container.magnitude_db, new_col))
 
             self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
-            return
+        else:
+            if np.isnan(new_data):
+                return
 
-        data_container.x = np.append(data_container.x, snapshot.time)
-        data_container.y = np.append(data_container.y, new_data)
-        self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
+            data_container.x = np.append(data_container.x, snapshot.time)
+            data_container.y = np.append(data_container.y, new_data)
+            self.set_curve_data(curve_name, data_container.x, data_container.y, data_container, audio_features_ctx)
 
     def update_target_bands(self, config: TargetConfig):
         for target_name, band in self.target_bands.items():
