@@ -19,7 +19,7 @@ class DirectionalViewBox(pg.ViewBox):
 
     def __init__(self, *args, **kwds):
         super().__init__(*args, **kwds)
-        self.zoom_axis = None  # Can be 'x', 'y', or None
+        self.zoom_axis = None
         self.measure_mode = False
         self.measure_start_pos = None
 
@@ -173,7 +173,7 @@ class PlotController(QtCore.QObject):
 
     def _handle_scene_click(self, event):
         """Gatekeeper for click events. Drops them if measuring."""
-        if self.btn_measure.isChecked():
+        if self.widget.getViewBox().measure_mode:
             return
         self.click_callback(event, self.widget, self.spec['title'])
 
@@ -198,27 +198,6 @@ class PlotController(QtCore.QObject):
 
         self.selector.currentTextChanged.connect(lambda new_name: self.change_plot_callback(self, new_name))
         top_bar_layout.addWidget(self.selector)
-
-        # --- Interactive Tools (Zoom X / Zoom Y / Measure) ---
-        self.btn_zoom_x = QtWidgets.QPushButton()
-        self.btn_zoom_y = QtWidgets.QPushButton()
-        self.btn_measure = QtWidgets.QPushButton()
-
-        self.btn_zoom_x.setCheckable(True)
-        self.btn_zoom_y.setCheckable(True)
-        self.btn_measure.setCheckable(True)
-
-        self.btn_zoom_x.setToolTip("Drag to zoom X-axis")
-        self.btn_zoom_y.setToolTip("Drag to zoom Y-axis")
-        self.btn_measure.setToolTip("Measure Delta Time and Value")
-
-        self.btn_zoom_x.toggled.connect(self._toggle_zoom_x)
-        self.btn_zoom_y.toggled.connect(self._toggle_zoom_y)
-        self.btn_measure.toggled.connect(self._toggle_measure)
-
-        top_bar_layout.addWidget(self.btn_zoom_x)
-        top_bar_layout.addWidget(self.btn_zoom_y)
-        top_bar_layout.addWidget(self.btn_measure)
 
         top_bar_layout.addStretch()
 
@@ -249,47 +228,23 @@ class PlotController(QtCore.QObject):
         self.widget.setStyleSheet("border: none;")
         layout.addWidget(self.widget, stretch=1)
 
-    # --- Tool Mutually Exclusive Logic ---
-
-    def _uncheck_others(self, active_btn):
-        for btn in [self.btn_zoom_x, self.btn_zoom_y, self.btn_measure]:
-            if btn != active_btn and btn.isChecked():
-                btn.blockSignals(True)
-                btn.setChecked(False)
-                btn.blockSignals(False)
-
-    def _toggle_zoom_x(self, checked):
-        if checked:
-            self._uncheck_others(self.btn_zoom_x)
-        self._update_mouse_mode()
-
-    def _toggle_zoom_y(self, checked):
-        if checked:
-            self._uncheck_others(self.btn_zoom_y)
-        self._update_mouse_mode()
-
-    def _toggle_measure(self, checked):
-        if checked:
-            self._uncheck_others(self.btn_measure)
-        self._update_mouse_mode()
-
-    def _update_mouse_mode(self):
+    def set_tool_mode(self, mode: str):
         vb = self.widget.getViewBox()
 
         # Reset measuring state
         vb.measure_mode = False
 
-        if self.btn_zoom_x.isChecked():
+        if mode == 'zoom_x':
             vb.zoom_axis = 'x'
             vb.setMouseMode(pg.ViewBox.RectMode)
             self.widget.setMouseEnabled(x=True, y=False)
 
-        elif self.btn_zoom_y.isChecked():
+        elif mode == 'zoom_y':
             vb.zoom_axis = 'y'
             vb.setMouseMode(pg.ViewBox.RectMode)
             self.widget.setMouseEnabled(x=False, y=True)
 
-        elif self.btn_measure.isChecked():
+        elif mode == 'measure':
             vb.zoom_axis = None
             vb.measure_mode = True
             # Suspend standard panning functionality
@@ -303,28 +258,6 @@ class PlotController(QtCore.QObject):
             vb.measure_rect.setVisible(False)
             vb.measure_text.setVisible(False)
             self._configure_mouse_behavior()
-
-        # Update icons to match the new toggle state
-        self._update_icons()
-
-    def _update_icons(self):
-        """Forces the correct icon color based on selection state and Qt palette."""
-        if not hasattr(self, 'btn_zoom_x'):
-            return
-
-        palette = QtWidgets.QApplication.palette()
-        text_color = palette.color(QtGui.QPalette.ColorRole.WindowText).name()
-        highlight_text = palette.color(QtGui.QPalette.ColorRole.HighlightedText).name()
-
-        color_x = highlight_text if self.btn_zoom_x.isChecked() else text_color
-        color_y = highlight_text if self.btn_zoom_y.isChecked() else text_color
-        color_m = highlight_text if self.btn_measure.isChecked() else text_color
-
-        self.btn_zoom_x.setIcon(qta.icon('fa5s.arrows-alt-h', color=color_x))
-        self.btn_zoom_y.setIcon(qta.icon('fa5s.arrows-alt-v', color=color_y))
-        self.btn_measure.setIcon(qta.icon('fa5s.ruler-combined', color=color_m))
-
-    # -----------------------
 
     def _populate_checkboxes(self):
         self.toggles = []
@@ -384,30 +317,6 @@ class PlotController(QtCore.QObject):
                     selection-background-color: {highlight_color.name()}; 
                 }}
             """)
-
-        # Button stylesheet mapping directly to standard QPalette roles
-        if hasattr(self, 'btn_zoom_x'):
-            btn_style = f"""
-                QPushButton {{
-                    background-color: {base_color.name()};
-                    border: 1px solid gray;
-                    padding: 4px 8px;
-                    border-radius: 3px;
-                }}
-                QPushButton:checked {{
-                    background-color: {highlight_color.name()};
-                    border: 1px solid {highlight_color.name()};
-                }}
-                QPushButton:hover:!checked {{
-                    background-color: {bg_color.name()};
-                }}
-            """
-            self.btn_zoom_x.setStyleSheet(btn_style)
-            self.btn_zoom_y.setStyleSheet(btn_style)
-            self.btn_measure.setStyleSheet(btn_style)
-
-            # Immediately force the icon colors to match the new theme
-            self._update_icons()
 
         if hasattr(self, 'toggles'):
             for cb in self.toggles:
@@ -578,12 +487,6 @@ class PlotController(QtCore.QObject):
                     item.scatter.setSize(target_size)
 
     def reset_zoom(self):
-        # Deselect tools so auto-range isn't immediately fought by mouse modes
-        if hasattr(self, 'btn_zoom_x'):
-            self.btn_zoom_x.setChecked(False)
-            self.btn_zoom_y.setChecked(False)
-            self.btn_measure.setChecked(False)
-
         y_min = self.spec.get('y_min')
         y_max = self.spec.get('y_max')
         if y_min is not None and y_max is not None:

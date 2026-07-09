@@ -1,10 +1,8 @@
 import logging
 import queue
-import sys
 import time
 import os
 import json
-import shutil
 import tempfile
 import wave
 import miniaudio
@@ -13,7 +11,6 @@ from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
 from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import qtawesome as qta
-import pyqtgraph as pg
 
 from ResourceManager import ResourceManager
 from PlotsSpec import spec, defaultSize
@@ -22,12 +19,11 @@ from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, Targe
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
-from ui.PlotController import PlotController
 from ui.TargetConfigDialog import TargetConfigDialog
 from ui.workers.AnalysisWorker import AnalysisWorker
 from ui.workers.PlaybackWorker import PlaybackWorker
 from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
-
+from ui.PlotController import PlotController
 
 class LiveMultiPlotWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
@@ -38,6 +34,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__()
+
+        self.active_tool_mode = None
 
         self.resource_manager = ResourceManager()
 
@@ -192,6 +190,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.clear_icon = qta.icon('fa5s.trash', color=icon_color)
         self.reset_zoom_icon = qta.icon('fa6s.maximize', color=icon_color)
 
+        self.zoom_x_icon = qta.icon('fa5s.arrows-alt-h', color=icon_color)
+        self.zoom_y_icon = qta.icon('fa5s.arrows-alt-v', color=icon_color)
+        self.measure_icon = qta.icon('fa5s.ruler-combined', color=icon_color)
+
         self.record_stop_btn = QtWidgets.QPushButton()
         self.record_stop_btn.setFixedSize(40, 40)
         self.record_stop_btn.setIcon(self.record_icon)
@@ -224,6 +226,36 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.reset_zoom_btn.clicked.connect(self.handle_reset_zoom)
         top_buttons_layout.addWidget(self.reset_zoom_btn)
 
+        top_buttons_layout.addSpacing(10)
+
+        # Tools
+        self.btn_zoom_x = QtWidgets.QPushButton()
+        self.btn_zoom_x.setFixedSize(40, 40)
+        self.btn_zoom_x.setIcon(self.zoom_x_icon)
+        self.btn_zoom_x.setIconSize(QtCore.QSize(20, 20))
+        self.btn_zoom_x.setToolTip("Zoom X-Axis")
+        self.btn_zoom_x.setCheckable(True)
+        self.btn_zoom_x.toggled.connect(lambda c: self.handle_tool_toggle('zoom_x', c))
+        top_buttons_layout.addWidget(self.btn_zoom_x)
+
+        self.btn_zoom_y = QtWidgets.QPushButton()
+        self.btn_zoom_y.setFixedSize(40, 40)
+        self.btn_zoom_y.setIcon(self.zoom_y_icon)
+        self.btn_zoom_y.setIconSize(QtCore.QSize(20, 20))
+        self.btn_zoom_y.setToolTip("Zoom Y-Axis")
+        self.btn_zoom_y.setCheckable(True)
+        self.btn_zoom_y.toggled.connect(lambda c: self.handle_tool_toggle('zoom_y', c))
+        top_buttons_layout.addWidget(self.btn_zoom_y)
+
+        self.btn_measure = QtWidgets.QPushButton()
+        self.btn_measure.setFixedSize(40, 40)
+        self.btn_measure.setIcon(self.measure_icon)
+        self.btn_measure.setIconSize(QtCore.QSize(20, 20))
+        self.btn_measure.setToolTip("Measure Time/Value")
+        self.btn_measure.setCheckable(True)
+        self.btn_measure.toggled.connect(lambda c: self.handle_tool_toggle('measure', c))
+        top_buttons_layout.addWidget(self.btn_measure)
+
         # --- First Stretch to push the time widget to the center ---
         top_buttons_layout.addStretch()
 
@@ -241,7 +273,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- Target Name Label ---
         self.target_name_label = QtWidgets.QLabel(f"|  Target: {self.target_config.config_name}")
-        # self.target_name_label.setStyleSheet("color: gray;")
         top_buttons_layout.addWidget(self.target_name_label)
 
         # --- Second Stretch to keep the time widget centered ---
@@ -280,6 +311,29 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         top_buttons_layout.addWidget(self.size_slider)
 
         self.layout.addLayout(top_buttons_layout)
+
+    def handle_tool_toggle(self, tool, checked):
+        if checked:
+            if tool != 'zoom_x':
+                self.btn_zoom_x.blockSignals(True)
+                self.btn_zoom_x.setChecked(False)
+                self.btn_zoom_x.blockSignals(False)
+            if tool != 'zoom_y':
+                self.btn_zoom_y.blockSignals(True)
+                self.btn_zoom_y.setChecked(False)
+                self.btn_zoom_y.blockSignals(False)
+            if tool != 'measure':
+                self.btn_measure.blockSignals(True)
+                self.btn_measure.setChecked(False)
+                self.btn_measure.blockSignals(False)
+            self.active_tool_mode = tool
+        else:
+            if self.active_tool_mode == tool:
+                self.active_tool_mode = None
+
+        if hasattr(self, 'plot_cells'):
+            for controller in self.plot_cells:
+                controller.set_tool_mode(self.active_tool_mode)
 
     def setupPlots(self):
         self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
@@ -328,6 +382,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             change_plot_callback=self.handle_plot_selection,
             initial_size=initial_size
         )
+        if hasattr(self, 'active_tool_mode'):
+            controller.set_tool_mode(self.active_tool_mode)
         return controller
 
     def add_plot_row(self):
@@ -398,6 +454,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             change_plot_callback=self.handle_plot_selection,
             initial_size=current_size
         )
+        if hasattr(self, 'active_tool_mode'):
+            new_controller.set_tool_mode(self.active_tool_mode)
 
         splitter = old_controller.container.parentWidget()
         if isinstance(splitter, QtWidgets.QSplitter):
@@ -453,6 +511,10 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.clear_icon = qta.icon('fa5s.trash', color=icon_color)
             self.reset_zoom_icon = qta.icon('fa6s.maximize', color=icon_color)
 
+            self.zoom_x_icon = qta.icon('fa5s.arrows-alt-h', color=icon_color)
+            self.zoom_y_icon = qta.icon('fa5s.arrows-alt-v', color=icon_color)
+            self.measure_icon = qta.icon('fa5s.ruler-combined', color=icon_color)
+
             if hasattr(self, 'record_stop_btn'):
                 if "Record" in self.record_stop_btn.toolTip():
                     self.record_stop_btn.setIcon(self.record_icon)
@@ -473,6 +535,11 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             if hasattr(self, 'reset_zoom_btn'):
                 self.reset_zoom_btn.setIcon(self.reset_zoom_icon)
+
+            if hasattr(self, 'btn_zoom_x'):
+                self.btn_zoom_x.setIcon(self.zoom_x_icon)
+                self.btn_zoom_y.setIcon(self.zoom_y_icon)
+                self.btn_measure.setIcon(self.measure_icon)
 
             if hasattr(self, 'plot_cells'):
                 for controller in self.plot_cells:
@@ -523,7 +590,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 self.load_audio_to_memory(file_name)
 
     def load_audio_to_memory(self, file_path):
-        """Decodes the selected file directly into the memory buffer for playback & analysis."""
         try:
             self.clear_annotations()
             self.current_audio_file = file_path
@@ -594,7 +660,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                                            f"An error occurred while loading annotations:\n{str(e)}")
 
     def save_audio(self):
-        """Saves the active in-memory audio array to a WAV file."""
         if self.audio_data.isEmpty():
             QtWidgets.QMessageBox.warning(self, "No Audio", "There is no audio currently loaded or recorded to save.")
             return
@@ -616,7 +681,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 # Manually write raw PCM data to disk
                 with wave.open(save_path, 'wb') as wf:
                     wf.setnchannels(1)
-                    wf.setsampwidth(2)  # Int16 format implies 2 bytes per sample
+                    wf.setsampwidth(2)
                     wf.setframerate(self.sampling_rate)
                     wf.writeframes(self.audio_data.data())
 
@@ -751,7 +816,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.stop_playback()
 
     def handle_clear(self):
-        """Stops playback/recording, clears audio buffers, and resets all plots."""
         if self.is_playing:
             self.stop_playback()
         if self.is_recording:
@@ -792,7 +856,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         target_time = max(0.0, self.current_playback_time)
 
-        # Guard against zero division/undefined sample rate before setup
         current_sr = self.analysedAudioFeatures.sample_rate if getattr(self.analysedAudioFeatures, 'sample_rate',
                                                                        None) else self.sampling_rate
         seek_frame = int(target_time * current_sr)
@@ -801,7 +864,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.play_worker.stop_backend()
             self.play_worker.wait()
 
-        # Supply raw memory samples directly to playback worker
         self.play_worker = PlaybackWorker(
             samples=self.audio_data.data(),
             seek_frame=seek_frame,
@@ -872,8 +934,15 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             controller.set_symbol_size(value)
 
     def handle_reset_zoom(self):
+        if hasattr(self, 'btn_zoom_x'):
+            self.btn_zoom_x.setChecked(False)
+            self.btn_zoom_y.setChecked(False)
+            self.btn_measure.setChecked(False)
+            self.active_tool_mode = None
+
         if not hasattr(self, 'plot_cells'): return
         for controller in self.plot_cells:
+            controller.set_tool_mode(None)
             controller.reset_zoom()
 
     def handle_toggle_plot(self, plot_key: str, checked: bool):
