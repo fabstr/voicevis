@@ -141,6 +141,55 @@ spec = {
         }
     },
 
+    'F1': {
+        'title': 'Formants (Hz)',
+        'y_min': 0,
+        'y_max': 3500,
+        'curves': {
+            'F1': {
+                'size': defaultSize,
+                'colour': f1,
+                'analysisResult': 'F1'
+            },
+        },
+        'targets': {
+            'F1': {'colour': target_band},
+        }
+    },
+
+    'F2': {
+        'title': 'Formants (Hz)',
+        'y_min': 0,
+        'y_max': 3500,
+        'curves': {
+            'F2': {
+                'symbol': 'o',
+                'size': defaultSize,
+                'colour': f2,
+                'analysisResult': 'F2'
+            },
+        },
+        'targets': {
+            'F2': {'colour': target_band},
+        }
+    },
+
+    'F3': {
+        'title': 'Formants (Hz)',
+        'y_min': 0,
+        'y_max': 3500,
+        'curves': {
+            'F3': {
+                'size': defaultSize,
+                'colour': f3,
+                'analysisResult': 'F3'
+            },
+        },
+        'targets': {
+            'F3': {'colour': target_band}
+        }
+    },
+
     'F3/Pitch': {
         'title': 'F3 / Pitch',
         'y_min': 1,

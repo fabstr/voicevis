@@ -279,22 +279,53 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         top_buttons_layout.addStretch()
 
         # Row layout controls
-        self.add_row_btn = QtWidgets.QPushButton("Add row")
+        # Define the icons for adding/removing
+        self.add_icon = qta.icon('fa5s.plus', color=icon_color)
+        self.remove_icon = qta.icon('fa5s.minus', color=icon_color)
+
+        # Row layout controls
+        self.row_label = QtWidgets.QLabel("Rows:")
+        top_buttons_layout.addWidget(self.row_label)
+
+        self.add_row_btn = QtWidgets.QPushButton()
+        self.add_row_btn.setFixedSize(40, 40)
+        self.add_row_btn.setIcon(self.add_icon)
+        self.add_row_btn.setIconSize(QtCore.QSize(20, 20))
+        self.add_row_btn.setToolTip("Add row")
         self.add_row_btn.clicked.connect(self.add_plot_row)
         top_buttons_layout.addWidget(self.add_row_btn)
 
-        self.remove_row_btn = QtWidgets.QPushButton("Remove row")
+        self.remove_row_btn = QtWidgets.QPushButton()
+        self.remove_row_btn.setFixedSize(40, 40)
+        self.remove_row_btn.setIcon(self.remove_icon)
+        self.remove_row_btn.setIconSize(QtCore.QSize(20, 20))
+        self.remove_row_btn.setToolTip("Remove row")
         self.remove_row_btn.clicked.connect(self.remove_plot_row)
         top_buttons_layout.addWidget(self.remove_row_btn)
 
+        top_buttons_layout.addSpacing(10)
+
         # Column layout controls
-        self.add_col_btn = QtWidgets.QPushButton("Add column")
+        self.col_label = QtWidgets.QLabel("Columns:")
+        top_buttons_layout.addWidget(self.col_label)
+
+        self.add_col_btn = QtWidgets.QPushButton()
+        self.add_col_btn.setFixedSize(40, 40)
+        self.add_col_btn.setIcon(self.add_icon)
+        self.add_col_btn.setIconSize(QtCore.QSize(20, 20))
+        self.add_col_btn.setToolTip("Add column")
         self.add_col_btn.clicked.connect(self.add_plot_column)
         top_buttons_layout.addWidget(self.add_col_btn)
 
-        self.remove_col_btn = QtWidgets.QPushButton("Remove column")
+        self.remove_col_btn = QtWidgets.QPushButton()
+        self.remove_col_btn.setFixedSize(40, 40)
+        self.remove_col_btn.setIcon(self.remove_icon)
+        self.remove_col_btn.setIconSize(QtCore.QSize(20, 20))
+        self.remove_col_btn.setToolTip("Remove column")
         self.remove_col_btn.clicked.connect(self.remove_plot_column)
         top_buttons_layout.addWidget(self.remove_col_btn)
+
+        top_buttons_layout.addSpacing(10)
 
         # Plot item size slider
         self.size_label = QtWidgets.QLabel("Global point size:")

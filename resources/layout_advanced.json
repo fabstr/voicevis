@@ -1,10 +1,11 @@
 {
     "global_size": 5,
     "main_splitter_sizes": [
-        952,
-        952,
-        951,
-        952
+        760,
+        761,
+        760,
+        761,
+        760
     ],
     "columns": [
         {
@@ -12,26 +13,17 @@
                 {
                     "name": "Pitch",
                     "local_size": 5,
-                    "toggles": {
-                        "Pitch": true
-                    }
+                    "toggles": {}
                 },
                 {
                     "name": "Size",
                     "local_size": 5,
-                    "toggles": {
-                        "Size": true
-                    }
+                    "toggles": {}
                 },
                 {
                     "name": "Weight",
                     "local_size": 5,
-                    "toggles": {
-                        "Weight": true,
-                        "0.1 s average weight": false,
-                        "1 s average weight": false,
-                        "5 s average weight": true
-                    }
+                    "toggles": {}
                 }
             ],
             "sizes": [
@@ -45,9 +37,7 @@
                 {
                     "name": "Loudness",
                     "local_size": 5,
-                    "toggles": {
-                        "Loudness": true
-                    }
+                    "toggles": {}
                 },
                 {
                     "name": "Spectrogram",
@@ -57,11 +47,7 @@
                 {
                     "name": "Formants",
                     "local_size": 5,
-                    "toggles": {
-                        "F1": true,
-                        "F2": true,
-                        "F3": true
-                    }
+                    "toggles": {}
                 }
             ],
             "sizes": [
@@ -75,23 +61,17 @@
                 {
                     "name": "F3/Pitch",
                     "local_size": 5,
-                    "toggles": {
-                        "F3/Pitch": true
-                    }
+                    "toggles": {}
                 },
                 {
                     "name": "F2/Pitch",
                     "local_size": 5,
-                    "toggles": {
-                        "F2/Pitch": true
-                    }
+                    "toggles": {}
                 },
                 {
                     "name": "F1/Pitch",
                     "local_size": 5,
-                    "toggles": {
-                        "F1/Pitch": true
-                    }
+                    "toggles": {}
                 }
             ],
             "sizes": [
@@ -105,23 +85,41 @@
                 {
                     "name": "H1_H4",
                     "local_size": 5,
-                    "toggles": {
-                        "H1_H4": true
-                    }
+                    "toggles": {}
                 },
                 {
                     "name": "H1_H3",
                     "local_size": 5,
-                    "toggles": {
-                        "H1_H3": true
-                    }
+                    "toggles": {}
                 },
                 {
                     "name": "H1_H2",
                     "local_size": 5,
-                    "toggles": {
-                        "H1_H2": true
-                    }
+                    "toggles": {}
+                }
+            ],
+            "sizes": [
+                653,
+                652,
+                653
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "H1_A3",
+                    "local_size": 5,
+                    "toggles": {}
+                },
+                {
+                    "name": "Jitter",
+                    "local_size": 5,
+                    "toggles": {}
+                },
+                {
+                    "name": "Shimmer",
+                    "local_size": 5,
+                    "toggles": {}
                 }
             ],
             "sizes": [
