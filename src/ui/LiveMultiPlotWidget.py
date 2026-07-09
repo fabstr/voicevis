@@ -451,6 +451,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
             self.save_icon = qta.icon('fa5s.save', color=icon_color)
             self.clear_icon = qta.icon('fa5s.trash', color=icon_color)
+            self.reset_zoom_icon = qta.icon('fa6s.maximize', color=icon_color)
 
             if hasattr(self, 'record_stop_btn'):
                 if "Record" in self.record_stop_btn.toolTip():
@@ -469,6 +470,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
             if hasattr(self, 'save_btn'):
                 self.save_btn.setIcon(self.save_icon)
+
+            if hasattr(self, 'reset_zoom_btn'):
+                self.reset_zoom_btn.setIcon(self.reset_zoom_icon)
 
             if hasattr(self, 'plot_cells'):
                 for controller in self.plot_cells:

@@ -15,6 +15,13 @@ f3_pitch      = "#9966cc"
 weight        = "#c71585"
 size          = "#32cd32"
 
+h1_h2         = "#EF75F0"
+h1_h3         = "#F07595"
+h1_h4         = "#F0B175"
+h1_a3         = "#C175F0"
+
+jitter        = "#85E0BF"
+shimmer       = "#85BCE0"
 
 white         = "#88888888"
 
@@ -221,7 +228,7 @@ spec = {
         'curves': {
             'H1_H2': {
                 'size': defaultSize,
-                'colour': weight,
+                'colour': h1_h2,
                 'analysisResult': 'H1_H2'
             }
         },
@@ -237,7 +244,7 @@ spec = {
         'curves': {
             'H1_H3': {
                 'size': defaultSize,
-                'colour': weight,
+                'colour': h1_h3,
                 'analysisResult': 'H1_H3'
             }
         },
@@ -253,7 +260,7 @@ spec = {
         'curves': {
             'H1_H4': {
                 'size': defaultSize,
-                'colour': weight,
+                'colour': h1_h4,
                 'analysisResult': 'H1_H4'
             }
         },
@@ -269,7 +276,7 @@ spec = {
         'curves': {
             'H1_A3': {
                 'size': defaultSize,
-                'colour': weight,
+                'colour': h1_a3,
                 'analysisResult': 'H1_A3'
             }
         },
@@ -285,7 +292,7 @@ spec = {
         'curves': {
             'Jitter': {
                 'size': defaultSize,
-                'colour': 'red',
+                'colour': jitter,
                 'analysisResult': 'jitter'
             }
         },
@@ -301,7 +308,7 @@ spec = {
         'curves': {
             'Shimmer': {
                 'size': defaultSize,
-                'colour': 'yellow',
+                'colour': shimmer,
                 'analysisResult': 'shimmer'
             }
         },

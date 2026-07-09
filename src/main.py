@@ -58,7 +58,7 @@ def setup_logging():
     log_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().isoformat().replace(":", "_")
-    log_file = log_dir / f"voicevis_{timestamp}.log"
+    log_file = log_dir / f"voicevis.log"
     print("Logging to {}".format(log_file))
 
     # 1. Instantiate your handlers explicitly
@@ -72,7 +72,7 @@ def setup_logging():
 
     # 3. Pass the configured handlers into basicConfig
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.WARNING,
         format="%(asctime)s %(levelname)s %(filename)s:%(funcName)s:%(lineno)s %(message)s",
         handlers=[file_handler, stream_handler],
         force=True,
