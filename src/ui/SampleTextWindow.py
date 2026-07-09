@@ -1,28 +1,18 @@
 import os
-import sys
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
                              QListWidget, QTextBrowser, QPushButton, QStackedWidget,
                              QPlainTextEdit, QInputDialog, QMessageBox)
 from PyQt6.QtCore import Qt
+from ResourceManager import ResourceManager
 
 
 class SampleTextWindow(QWidget):
-    def __init__(self, sample_dir="sample_texts"):
+    def __init__(self, resource_manager: ResourceManager, sample_dir="sample_texts"):
         super().__init__()
         self.setWindowTitle("Sample Texts Editor")
         self.resize(850, 600)
 
-        # --- Resolve Persistent Directory Path ---
-        # Do not use sys._MEIPASS for saving files, as it is wiped on exit.
-        if getattr(sys, 'frozen', False):
-            # Running as bundled app: use the directory of the executable
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            # Running as script: use project root
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            base_dir = os.path.join(base_dir, '..')
-
-        self.sample_dir = os.path.abspath(os.path.join(base_dir, sample_dir))
+        self.sample_dir = resource_manager.get_absolute_path(sample_dir)
 
         # Ensure the directory exists
         os.makedirs(self.sample_dir, exist_ok=True)

@@ -1,3 +1,4 @@
+import logging
 import time
 
 import opensmile
@@ -8,6 +9,7 @@ import wave
 
 from scipy.signal import stft, spectrogram
 
+from ResourceManager import ResourceManager
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
 
@@ -45,7 +47,7 @@ class AudioFeatureExtractor:
     #     F3bandwidth_sma3nz
     #     F3amplitudeLogRelF0_sma3nz
 
-    def __init__(self, targets: TargetConfig = TargetConfig()):
+    def __init__(self, targets: TargetConfig = TargetConfig(), resource_manager: ResourceManager = ResourceManager()):
         """
         Constructor for AudioFeatureExtractor.
 
@@ -54,7 +56,7 @@ class AudioFeatureExtractor:
         :param targets: The default target config to use when analysis requires targets to compare against.
         """
         self.smile = opensmile.Smile(
-            feature_set='resources/smile_configs/egemaps/v02/eGeMAPSv02.conf',
+            feature_set=resource_manager.get_absolute_path('smile_configs/egemaps/v02/eGeMAPSv02.conf'),
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
         )
         self.target_config = targets
@@ -87,7 +89,7 @@ class AudioFeatureExtractor:
             samples, sampling_rate = convertMp3ToPcm(path)
             audio_length = len(samples) / float(sampling_rate)
         else:
-            print("Unknown file extension")
+            logging.error("Unknown file extension")
             return AudioFeatures()
 
         # Peak amplitude normalization
@@ -171,7 +173,7 @@ def calculate_size(t, F1_Pitch, F2_Pitch, F3_Pitch, target_config) -> SignalTime
         return SignalTimeSeries()
 
     if not target_config.has_all_bounds(["f1_pitch", "f2_pitch", "f3_pitch"]):
-        print("No target defined for F1, F2 or F3. Size cannot be calculated.")
+        logging.error("No target defined for F1, F2 or F3. Size cannot be calculated.")
         return SignalTimeSeries()
 
     # Calculate signed error vectors (Actual - Target)
@@ -377,35 +379,14 @@ def calculate_weight(t, H1_H2, H1_H3, H1_H4, target_config: TargetConfig, window
         return SignalTimeSeries()
 
     if not target_config.has_all_bounds(["H1_H2", "H1_H3", "H1_H4"]):
-        print("No target defined for H1_H2, H1_H3 or H1_H4. Weight cannot be calculated.")
+        logging.error("No target defined for H1_H2, H1_H3 or H1_H4. Weight cannot be calculated.")
         return SignalTimeSeries()
-
-    fps = 100 # opensmile default, 100 fps
-    window_size = window_duration * fps
 
     weight_instantaneous = signed_rms([
         H1_H2,
         H1_H3,
         H1_H4
     ])
-    #
-    # weight_0_1s_avg = signed_rms([
-    #     calculate_range(H1_H2, 10),
-    #     calculate_range(H1_H3, 10),
-    #     calculate_range(H1_H4, 10)
-    # ])
-    #
-    # weight_1s_avg = signed_rms([
-    #     calculate_range(H1_H2, 1*window_size),
-    #     calculate_range(H1_H3, 1*window_size),
-    #     calculate_range(H1_H4, 1*window_size)
-    # ])
-    #
-    # weight_5s_avg = signed_rms([
-    #     calculate_range(H1_H2, 5*window_size),
-    #     calculate_range(H1_H3, 5*window_size),
-    #     calculate_range(H1_H4, 5*window_size)
-    # ])
 
     return SignalTimeSeries(x=t, y=weight_instantaneous)
 

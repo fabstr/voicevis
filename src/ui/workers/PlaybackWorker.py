@@ -1,5 +1,7 @@
 from PyQt6 import QtCore
 import miniaudio
+import logging
+import os
 
 class PlaybackWorker(QtCore.QThread):
     playback_finished = QtCore.pyqtSignal()
@@ -14,16 +16,17 @@ class PlaybackWorker(QtCore.QThread):
 
     def run(self):
         try:
-            self.stream = miniaudio.stream_file(self.file_path, seek_frame=self.seek_frame)
-            self.device = miniaudio.PlaybackDevice()
-            self.device.start(self.stream)
+            if self.file_path is None or not os.path.exists(self.file_path):
+                logging.warning(f"File {self.file_path} does not exist")
+            else:
+                self.stream = miniaudio.stream_file(self.file_path, seek_frame=self.seek_frame)
+                self.device = miniaudio.PlaybackDevice()
+                self.device.start(self.stream)
 
-            # Keep thread alive while audio plays and stop wasn't requested
-            while self._is_running and self.device.running:
-                self.msleep(50)  # Low overhead sleep
+                # Keep thread alive while audio plays and stop wasn't requested
+                while self._is_running and self.device.running:
+                    self.msleep(50)  # Low overhead sleep
 
-        except Exception as e:
-            print(f"Playback thread error: {e}")
         finally:
             self.stop_backend()
             self.playback_finished.emit()

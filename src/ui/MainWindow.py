@@ -1,4 +1,7 @@
 import sys
+import logging
+import traceback
+
 from PyQt6 import QtWidgets, QtCore
 import qtawesome as qta
 
@@ -21,10 +24,15 @@ class SessionDockWidget(QtWidgets.QDockWidget):
 
 
 class MainWindow(QtWidgets.QMainWindow):
+    show_error_signal = QtCore.pyqtSignal(object, object, object)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"VoiceVis {__version__}")
         self.resize(800, 900)
+
+        self.show_error_signal.connect(self.show_error_dialog)
+        sys.excepthook = self.handle_exception
 
         # --- DOCK WIDGET SETUP ---
         self.setDockOptions(
@@ -42,6 +50,27 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Start with one default session
         self.add_new_session()
+
+    def handle_exception(self, exc_type, exc_value, exc_traceback):
+        """Catches global exceptions and routes them to the main thread."""
+        # Let keyboard interrupts exit gracefully
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        # Log the error
+        logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+        # Emit the signal instead of directly creating a QMessageBox.
+        # This guarantees the dialog is drawn in the main GUI thread safely.
+        self.show_error_signal.emit(exc_type, exc_value, exc_traceback)
+
+    def show_error_dialog(self, exc_type, exc_value, exc_traceback):
+        tb_string = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+
+        # Launch our custom dialog instead of standard QMessageBox
+        error_dialog = ExceptionDialog(exc_value, tb_string, self)
+        error_dialog.exec()
 
     def add_new_session(self):
         new_session = LiveMultiPlotWidget()
@@ -114,3 +143,49 @@ class MainWindow(QtWidgets.QMainWindow):
             sys.exit(0)
 
 
+class ExceptionDialog(QtWidgets.QDialog):
+    def __init__(self, exc_value, tb_string, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Unhandled error")
+        self.setMinimumSize(600, 400)  # Give it enough space for the traceback
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # --- Header Section (Icon + Messages) ---
+        header_layout = QtWidgets.QHBoxLayout()
+
+        # Fetch the system's standard critical error icon
+        icon_label = QtWidgets.QLabel()
+        icon = self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical)
+        icon_label.setPixmap(icon.pixmap(48, 48))
+        header_layout.addWidget(icon_label)
+
+        # Setup the message text
+        msg_layout = QtWidgets.QVBoxLayout()
+        title_label = QtWidgets.QLabel("<b>An uncaught exception:</b>")
+        info_label = QtWidgets.QLabel(str(exc_value))
+        info_label.setWordWrap(True)
+
+        msg_layout.addWidget(title_label)
+        msg_layout.addWidget(info_label)
+        header_layout.addLayout(msg_layout)
+        header_layout.addStretch()
+
+        layout.addLayout(header_layout)
+
+        # --- Traceback Section (Always Visible) ---
+        tb_edit = QtWidgets.QTextEdit()
+        tb_edit.setReadOnly(True)
+        tb_edit.setPlainText(tb_string)
+
+        # Set a monospace font so the traceback aligns nicely
+        font = tb_edit.font()
+        font.setFamily("Courier")
+        tb_edit.setFont(font)
+
+        layout.addWidget(tb_edit)
+
+        # --- OK Button ---
+        btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+        btn_box.accepted.connect(self.accept)
+        layout.addWidget(btn_box)

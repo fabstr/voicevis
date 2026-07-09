@@ -24,7 +24,7 @@ app_name = f"VoiceVis-{version_str}"
 
 
 # --- 2. Copy resource folders into the application tree ---
-for folder in ['targets', 'docs']:
+for folder in []:
     folder_path = os.path.join(SPEC_DIR, folder)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
@@ -92,7 +92,7 @@ print("*** Running post-processing to copy external folders ***")
 final_build_dir = os.path.join(DISTPATH, app_name)
 
 # The folders you want sitting next to the .exe
-folders_to_expose = ['sample_texts']
+folders_to_expose = ['resources']
 
 for folder in folders_to_expose:
     src_folder = os.path.join(SPECPATH, folder)

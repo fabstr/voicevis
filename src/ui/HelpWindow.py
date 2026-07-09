@@ -1,8 +1,10 @@
+import logging
 import os
 import sys
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter, QListWidget, QTextBrowser
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
+from ResourceManager import ResourceManager
 
 # --- Try to safely read the auto-generated version file ---
 try:
@@ -12,22 +14,13 @@ except ImportError:
 
 
 class HelpWindow(QWidget):
-    def __init__(self, docs_dir="docs"):
+    def __init__(self, resource_manager: ResourceManager, docs_dir="docs"):
         super().__init__()
         # --- Update the window title to include the version ---
         self.setWindowTitle(f"VoiceVis Help")
         self.resize(850, 600)
 
-        # --- Resolve the Docs Directory Path Dynamically ---
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # Running as a bundled application; 'docs' sits inside PyInstaller's data tree
-            base_dir = sys._MEIPASS
-        else:
-            # Running as a raw script; look for 'docs' up one level from 'src'
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            base_dir = os.path.join(base_dir, '..')
-
-        self.docs_dir = os.path.join(base_dir, docs_dir)
+        self.docs_dir = resource_manager.get_absolute_path(docs_dir)
 
         # Set up the main layout and a splitter for resizable panes
         layout = QHBoxLayout(self)
@@ -74,6 +67,8 @@ class HelpWindow(QWidget):
         if not os.path.exists(self.docs_dir) or not os.path.isdir(self.docs_dir):
             return help_items
 
+        logging.info(f"Scanning for help files: {self.docs_dir}")
+
         # Sort files alphabetically so the sidebar is predictable
         for filename in sorted(os.listdir(self.docs_dir)):
             if filename.endswith(".md"):
@@ -84,7 +79,7 @@ class HelpWindow(QWidget):
                     "title": title,
                     "file_name": file_path
                 }
-                print(filename)
+                logging.debug(f"scanning for help files, found {filename}")
                 # Check if this is our main file
                 if filename.lower() == "readme.md":
                     main_item = item
@@ -94,7 +89,8 @@ class HelpWindow(QWidget):
         # If readme.md was found, insert it at the very top (index 0)
         if main_item:
             help_items.insert(0, main_item)
-        print("main", main_item)
+        logging.debug(f"help main: {main_item}")
+        logging.debug(f"help_items: {help_items}")
 
         return help_items
 
@@ -107,7 +103,7 @@ class HelpWindow(QWidget):
                     if line.startswith("# "):
                         return line[2:].strip()
         except Exception as e:
-            print(f"Could not read {file_path}: {e}")
+            logging.error(f"Could not read {file_path}: {e}")
 
         # Fallback: if no # header is found, use the filename formatted nicely
         base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -148,4 +144,4 @@ class HelpWindow(QWidget):
                 self.toc_list.setCurrentRow(index)
                 return
 
-        print(f"Could not resolve internal link: {url.toString()}")
+        logging.error(f"Could not resolve internal link: {url.toString()}")

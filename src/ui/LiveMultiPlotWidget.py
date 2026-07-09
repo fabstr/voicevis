@@ -1,3 +1,4 @@
+import logging
 import queue
 import sys
 import time
@@ -10,8 +11,9 @@ from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
 from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import qtawesome as qta
+import pyqtgraph as pg
 
-
+from ResourceManager import ResourceManager
 from PlotsSpec import spec, defaultSize
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig, calculate_size, calculate_weight
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
@@ -35,6 +37,8 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
 
+        self.resource_manager = ResourceManager()
+
         self.sampling_rate = 44100
         self.analysedAudioFeatures = AudioFeatures()
 
@@ -52,7 +56,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.file_path = None
         self.target_config = TargetConfig()
 
-        self.audioFeatureExtractor = AudioFeatureExtractor(self.target_config)
+        self.audioFeatureExtractor = AudioFeatureExtractor(self.target_config, self.resource_manager)
 
         self.setup_GUI()
         self.setup_audio()
@@ -137,6 +141,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         sample_texts_action.triggered.connect(self.show_sample_text_window)
 
         view_menu.addSeparator()
+
+        view_menu.addAction("Load simple layout", self.load_simple_layout)
+        view_menu.addAction("Load advanced layout", self.load_advanced_layout)
 
         view_menu.addAction("Load Layout...", self.load_layout)
         view_menu.addAction("Save Layout...", self.save_layout)
@@ -232,7 +239,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # --- Target Name Label ---
         self.target_name_label = QtWidgets.QLabel(f"|  Target: {self.target_config.config_name}")
-       # self.target_name_label.setStyleSheet("color: gray;")
+        # self.target_name_label.setStyleSheet("color: gray;")
         top_buttons_layout.addWidget(self.target_name_label)
 
         # --- Second Stretch to keep the time widget centered ---
@@ -436,19 +443,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         new_controller.set_symbol_size(current_size)
 
     def sync_all_x_axes(self):
-        """Cross-links panning/zooming for all active plots."""
-        target_widget = None
-        for controller in self.plot_cells:
-            if controller.plot_name == 'Loudness':
-                target_widget = controller.widget
-                break
+        # If there are 0 or 1 plots, there's nothing to sync
+        if len(self.plot_cells) <= 1:
+            return
 
-        if not target_widget: return
-
-        for controller in self.plot_cells:
-            if controller.spec.get('linkX') == 'Loudness':
-                if controller.widget != target_widget:
-                    controller.widget.setXLink(target_widget)
+        # Daisy-chain all currently active plots together.
+        for i in range(1, len(self.plot_cells)):
+            self.plot_cells[i].widget.setXLink(self.plot_cells[i - 1].widget)
 
     # --- Theme Switching Methods ---
     def set_theme_os_default(self):
@@ -504,7 +505,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
     def show_sample_text_window(self):
         if self.sample_text_window is None:
             from ui.SampleTextWindow import SampleTextWindow
-            self.sample_text_window = SampleTextWindow()
+            self.sample_text_window = SampleTextWindow(self.resource_manager)
 
         self.sample_text_window.show()
         self.sample_text_window.raise_()
@@ -781,7 +782,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
         # 5. Reset camera boundaries
         self.handle_reset_zoom()
-        print("All data cleared.")
+        logging.debug("All data cleared.")
 
     def stop_playback(self):
         self.is_playing = False
@@ -824,18 +825,22 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.analysedAudioFeatures.length_seconds = max(self.analysedAudioFeatures.length_seconds, total_duration)
 
         # --- Update Time Display ---
-        # Only update the text if the user hasn't clicked into the box to type
         if hasattr(self, 'time_edit') and not self.time_edit.hasFocus():
             self.time_edit.setText(self.format_time(self.current_playback_time))
 
-        # --- Sync with Controllers ---
+        # --- Sync Playhead Lines ---
         for controller in self.plot_cells:
             controller.set_playhead_value(self.current_playback_time)
 
-            if self.is_recording:
-                view_window_seconds = 10.0
-                min_x = max(0.0, self.current_playback_time - view_window_seconds)
-                controller.widget.setXRange(min_x, max(view_window_seconds, self.current_playback_time), padding=0)
+        # --- Handle Live Scrolling ---
+        if self.is_recording and self.plot_cells:
+            view_window_seconds = 10.0
+            min_x = max(0.0, self.current_playback_time - view_window_seconds)
+            max_x = max(view_window_seconds, self.current_playback_time)
+
+            # Push the update to whatever plot currently sits at index 0.
+            # The daisy-chain will instantly pull all other plots along with it.
+            self.plot_cells[0].widget.setXRange(min_x, max_x, padding=0)
 
     #################### Misc plot stuff ####################
 
@@ -926,7 +931,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             try:
                 config_obj = self.audioFeatureExtractor.target_config
                 config_obj.to_json(save_path)
-                print(f"Successfully saved targets to: {save_path}")
+                logging.info(f"Successfully saved targets to: {save_path}")
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving targets:\n{str(e)}")
 
@@ -938,24 +943,17 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             try:
                 new_config = TargetConfig.from_json(open_path)
                 self.set_target_config(new_config)
-                print(f"Successfully loaded targets from: {open_path}")
+                logging.info(f"Successfully loaded targets from: {open_path}")
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Load Error",
                                                f"An error occurred while loading targets:\n{str(e)}")
 
     def load_targets_from_path(self, target_file_name):
-        try:
-            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                base_dir = sys._MEIPASS
-            else:
-                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                base_dir = os.path.join(base_dir, '..')
-
-            full_path = os.path.join(base_dir, 'targets', target_file_name)
-            new_config = TargetConfig.from_json(full_path)
-            self.set_target_config(new_config)
-
-        except Exception as e:
+        full_path = self.resource_manager.get_absolute_path(target_file_name)
+        if full_path is not None:
+            target_config = TargetConfig.from_json(full_path)
+            self.set_target_config(target_config)
+        else:
             QtWidgets.QMessageBox.critical(self, "Load Error", f"An error occurred while loading targets:\n{str(e)}")
 
     def set_target_config(self, new_config: TargetConfig):
@@ -1155,7 +1153,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             try:
                 markers = [ann['marker'] for ann in self.annotations if 'marker' in ann]
                 AnnotationMarker.save_to_file(save_path, markers, self.file_path)
-                print(f"Successfully saved annotations to: {save_path}")
+                logging.info(f"Successfully saved annotations to: {save_path}")
 
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{str(e)}")
@@ -1164,7 +1162,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
     def show_help_window(self):
         if self.help_window is None:
-            self.help_window = HelpWindow()
+            self.help_window = HelpWindow(self.resource_manager)
 
         self.help_window.show()
         self.help_window.raise_()
@@ -1307,13 +1305,28 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         )
 
         if open_path:
-            try:
-                with open(open_path, 'r') as f:
-                    layout_data = json.load(f)
-                self.apply_layout_data(layout_data)
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(self, "Load Error",
-                                               f"An error occurred while loading the layout:\n{str(e)}")
+            self.load_layout_from_file(open_path)
+
+    def load_layout_from_file(self, open_path):
+        try:
+            with open(open_path, 'r') as f:
+                layout_data = json.load(f)
+            self.apply_layout_data(layout_data)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Load Error",
+                                           f"An error occurred while loading the layout:\n{str(e)}")
+
+    def load_simple_layout(self):
+        """Manual trigger to load layout from a JSON file."""
+        open_path = self.resource_manager.get_absolute_path("layout_simple.json")
+        if open_path is not None:
+            self.load_layout_from_file(open_path)
+
+    def load_advanced_layout(self):
+        """Manual trigger to load layout from a JSON file."""
+        open_path = self.resource_manager.get_absolute_path("layout_advanced.json")
+        if open_path is not None:
+            self.load_layout_from_file(open_path)
 
     #################### Auto-Save / Auto-Restore Logic ####################
 
@@ -1338,7 +1351,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             settings.setValue("last_target_config", target_json_str)
 
         except Exception as e:
-            print(f"Failed to auto-save application state: {e}")
+            logging.error(f"Failed to auto-save application state: {e}")
 
     def restore_previous_state(self):
         """Reads QSettings on startup to restore the last active layout and targets."""
@@ -1357,7 +1370,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
 
                 os.remove(tmp_path)  # Clean up the temp file
             except Exception as e:
-                print(f"Failed to restore previous target config: {e}")
+                logging.error(f"Failed to restore previous target config: {e}")
 
         # 2. Restore Layout Config
         layout_str = settings.value("last_active_layout", "")
@@ -1366,7 +1379,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                 layout_data = json.loads(layout_str)
                 self.apply_layout_data(layout_data)
             except Exception as e:
-                print(f"Failed to restore previous layout: {e}")
+                logging.error(f"Failed to restore previous layout: {e}")
 
     def format_time(self, seconds: float) -> str:
         """Converts seconds into HH:MM:SS.ms string."""

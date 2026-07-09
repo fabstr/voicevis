@@ -9,11 +9,21 @@ class SignalTimeSeries:
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     y: np.ndarray = field(default_factory=lambda: np.array([]))
 
+    def __init__(self, x: np.ndarray = None, y: np.ndarray = None):
+        if x is None:
+            x = np.array([])
+        if y is None:
+            y = np.array([])
 
-@dataclass
-class BandwidthTimeSeries(SignalTimeSeries):
-    """Extends standard time-series to include Bandwidth (BW)."""
-    BW: np.ndarray = field(default_factory=lambda: np.array([]))
+        valid_mask = ~(np.isnan(x) | np.isnan(y))
+
+        if not np.any(valid_mask):
+            self.x = np.array([])
+            self.y = np.array([])
+        else:
+            # Apply the mask safely
+            self.x = x[valid_mask]
+            self.y = y[valid_mask]
 
 
 @dataclass
@@ -57,6 +67,7 @@ class AudioFeatures:
     # Metadata (Initialized via your audio processing pipeline)
     sample_rate: float = 0.0
     length_seconds: float = 0.0
+
 
 @dataclass
 class FeatureSnapshot:
