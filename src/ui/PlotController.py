@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import pyqtgraph as pg
 import qtawesome as qta
@@ -223,7 +225,7 @@ class PlotController(QtCore.QObject):
         # --- Dynamic Checkboxes ---
         self.checkbox_layout = QtWidgets.QHBoxLayout()
         self.checkbox_layout.setSpacing(10)
-        self._populate_checkboxes()
+        # self._populate_checkboxes()
         top_bar_layout.addLayout(self.checkbox_layout)
         top_bar_layout.addSpacing(15)
 
@@ -467,7 +469,9 @@ class PlotController(QtCore.QObject):
     def set_curve_data(self, curve_name: str, x: np.ndarray, y: np.ndarray, data_container=None,
                        audio_features_ctx=None):
         curve = self.curves.get(curve_name)
-        if not curve: return
+        if not curve:
+            logging.error(f"No curve {curve_name}")
+            return
 
         if curve.get('is_spectrogram'):
             img = curve['image_item']
@@ -507,10 +511,14 @@ class PlotController(QtCore.QObject):
 
     def append_curve_point(self, curve_name: str, snapshot: FeatureSnapshot, audio_features_ctx):
         curve = self.curves.get(curve_name)
-        if not curve: return
+        if not curve:
+            logging.error(f"No curve {curve_name}")
+            return
 
         result_key = curve['analysisResult']
-        if not hasattr(audio_features_ctx, result_key) or not hasattr(snapshot, result_key): return
+        if not hasattr(audio_features_ctx, result_key) or not hasattr(snapshot, result_key):
+            logging.error(f"Could not find analysis result {result_key} for curve {curve_name}")
+            return
 
         data_container = getattr(audio_features_ctx, result_key)
         new_data = getattr(snapshot, result_key)

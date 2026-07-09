@@ -9,21 +9,22 @@ class SignalTimeSeries:
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     y: np.ndarray = field(default_factory=lambda: np.array([]))
 
-    def __init__(self, x: np.ndarray = None, y: np.ndarray = None):
-        if x is None:
-            x = np.array([])
-        if y is None:
-            y = np.array([])
-
-        valid_mask = ~(np.isnan(x) | np.isnan(y))
-
+    def get_x_without_NaN(self):
+        valid_mask = ~(np.isnan(self.x) | np.isnan(self.y))
         if not np.any(valid_mask):
-            self.x = np.array([])
-            self.y = np.array([])
+            return np.array([])
         else:
-            # Apply the mask safely
-            self.x = x[valid_mask]
-            self.y = y[valid_mask]
+            return self.x[valid_mask]
+
+    def get_y_without_NaN(self):
+        valid_mask = ~(np.isnan(self.x) | np.isnan(self.y))
+        if not np.any(valid_mask):
+            return np.array([])
+        else:
+            return self.y[valid_mask]
+
+    def get_last_y(self):
+        return self.y[-1]
 
 
 @dataclass
@@ -33,6 +34,32 @@ class SpectrogramData:
     y: np.ndarray = field(default_factory=lambda: np.array([]))  # Frequency bins
     magnitude_db: np.ndarray = field(default_factory=lambda: np.array([[]])) # 2D STFT matrix
 
+    def get_x_without_NaN(self):
+        # valid_mask = ~(np.isnan(self.x) | np.isnan(self.y) | np.isnan(self.magnitude_db))
+        # if not np.any(valid_mask):
+        #     return np.array([])
+        # else:
+        #     return self.x[valid_mask]
+        return self.x
+
+    def get_y_without_NaN(self):
+        # valid_mask = ~(np.isnan(self.x) | np.isnan(self.y) | np.isnan(self.magnitude_db))
+        # if not np.any(valid_mask):
+        #     return np.array([])
+        # else:
+        #     return self.y[valid_mask]
+        return self.y
+
+    def get_magnitude_without_NaN(self):
+        # valid_mask = ~(np.isnan(self.x) | np.isnan(self.y) | np.isnan(self.magnitude_db))
+        # if not np.any(valid_mask):
+        #     return np.array([])
+        # else:
+        #     return self.magnitude_db[valid_mask]
+        return self.magnitude_db
+
+    def get_last_y(self):
+        return self.y[-1]
 
 @dataclass
 class AudioFeatures:
@@ -42,6 +69,8 @@ class AudioFeatures:
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     slopes: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     weight_instantaneous: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    jitter: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    shimmer: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     H1_H2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
@@ -75,6 +104,8 @@ class FeatureSnapshot:
 
     pitch: float
     loudness: float
+    jitter: float
+    shimmer: float
     weight_instantaneous: float
     slopes: float
     H1_H2: float

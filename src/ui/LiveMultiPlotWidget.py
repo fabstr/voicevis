@@ -129,9 +129,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         # --- View Menu ---
         view_menu = self.menu_bar.addMenu("&View")
 
-        reset_zoom_action = view_menu.addAction("&Reset zoom")
-        reset_zoom_action.triggered.connect(self.handle_reset_zoom)
-
         reset_plots_action = view_menu.addAction("Reset plot spacing")
         reset_plots_action.triggered.connect(self.handle_reset_plots)
 
@@ -438,8 +435,6 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         self.sync_all_x_axes()
         self.update_plots()
 
-        # 5. Force the camera to frame the newly drawn data
-        new_controller.reset_zoom()
         new_controller.set_symbol_size(current_size)
 
     def sync_all_x_axes(self):
@@ -832,15 +827,41 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         for controller in self.plot_cells:
             controller.set_playhead_value(self.current_playback_time)
 
-        # --- Handle Live Scrolling ---
-        if self.is_recording and self.plot_cells:
-            view_window_seconds = 10.0
-            min_x = max(0.0, self.current_playback_time - view_window_seconds)
-            max_x = max(view_window_seconds, self.current_playback_time)
+        # --- Handle Live Scrolling & Playback Tracking ---
+        if self.plot_cells:
+            if self.is_recording:
+                view_window_seconds = 10.0
+                min_x = max(0.0, self.current_playback_time - view_window_seconds)
+                max_x = max(view_window_seconds, self.current_playback_time)
+                self.plot_cells[0].widget.setXRange(min_x, max_x, padding=0)
 
-            # Push the update to whatever plot currently sits at index 0.
-            # The daisy-chain will instantly pull all other plots along with it.
-            self.plot_cells[0].widget.setXRange(min_x, max_x, padding=0)
+            elif self.is_playing:
+                # 1. Get the current view range of the active plot
+                view_box = self.plot_cells[0].widget.getViewBox()
+                x_range = view_box.viewRange()[0]
+                min_x, max_x = x_range[0], x_range[1]
+                view_width = max_x - min_x
+
+                total_length = getattr(self.analysedAudioFeatures, 'length_seconds', 0.0) or 0.0
+
+                # 2. Only auto-scroll if the current zoom level doesn't already fit the entire audio
+                if view_width < (total_length - 0.01):
+                    future_buffer = 0.50 * view_width
+
+                    # Scenario A: Playhead approaches the right edge (10% buffer)
+                    if self.current_playback_time > (max_x - future_buffer):
+                        new_max_x = self.current_playback_time + future_buffer
+                        new_min_x = new_max_x - view_width
+
+                        # Push the update to the first plot (daisy-chain handles the rest)
+                        self.plot_cells[0].widget.setXRange(new_min_x, new_max_x, padding=0)
+
+                    # Scenario B: Playhead is off the left edge (e.g., user seeks backwards)
+                    elif self.current_playback_time < min_x:
+                        new_min_x = max(0.0, self.current_playback_time - future_buffer)
+                        new_max_x = new_min_x + view_width
+
+                        self.plot_cells[0].widget.setXRange(new_min_x, new_max_x, padding=0)
 
     #################### Misc plot stuff ####################
 
@@ -895,20 +916,23 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         for controller in self.plot_cells:
             for curve_name, curve_config in controller.curves.items():
                 if not hasattr(self.analysedAudioFeatures, curve_config['analysisResult']):
+                    logging.error(f"Unknown curve: {curve_config['analysisResult']}")
                     continue
 
                 data = getattr(self.analysedAudioFeatures, curve_config['analysisResult'])
                 if not hasattr(data, 'x') or not hasattr(data, 'y'):
+                    logging.error(f"Missing x or y data")
                     continue
 
                 is_spectrogram = curve_config.get('is_spectrogram', False)
                 if not is_spectrogram and len(data.x) != len(data.y):
+                    logging.error(f"Mismatch in dimensions for curve {curve_config['name']} ")
                     continue
 
                 controller.set_curve_data(
                     curve_name=curve_name,
-                    x=data.x,
-                    y=data.y,
+                    x=data.get_x_without_NaN(),
+                    y=data.get_y_without_NaN(),
                     data_container=data,
                     audio_features_ctx=self.analysedAudioFeatures
                 )
@@ -979,8 +1003,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
             self.analysedAudioFeatures.H1_H2.x,
             self.analysedAudioFeatures.H1_H2.y,
             self.analysedAudioFeatures.H1_H3.y,
-            self.analysedAudioFeatures.H1_H4.y,
-            self.audioFeatureExtractor.target_config)
+            self.analysedAudioFeatures.H1_H4.y)
 
         self.update_plots()
 

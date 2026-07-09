@@ -35,8 +35,7 @@ spec = {
         },
         'targets': {
             'Pitch': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
+        }
     },
 
     "Size": {
@@ -52,8 +51,7 @@ spec = {
         },
         'targets': {
             'Size': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
+        }
     },
 
     'Weight': {
@@ -69,8 +67,7 @@ spec = {
         },
         'targets': {
             'Weight': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
+        }
     },
 
     'Loudness': {
@@ -89,8 +86,7 @@ spec = {
         },
         'targets': {
             'Loudness': {'colour': target_band}
-        },
-        'linkX': None
+        }
     },
 
     "Spectral slopes": {
@@ -106,8 +102,7 @@ spec = {
         },
         'targets': {
             'slopes': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
+        }
     },
 
     'Formants': {
@@ -136,8 +131,7 @@ spec = {
             'F1': {'colour': target_band},
             'F2': {'colour': target_band},
             'F3': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
+        }
     },
 
     'F3/Pitch': {
@@ -153,8 +147,7 @@ spec = {
         },
         'targets': {
             'F3_Pitch': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
+        }
     },
 
     'F2/Pitch': {
@@ -170,8 +163,7 @@ spec = {
         },
         'targets': {
             'F2_Pitch': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
+        }
     },
 
     'F1/Pitch': {
@@ -187,8 +179,7 @@ spec = {
         },
         'targets': {
             'F1_Pitch': {'colour': target_band}
-        },
-        'linkX': 'Loudness'
+        }
     },
 
     "Fullness": {
@@ -205,8 +196,7 @@ spec = {
         },
         'targets': {
             'Size': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
+        }
     },
 
     'Spectrogram': {
@@ -221,8 +211,7 @@ spec = {
                     'is_spectrogram': True,  # The flag our PlotController looks for
                     'colour': 'viridis',
                 },
-            },
-            'linkX': 'Loudness' # Synchronize zooming/panning with the other plots
+            }
         },
 
     "H1_H2": {
@@ -238,8 +227,7 @@ spec = {
         },
         'targets': {
             'H1_H2': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
+        }
     },
 
     "H1_H3": {
@@ -255,8 +243,7 @@ spec = {
         },
         'targets': {
             'H1_H3': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
+        }
     },
 
     "H1_H4": {
@@ -272,8 +259,7 @@ spec = {
         },
         'targets': {
             'H1_H4': {'colour': target_band}
-        },
-        'linkX': 'Loudness',
+        }
     },
 
     "H1_A3": {
@@ -289,7 +275,38 @@ spec = {
         },
         'targets': {
             'H1_A3': {'colour': target_band}
+        }
+    },
+
+    "Jitter": {
+        'title': 'Jitter',
+        'y_min': 0,
+        'y_max': 1,
+        'curves': {
+            'Jitter': {
+                'size': defaultSize,
+                'colour': 'red',
+                'analysisResult': 'jitter'
+            }
         },
-        'linkX': 'Loudness',
+        # 'targets': {
+        #     'H1_A3': {'colour': target_band}
+        # }
+    },
+
+    "Shimmer": {
+        'title': 'Shimmer',
+        'y_min': 0,
+        'y_max': 7,
+        'curves': {
+            'Shimmer': {
+                'size': defaultSize,
+                'colour': 'yellow',
+                'analysisResult': 'shimmer'
+            }
+        },
+        # 'targets': {
+        #     'H1_A3': {'colour': target_band}
+        # }
     },
 }

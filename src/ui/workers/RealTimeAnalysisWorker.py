@@ -85,27 +85,29 @@ class RealTimeAnalysisWorker(QtCore.QThread):
 
                             latest_point = FeatureSnapshot(
                                 time=current_time,
-                                pitch=results.pitch.y[-1],
-                                loudness=results.loudness.y[-1],
-                                slopes=results.slopes.y[-1],
-                                weight_instantaneous=results.weight_instantaneous.y[-1],
+                                pitch=results.pitch.get_last_y(),
+                                loudness=results.loudness.get_last_y(),
+                                slopes=results.slopes.get_last_y(),
+                                jitter=results.jitter.get_last_y(),
+                                shimmer=results.shimmer.get_last_y(),
+                                weight_instantaneous=results.weight_instantaneous.get_last_y(),
 
                                 # Individual Formants
-                                F1=results.F1.y[-1],
-                                F2=results.F2.y[-1],
-                                F3=results.F3.y[-1],
+                                F1=results.F1.get_last_y(),
+                                F2=results.F2.get_last_y(),
+                                F3=results.F3.get_last_y(),
 
                                 # Weight
-                                H1_H2=results.H1_H2.y[-1],
-                                H1_H3=results.H1_H3.y[-1],
-                                H1_H4=results.H1_H4.y[-1],
-                                H1_A3=results.H1_A3.y[-1],
+                                H1_H2=results.H1_H2.get_last_y(),
+                                H1_H3=results.H1_H3.get_last_y(),
+                                H1_H4=results.H1_H4.get_last_y(),
+                                H1_A3=results.H1_A3.get_last_y(),
 
-                                F1_Pitch=results.F1_Pitch.y[-1] if len(results.F1_Pitch.y) > 0 else None,
-                                F2_Pitch=results.F2_Pitch.y[-1] if len(results.F2_Pitch.y) > 0 else None,
-                                F3_Pitch=results.F3_Pitch.y[-1] if len(results.F3_Pitch.y) > 0 else None,
+                                F1_Pitch=results.F1_Pitch.get_last_y() if len(results.F1_Pitch.y) > 0 else None,
+                                F2_Pitch=results.F2_Pitch.get_last_y() if len(results.F2_Pitch.y) > 0 else None,
+                                F3_Pitch=results.F3_Pitch.get_last_y() if len(results.F3_Pitch.y) > 0 else None,
 
-                                size=results.size.y[-1] if len(results.size.y) > 0 else None,
+                                size=results.size.get_last_y() if len(results.size.y) > 0 else None,
 
                                 spectrogram=latest_spec
                             )

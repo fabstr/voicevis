@@ -124,6 +124,9 @@ class AudioFeatureExtractor:
 
         pitch_clean = np.where(valid_mask, pitch, np.nan)
         loudness_clean = np.where(valid_mask, loudness, np.nan)
+        jitter_clean = np.where(valid_mask, df['jitterLocal_sma3nz'].to_numpy(), np.nan)
+        shimmer_clean = np.where(valid_mask, df['shimmerLocaldB_sma3nz'].to_numpy(), np.nan)
+
         f1_clean = np.where(valid_mask, f1, np.nan)
         f2_clean = np.where(valid_mask, f2, np.nan)
         f3_clean = np.where(valid_mask, f3, np.nan)
@@ -146,7 +149,9 @@ class AudioFeatureExtractor:
 
             pitch=SignalTimeSeries(x=timepoints, y=pitch_clean),
             loudness=SignalTimeSeries(x=timepoints, y=loudness_clean),
-            weight_instantaneous=calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean, self.target_config),
+            jitter=SignalTimeSeries(x=timepoints, y=jitter_clean),
+            shimmer=SignalTimeSeries(x=timepoints, y=shimmer_clean),
+            weight_instantaneous=calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean),
             size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),
             spectrogram=calculate_spectrogram(pcm_data, sampling_rate),
             slopes=calculate_slopes(pcm_data, sampling_rate, timepoints),
@@ -374,21 +379,14 @@ def calculate_range(y, window_size):
     return centered_window()
 
 
-def calculate_weight(t, H1_H2, H1_H3, H1_H4, target_config: TargetConfig, window_duration = 1):
-    if target_config is None or len(t) == 0:
-        return SignalTimeSeries()
-
-    if not target_config.has_all_bounds(["H1_H2", "H1_H3", "H1_H4"]):
-        logging.error("No target defined for H1_H2, H1_H3 or H1_H4. Weight cannot be calculated.")
-        return SignalTimeSeries()
-
-    weight_instantaneous = signed_rms([
+def calculate_weight(t, H1_H2, H1_H3, H1_H4):
+    weight = signed_rms([
         H1_H2,
         H1_H3,
         H1_H4
     ])
 
-    return SignalTimeSeries(x=t, y=weight_instantaneous)
+    return SignalTimeSeries(x=t, y=weight)
 
 
 def signed_rms(array: np.ndarray) -> np.ndarray:
