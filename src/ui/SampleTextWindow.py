@@ -9,6 +9,14 @@ from ResourceManager import ResourceManager
 class SampleTextWindow(QWidget):
     def __init__(self, resource_manager: ResourceManager, sample_dir="sample_texts"):
         super().__init__()
+        self.file_list = None
+        self.btn_new = None
+        self.btn_edit = None
+        self.btn_save = None
+        self.btn_cancel = None
+        self.stack = None
+        self.viewer = None
+        self.editor = None
         self.setWindowTitle("Sample Texts Editor")
         self.resize(850, 600)
 
@@ -132,7 +140,7 @@ class SampleTextWindow(QWidget):
             self.viewer.setMarkdown(f"# Error\nCould not read file:\n`{e}`")
 
     def create_new_file(self):
-        """Prompts the user for a filename and creates a blank markdown file."""
+        """Prompts the user for a filename and creates a blank Markdown file."""
         text, ok = QInputDialog.getText(self, "New Sample Text", "Enter filename (without .md):")
         if ok and text:
             # Sanitize and format filename
@@ -154,7 +162,7 @@ class SampleTextWindow(QWidget):
             self.enter_edit_mode()
 
     def enter_edit_mode(self):
-        """Switches the UI to markdown editing mode."""
+        """Switches the UI to Markdown editing mode."""
         if not self.current_file_path:
             return
 
@@ -166,7 +174,7 @@ class SampleTextWindow(QWidget):
         self.btn_cancel.show()
 
     def exit_edit_mode(self):
-        """Reverts the UI back to markdown viewing mode without saving."""
+        """Reverts the UI back to Markdown viewing mode without saving."""
         self.stack.setCurrentWidget(self.viewer)
         self.btn_save.hide()
         self.btn_cancel.hide()

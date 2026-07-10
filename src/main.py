@@ -5,7 +5,6 @@ import sys
 import traceback
 
 from pathlib import Path
-import pyqtgraph as pg
 
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import QStandardPaths, QThread
@@ -16,13 +15,10 @@ from PyQt6.QtWidgets import QMessageBox, QApplication
 class SyncFileHandler(logging.FileHandler):
     """A FileHandler that forces the OS to immediately write to disk."""
     def emit(self, record):
-        # Writes the log and flushes Python's buffer
         super().emit(record)
         try:
-            # Force the Operating System to sync its buffer to the physical disk
             os.fsync(self.stream.fileno())
         except OSError:
-            # Ignore errors if the file stream is already closed or invalid
             pass
 
 
@@ -84,7 +80,7 @@ def setup_logging():
 
 
 def global_exception_handler(exc_type, exc_value, exc_traceback):
-    """Catches unhandled exceptions, logs them, and shows a GUI error dialog safely."""
+    """Catches unhandled exceptions, logs them, and shows a GUI error dialogue safely."""
     # Let keyboard interrupts exit gracefully
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -108,7 +104,7 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
     # Format the traceback for the user message box
     tb_string = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
 
-    # 3. Show the error dialog (Safe because we are in the main thread with an active app)
+    # 3. Show the error dialogue (Safe because we are in the main thread with an active app)
     error_box = QMessageBox()
     error_box.setIcon(QMessageBox.Icon.Critical)
     error_box.setWindowTitle("Fatal Error")
@@ -116,7 +112,7 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
     error_box.setInformativeText(str(exc_value))
     error_box.setDetailedText(tb_string)
 
-    # Process pending events to ensure the UI isn't stuck before showing the dialog
+    # Process pending events to ensure the UI isn't stuck before showing the dialogue
     app.processEvents()
 
     error_box.exec()

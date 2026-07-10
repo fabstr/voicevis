@@ -160,7 +160,6 @@ class ExceptionDialog(QtWidgets.QDialog):
         icon_label.setPixmap(icon.pixmap(48, 48))
         header_layout.addWidget(icon_label)
 
-        # Setup the message text
         msg_layout = QtWidgets.QVBoxLayout()
         title_label = QtWidgets.QLabel("<b>An uncaught exception:</b>")
         info_label = QtWidgets.QLabel(str(exc_value))

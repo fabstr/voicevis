@@ -118,8 +118,6 @@ class HelpWindow(QWidget):
                 with open(file_name, "r", encoding="utf-8") as f:
                     markdown_text = f.read()
 
-                # --- Dynamic replacement step ---
-                # This injects the version string wherever you drop {{VERSION}} in your markdown files
                 markdown_text = markdown_text.replace("{{VERSION}}", __version__)
 
                 self.text_browser.setMarkdown(markdown_text)

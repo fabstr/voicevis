@@ -206,9 +206,6 @@ def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512
     if mag_spectrum.shape[1] == 0:
         return np.array([]), np.array([])
 
-    # 2. Calculate the spectral slope for each frame using vectorized linear regression
-    # f shape: (F,)
-    # mag_spectrum shape: (F, T)
     f_mean = np.mean(f)
     mag_mean = np.mean(mag_spectrum, axis=0)  # Mean across frequencies for each frame
 
@@ -256,7 +253,7 @@ def load_pcm_from_wave(file_path):
         # 4. Convert the buffer to a NumPy array
         audio_samples = np.frombuffer(raw_bytes, dtype=dtype)
 
-        # 5. Optional: Normalize to floating point (-1.0 to 1.0)
+        # 5. Optional: Normalise to floating point (-1.0 to 1.0)
         # This is highly recommended for spectral analysis / STFT
         if samp_width == 1:
             # Convert unsigned 8-bit (0 to 255) to (-1.0 to 1.0)
@@ -300,8 +297,8 @@ def convertMp3ToPcm(mp3_path):
         pcm_data = pcm_data.reshape(-1, num_channels)
         pcm_data = pcm_data.mean(axis=1)  # Average left and right channels
 
-    # 3. Normalize to floating-point values between -1.0 and 1.0
-    # openSMILE expects standard normalized float32/64 audio signals
+    # 3. Normalise to floating-point values between -1.0 and 1.0
+    # openSMILE expects standard normalised float32/64 audio signals
     signal = pcm_data.astype(np.float32) / 32768.0
     return signal, sampling_rate
 
