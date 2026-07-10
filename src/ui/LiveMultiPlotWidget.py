@@ -511,10 +511,27 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         new_controller.set_symbol_size(current_size)
 
     def sync_all_x_axes(self):
-        if len(self.plot_cells) <= 1:
-            return
-        for i in range(1, len(self.plot_cells)):
-            self.plot_cells[i].widget.setXLink(self.plot_cells[i - 1].widget)
+        master_widget = None
+
+        for cell in self.plot_cells:
+            # Check the cell's spec to see if it contains a frequency curve
+            is_freq_plot = any(
+                curve.get('is_frequency_analysis', False)
+                for curve in cell.spec.get('curves', {}).values()
+            )
+
+            if is_freq_plot:
+                # Explicitly clear any existing link so it doesn't accidentally
+                # pan/zoom when you scrub the time plots
+                cell.widget.setXLink(None)
+            else:
+                # First time-based plot becomes the master anchor
+                if master_widget is None:
+                    master_widget = cell.widget
+                    master_widget.setXLink(None)  # Clear stale links on the master
+                else:
+                    # Link all subsequent time plots to the master
+                    cell.widget.setXLink(master_widget)
 
     # --- Theme Switching Methods ---
     def set_theme_os_default(self):
@@ -1016,7 +1033,9 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                     continue
 
                 is_spectrogram = curve_config.get('is_spectrogram', False)
-                if not is_spectrogram and len(data.x) != len(data.y):
+                is_frequency_analysis = curve_config.get('is_frequency_analysis', False)
+
+                if not is_spectrogram and not is_frequency_analysis and len(data.x) != len(data.y):
                     logging.error(f"Mismatch in dimensions for curve {curve_config['name']} ")
                     continue
 

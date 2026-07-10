@@ -3,8 +3,9 @@ import logging
 import os
 import sys
 import traceback
-from logging import captureWarnings
+
 from pathlib import Path
+import pyqtgraph as pg
 
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import QStandardPaths, QThread
@@ -124,6 +125,9 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
 if __name__ == '__main__':
     setup_logging()
     sys.excepthook = global_exception_handler
+
+    # use OpenGl
+    # pg.setConfigOptions(useOpenGL=True)
 
     # imported here to avoid import order problems which makes the logging break
     from ui.MainWindow import MainWindow

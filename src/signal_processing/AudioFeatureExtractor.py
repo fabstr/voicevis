@@ -410,11 +410,18 @@ def calculate_slopes(samples, sampling_rate, timepoints) -> SignalTimeSeries:
 
     return SignalTimeSeries(x=timepoints, y=matched_slopes)
 
-def calculate_spectrogram(samples, sampling_rate) -> SpectrogramData:
-    f_spec, t_spec, Sxx = spectrogram(samples, fs=sampling_rate, window='hann', nperseg=nperseg, noverlap=noverlap)
+def calculate_spectrogram(samples, sampling_rate):
+    # 4. Change window to 'blackmanharris' or 'nuttall' for less spectral leakage
+    f_spec, t_spec, Sxx = spectrogram(
+        samples,
+        fs=sampling_rate,
+        window='blackmanharris',
+        nperseg=4096,
+        noverlap=3072,
+        nfft=8192
+    )
 
     # Convert magnitude to log scale (Decibels), strictly clipping to prevent log(0) errors
     Sxx_db = 10 * np.log10(np.clip(Sxx, 1e-10, None))
 
     return SpectrogramData(x=t_spec, y=f_spec, magnitude_db=Sxx_db)
-
