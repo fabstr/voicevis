@@ -1014,8 +1014,13 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
         if self.plot_cells:
             if self.is_recording:
                 view_window_seconds = 10.0
-                min_x = max(0.0, self.current_playback_time - view_window_seconds)
-                max_x = max(view_window_seconds, self.current_playback_time)
+
+                # Add a 1-second visual buffer so the playhead isn't clipped by the right border
+                future_padding = 1.0
+
+                min_x = max(0.0, self.current_playback_time - view_window_seconds + future_padding)
+                max_x = max(view_window_seconds, self.current_playback_time + future_padding)
+
                 self.plot_cells[0].widget.setXRange(min_x, max_x, padding=0)
 
             elif self.is_playing:

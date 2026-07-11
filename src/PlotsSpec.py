@@ -256,19 +256,40 @@ spec = {
     },
 
     'Spectrogram': {
-            'title': 'Spectrogram',
-            'y_min': 0,
-            'y_max': 8000,
-            'mouse_enabled_x': True,
-            'mouse_enabled_y': True,
-            'curves': {
-                'Spectrogram': {
-                    'analysisResult': 'spectrogram',
-                    'is_spectrogram': True,  # The flag our PlotController looks for
-                    'colour': 'viridis',
-                },
-            }
-        },
+        'title': 'Time - Frequency & Magnitude',
+        'y_min': 0,
+        'y_max': 8000,
+        'mouse_enabled_x': True,
+        'mouse_enabled_y': True,
+        'curves': {
+            'Spectrogram': {
+                'analysisResult': 'spectrogram',
+                'is_spectrogram': True,  # The flag our PlotController looks for
+                'colour': 'viridis',
+            },
+        }
+    },
+
+    'Frequency Analysis': {
+        'title': 'Frequency - Magnitude',
+        'mouse_enabled_x': False,
+        'mouse_enabled_y': False,
+        'y_min': -90,
+        'y_max': 0,
+        'x_min': 10,  # Start at 10Hz to prevent log(0) crashes
+        'x_max': 10000,  # Max frequency 10kHz
+        'log_x': True,
+        'x_ticks': [10, 110, 220, 1000, 5000, 10000],  # X-axis labels
+        'curves': {
+            'Spectrum': {
+                'analysisResult': 'spectrogram',
+                'is_frequency_analysis': True,
+                'colour': '#9370DB',
+                'fill_colour': (147, 112, 219, 150)
+            },
+        }
+    },
+
 
     "H1_H2": {
         'title': 'H1_H2',
@@ -365,25 +386,4 @@ spec = {
         #     'H1_A3': {'colour': target_band}
         # }
     },
-
-    'Frequency Analysis': {
-        'title': 'Frequency Analysis',
-        'mouse_enabled_x': False,
-        'mouse_enabled_y': False,
-        'y_min': -90,
-        'y_max': 0,
-        'x_min': 10, # Start at 10Hz to prevent log(0) crashes
-        'x_max': 10000, # Max frequency 10kHz
-        'log_x': True,
-        'x_ticks': [10, 110, 220, 1000, 5000, 10000], # X-axis labels
-        'curves': {
-            'Spectrum': {
-                'analysisResult': 'spectrogram',
-                'is_frequency_analysis': True,
-                'colour': '#9370DB',
-                'fill_colour': (147, 112, 219, 150)
-            },
-        }
-    }
-
 }
