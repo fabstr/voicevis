@@ -976,7 +976,7 @@ class LiveMultiPlotWidget(QtWidgets.QWidget):
                                                                        None) else self.sampling_rate
         seek_frame = int(target_time * current_sr)
 
-        if hasattr(self, 'play_worker') and self.play_worker.isRunning():
+        if self.play_worker is not None and self.play_worker.is_running():
             self.play_worker.stop_backend()
             self.play_worker.wait()
 

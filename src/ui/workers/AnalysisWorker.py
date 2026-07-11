@@ -1,3 +1,7 @@
+"""
+Define a worker to perform analysis in a separate thread.
+"""
+
 from PyQt6 import QtCore
 
 from signal_processing.AudioFeatures import AudioFeatures

@@ -107,3 +107,6 @@ class PlaybackWorker(QtCore.QThread):
             except ValueError:
                 pass
             self.stream = None
+
+    def is_running(self):
+        return self._is_running
