@@ -5,7 +5,7 @@ import traceback
 from PyQt6 import QtWidgets, QtCore
 import qtawesome as qta
 
-from ui.LiveMultiPlotWidget import LiveMultiPlotWidget
+from ui.AnalysisWidget import AnalysisWidget
 
 # Try to safely read the auto-generated version file
 try:
@@ -73,7 +73,7 @@ class MainWindow(QtWidgets.QMainWindow):
         error_dialog.exec()
 
     def add_new_session(self):
-        new_session = LiveMultiPlotWidget()
+        new_session = AnalysisWidget()
         session_num = len(self.dock_widgets) + 1
         tab_name = f"Session {session_num}"
 

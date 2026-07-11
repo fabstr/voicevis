@@ -25,7 +25,7 @@ from ui.workers.PlaybackWorker import PlaybackWorker
 from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
 from ui.PlotController import PlotController
 
-class LiveMultiPlotWidget(QtWidgets.QWidget):
+class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
     new_session_signal = QtCore.pyqtSignal()
     close_session_signal = QtCore.pyqtSignal()
