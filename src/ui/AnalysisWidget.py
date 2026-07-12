@@ -589,7 +589,9 @@ class AnalysisWidget(QtWidgets.QWidget):
                 for curve in cell.spec.get('curves', {}).values()
             )
 
-            if is_freq_plot:
+            is_inst_plot = cell.spec.get('is_instantaneous', False)
+
+            if is_freq_plot or is_inst_plot:
                 # Explicitly clear any existing link so it doesn't accidentally
                 # pan/zoom when you scrub the time plots
                 cell.widget.setXLink(None)
@@ -1012,7 +1014,15 @@ class AnalysisWidget(QtWidgets.QWidget):
         for controller in self.plot_cells:
             controller.set_playhead_value(self.current_playback_time)
 
-        if self.plot_cells:
+        # Find the first standard time-based plot to act as the viewport driver
+        time_plot_cell = next(
+            (c for c in self.plot_cells
+             if not c.spec.get('is_instantaneous') and not any(
+                cv.get('is_frequency_analysis') for cv in c.spec.get('curves', {}).values())),
+            None
+        )
+
+        if time_plot_cell:
             if self.is_recording:
                 view_window_seconds = 10.0
 
@@ -1022,10 +1032,10 @@ class AnalysisWidget(QtWidgets.QWidget):
                 min_x = max(0.0, self.current_playback_time - view_window_seconds + future_padding)
                 max_x = max(view_window_seconds, self.current_playback_time + future_padding)
 
-                self.plot_cells[0].widget.setXRange(min_x, max_x, padding=0)
+                time_plot_cell.widget.setXRange(min_x, max_x, padding=0)
 
             elif self.is_playing:
-                view_box = self.plot_cells[0].widget.getViewBox()
+                view_box = time_plot_cell.widget.getViewBox()
                 x_range = view_box.viewRange()[0]
                 min_x, max_x = x_range[0], x_range[1]
                 view_width = max_x - min_x
@@ -1037,11 +1047,11 @@ class AnalysisWidget(QtWidgets.QWidget):
                     if self.current_playback_time > (max_x - future_buffer):
                         new_max_x = self.current_playback_time + future_buffer
                         new_min_x = new_max_x - view_width
-                        self.plot_cells[0].widget.setXRange(new_min_x, new_max_x, padding=0)
+                        time_plot_cell.widget.setXRange(new_min_x, new_max_x, padding=0)
                     elif self.current_playback_time < min_x:
                         new_min_x = max(0.0, self.current_playback_time - future_buffer)
                         new_max_x = new_min_x + view_width
-                        self.plot_cells[0].widget.setXRange(new_min_x, new_max_x, padding=0)
+                        time_plot_cell.widget.setXRange(new_min_x, new_max_x, padding=0)
 
     #################### Misc plot stuff ####################
 
@@ -1096,21 +1106,40 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def update_plots(self):
         for controller in self.plot_cells:
+
+            # --- Handle Instantaneous Plots ---
+            if controller.spec.get('is_instantaneous'):
+                for curve_name in controller.curves.keys():
+                    controller.set_curve_data(
+                        curve_name=curve_name,
+                        x=[], y=[],  # The controller pulls x/y directly from audio_features_ctx
+                        data_container=None,
+                        audio_features_ctx=self.analysedAudioFeatures
+                    )
+                continue
+
+            # --- Handle Standard Time-Series & Frequency Plots ---
             for curve_name, curve_config in controller.curves.items():
-                if not hasattr(self.analysedAudioFeatures, curve_config['analysisResult']):
-                    logging.error(f"Unknown curve: {curve_config['analysisResult']}")
+                result_key = curve_config.get('analysisResult')
+
+                # Skip if there's no analysis result mapped to this curve
+                if not result_key:
                     continue
 
-                data = getattr(self.analysedAudioFeatures, curve_config['analysisResult'])
+                if not hasattr(self.analysedAudioFeatures, result_key):
+                    logging.error(f"Unknown curve: {result_key}")
+                    continue
+
+                data = getattr(self.analysedAudioFeatures, result_key)
                 if not hasattr(data, 'x') or not hasattr(data, 'y'):
-                    logging.error(f"Missing x or y data")
+                    logging.error(f"Missing x or y data for {curve_name}")
                     continue
 
                 is_spectrogram = curve_config.get('is_spectrogram', False)
                 is_frequency_analysis = curve_config.get('is_frequency_analysis', False)
 
                 if not is_spectrogram and not is_frequency_analysis and len(data.x) != len(data.y):
-                    logging.error(f"Mismatch in dimensions for curve {curve_config['name']} ")
+                    logging.error(f"Mismatch in dimensions for curve {curve_name}")
                     continue
 
                 controller.set_curve_data(

@@ -7,30 +7,19 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 
 from signal_processing.AudioFeatures import FeatureSnapshot
 from signal_processing.TargetConfig import TargetConfig
-from ui import AnnotationMarker
+from ui.AnnotationMarker import AnnotationMarker
 
 
 class FrequencyAxisItem(pg.AxisItem):
     """Custom AxisItem to force exact X-tick positions and labels for frequency plots."""
 
-    def __init__(self, x_ticks=None, is_log_x=False, *args, **kwds):
-        super().__init__(*args, **kwds)
-        self.x_ticks = x_ticks
-        self.is_log_x = is_log_x
+    def __init__(self, *args, **kwargs):
+        # Safely extract our custom variables before initializing the parent AxisItem
+        self.x_ticks = kwargs.pop('x_ticks', None)
+        self.is_log_x = kwargs.pop('is_log_x', False)
 
-        if self.x_ticks:
-            ticks = []
-            for v in self.x_ticks:
-                pos = np.log10(v) if self.is_log_x else v
+        super().__init__(*args, **kwargs)
 
-                # Optional: Format cleanly (e.g., 1000 -> 1k, 10000 -> 10k)
-                label = f"{v // 1000}k" if v >= 1000 else str(v)
-                ticks.append((pos, label))
-
-            # setTicks takes a list of levels. Index 0 is for major ticks.
-            self.setTicks([ticks])
-
-        # --- THE FIX ---
         # Force the axis to allocate 35 pixels of vertical space.
         # This prevents the axis from collapsing to a height of 0 during initialization.
         self.setHeight(35)
@@ -57,7 +46,6 @@ class FrequencyAxisItem(pg.AxisItem):
             val = (10 ** v) if self.is_log_x else v
 
             # Snap to the nearest predefined tick to prevent floating-point inaccuracies
-            # (e.g., ensuring 999.99999 is strictly treated as 1000)
             closest_tick = min(self.x_ticks, key=lambda x: abs(x - val))
 
             # Format nicely for a cleaner UI (e.g., 1000 -> 1k, 10000 -> 10k)
@@ -197,6 +185,7 @@ class PlotController(QtCore.QObject):
 
         # 1. Initialize Core Plot Widget WITH our Custom ViewBox
         is_freq_plot = any(c.get('is_frequency_analysis', False) for c in self.spec.get('curves', {}).values())
+        is_inst_plot = self.spec.get('is_instantaneous', False)
 
         # Select the appropriate custom axis class
         if is_freq_plot:
@@ -205,6 +194,9 @@ class PlotController(QtCore.QObject):
                 is_log_x=self.spec.get('log_x', False),
                 orientation='bottom'
             )
+        elif is_inst_plot:
+            # X axis evaluates arbitrary boundaries, not time formatting
+            bottom_axis = pg.AxisItem(orientation='bottom')
         else:
             bottom_axis = TimeAxisItem(orientation='bottom')
 
@@ -216,10 +208,17 @@ class PlotController(QtCore.QObject):
             axisItems={'bottom': bottom_axis}
         )
 
+        # --- Apply Axis Labels if defined in the spec ---
+        if 'x_label' in self.spec:
+            self.widget.setLabel('bottom', self.spec['x_label'])
+        if 'y_label' in self.spec:
+            self.widget.setLabel('left', self.spec['y_label'])
+
         self.playhead = pg.InfiniteLine(angle=90, movable=False)
         self.widget.addItem(self.playhead)
-        # Hide playhead for frequency analysis plots (since x-axis is frequency, not time)
-        if is_freq_plot:
+
+        # Explicitly hide playhead for non-time-series plots
+        if is_freq_plot or is_inst_plot:
             self.playhead.setVisible(False)
 
         self.curves = {}
@@ -391,7 +390,9 @@ class PlotController(QtCore.QObject):
 
     def _build_curves(self):
         for name, curve_spec in self.spec['curves'].items():
-            self.curves[name] = {'analysisResult': curve_spec['analysisResult']}
+            self.curves[name] = {}
+            if 'analysisResult' in curve_spec:
+                self.curves[name]['analysisResult'] = curve_spec['analysisResult']
 
             if curve_spec.get('is_spectrogram'):
                 img = pg.ImageItem()
@@ -403,11 +404,10 @@ class PlotController(QtCore.QObject):
                 self.curves[name]['image_item'] = img
                 continue
 
-            # --- New Frequency Analysis Plot Support ---
+            # --- Frequency Analysis Plot Support ---
             if curve_spec.get('is_frequency_analysis'):
                 pen = pg.mkPen(color=curve_spec.get('colour', '#9370DB'), width=1.5)
                 brush = pg.mkBrush(curve_spec.get('fill_colour', (147, 112, 219, 150)))
-                # Set a fill level (like the bottom of the graph) for that solid appearance
                 fill_lvl = self.spec.get('y_min', -100)
 
                 self.curves[name]['curve'] = self.widget.plot(
@@ -416,6 +416,20 @@ class PlotController(QtCore.QObject):
                 self.curves[name]['is_frequency_analysis'] = True
                 continue
 
+            # --- Instantaneous X/Y Plot Support ---
+            if self.spec.get('is_instantaneous'):
+                edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
+                # Use a pure ScatterPlotItem instead of PlotDataItem to avoid line-optimization bugs
+                scatter_item = pg.ScatterPlotItem(
+                    size=curve_spec.get('size', 6),
+                    pen=edge_pen,
+                    brush=curve_spec.get('colour', '#00FFFF')
+                )
+                self.widget.addItem(scatter_item)
+                self.curves[name]['curve'] = scatter_item
+                continue
+
+            # --- Standard Time-Series Support ---
             edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
             self.curves[name]['curve'] = self.widget.plot(
                 [], symbol="o", pen=None,
@@ -461,6 +475,16 @@ class PlotController(QtCore.QObject):
         # Cache container for scrubbing
         curve['data_container'] = data_container
 
+        # --- Handle Instantaneous Data Restores ---
+        if self.spec.get('is_instantaneous'):
+            x_key = self.spec.get('x_series')
+            y_key = self.spec.get('y_series')
+            if audio_features_ctx and hasattr(audio_features_ctx, x_key) and hasattr(audio_features_ctx, y_key):
+                curve['x_container'] = getattr(audio_features_ctx, x_key)
+                curve['y_container'] = getattr(audio_features_ctx, y_key)
+                self._update_instantaneous_plot(curve, self.playhead.value())
+            return
+
         if curve.get('is_spectrogram'):
             img = curve['image_item']
             if data_container is not None and hasattr(data_container,
@@ -489,7 +513,8 @@ class PlotController(QtCore.QObject):
                     z_interp = np.interp(x_arr, z_data.x, z_data.y)
                     cmap = pg.colormap.get('viridis')
                     colors = cmap.map(z_interp)
-                    curve['curve'].setData(x=x_arr, y=y_arr, symbolBrush=colors, symbolPen=edge_pen)
+                    curve['curve'].setData(x=x_arr, y=y_arr, symbolBrush=colors,
+                                           symbolPen=pg.mkPen(color=(128, 128, 128, 128), width=0.5))
             else:
                 curve['curve'].setData(x=x_arr, y=y_arr)
         else:
@@ -501,7 +526,47 @@ class PlotController(QtCore.QObject):
             logging.error(f"No curve {curve_name}")
             return
 
-        result_key = curve['analysisResult']
+        # --- Handle Instantaneous Appends ---
+        if self.spec.get('is_instantaneous'):
+            x_key = self.spec.get('x_series')
+            y_key = self.spec.get('y_series')
+
+            if hasattr(snapshot, x_key) and hasattr(snapshot, y_key):
+                x_val = getattr(snapshot, x_key)
+                y_val = getattr(snapshot, y_key)
+
+                # Cache full structures so that set_playhead_value can scrub this chart backwards
+                if hasattr(audio_features_ctx, x_key) and hasattr(audio_features_ctx, y_key):
+                    x_cont = getattr(audio_features_ctx, x_key)
+                    y_cont = getattr(audio_features_ctx, y_key)
+                    curve['x_container'] = x_cont
+                    curve['y_container'] = y_cont
+
+                    if hasattr(snapshot, 'time') and snapshot.time is not None:
+                        # Append directly to underlying X/Y arrays if not already present.
+                        # (This prevents a crash if the parent time-series plots are currently hidden)
+                        if x_val is not None and not np.isnan(x_val):
+                            if len(x_cont.x) == 0 or x_cont.x[-1] != snapshot.time:
+                                x_cont.x = np.append(x_cont.x, snapshot.time)
+                                x_cont.y = np.append(x_cont.y, x_val)
+
+                        if y_val is not None and not np.isnan(y_val):
+                            if len(y_cont.x) == 0 or y_cont.x[-1] != snapshot.time:
+                                y_cont.x = np.append(y_cont.x, snapshot.time)
+                                y_cont.y = np.append(y_cont.y, y_val)
+
+                        self._update_instantaneous_plot(curve, snapshot.time)
+                        return
+
+                # Fallback if no valid arrays or time exist yet
+                if x_val is not None and y_val is not None and not np.isnan(x_val) and not np.isnan(y_val):
+                    curve['curve'].setData(x=[x_val], y=[y_val])
+            return
+
+        result_key = curve.get('analysisResult')
+        if not result_key:
+            return
+
         if not hasattr(audio_features_ctx, result_key) or not hasattr(snapshot, result_key):
             logging.error(f"Could not find analysis result {result_key} for curve {curve_name}")
             return
@@ -593,12 +658,22 @@ class PlotController(QtCore.QObject):
             self.widget.enableAutoRange(axis=pg.ViewBox.XAxis)
 
     def set_playhead_value(self, value: float):
-        self.playhead.setValue(value)
+        is_freq_plot = any(c.get('is_frequency_analysis', False) for c in self.spec.get('curves', {}).values())
+        is_inst_plot = self.spec.get('is_instantaneous', False)
 
-        # When scrubbing, update any frequency plots to show the spectrum at this exact time
+        # Enforce hidden state during playback updates
+        if is_freq_plot or is_inst_plot:
+            self.playhead.setVisible(False)
+        else:
+            self.playhead.setVisible(True)
+            self.playhead.setValue(value)
+
+        # When scrubbing, update any dynamic plots to show exactly what's happening at this time
         for curve in self.curves.values():
             if curve.get('is_frequency_analysis'):
                 self._update_frequency_plot(curve, curve.get('data_container'), value)
+            elif self.spec.get('is_instantaneous'):
+                self._update_instantaneous_plot(curve, value)
 
     def _update_frequency_plot(self, curve: dict, data_container, target_time: float):
         if data_container is None or not hasattr(data_container,
@@ -622,3 +697,66 @@ class PlotController(QtCore.QObject):
             x_data = np.log10(x_data)
 
         curve['curve'].setData(x=x_data, y=y_data)
+
+    def _update_instantaneous_plot(self, curve: dict, target_time: float):
+        x_cont = curve.get('x_container')
+        y_cont = curve.get('y_container')
+
+        if x_cont is None or y_cont is None:
+            return
+
+        # Ensure we have data
+        if len(x_cont.x) == 0 or len(y_cont.x) == 0:
+            return
+
+        trail_time = self.spec.get('trail_time', 0.0)
+        min_time = max(0.0, target_time - trail_time)
+
+        # Slice the X array for points within the time window
+        valid_x_mask = (x_cont.x >= min_time) & (x_cont.x <= target_time)
+        x_times = x_cont.x[valid_x_mask]
+        x_vals = x_cont.y[valid_x_mask]
+
+        if len(x_times) == 0:
+            curve['curve'].setData(x=[], y=[])
+            return
+
+        # Interpolate the Y array to precisely align with X's time axis.
+        # This guarantees safety against varying sample rates or mismatched data lengths.
+        y_vals = np.interp(x_times, y_cont.x, y_cont.y)
+
+        # Filter out NaNs to prevent plotting glitches
+        valid_points = ~(np.isnan(x_vals) | np.isnan(y_vals))
+        final_x = x_vals[valid_points]
+        final_y = y_vals[valid_points]
+        final_times = x_times[valid_points]
+
+        if len(final_x) == 0:
+            curve['curve'].setData(x=[], y=[])
+            return
+
+        # --- Dynamic Alpha/Fading Logic ---
+
+        # Grab the configured color for this plot
+        curve_specs = list(self.spec.get('curves', {}).values())
+        base_color = pg.mkColor(curve_specs[0].get('colour', '#00FFFF') if curve_specs else '#00FFFF')
+        r, g, b = base_color.red(), base_color.green(), base_color.blue()
+
+        if trail_time > 0:
+            # Calculate how old each point is (0 is current, trail_time is oldest)
+            ages = target_time - final_times
+
+            # Normalize ages between 0.0 and 1.0
+            normalized_ages = np.clip(ages / trail_time, 0.0, 1.0)
+
+            # Map age to an alpha value (255 = fully visible, 0 = invisible)
+            alphas = (255 * (1.0 - normalized_ages)).astype(int)
+        else:
+            alphas = np.full(len(final_x), 255)
+
+        # Build an array of brushes and pens so both the fill and the outline fade
+        brushes = [pg.mkBrush(r, g, b, a) for a in alphas]
+        pens = [pg.mkPen(color=(128, 128, 128, int(a * 0.5)), width=0.5) for a in alphas]
+
+        # Call setData using ScatterPlotItem's direct parameters
+        curve['curve'].setData(x=final_x, y=final_y, brush=brushes, pen=pens)

@@ -64,7 +64,7 @@ spec = {
     'Weight': {
         'title': 'Weight (softness)',
         'y_min': 0,
-        'y_max': 2,
+        'y_max': 2.5,
         'curves': {
             'Weight': {
                 'size': defaultSize,
@@ -79,6 +79,28 @@ spec = {
         },
         'targets': {
             'Weight': {'colour': target_band}
+        }
+    },
+
+    "Size vs Weight": {
+        'title': 'Size vs Weight',
+        'is_instantaneous': True,
+        'trail_time': 3.0,
+        'x_series': 'weight_instantaneous',
+        'y_series': 'size',
+        'x_label': 'Weight (softness)',
+        'y_label': 'Size',
+        'x_min': 0,
+        'x_max': 2.5,
+        'y_min': 0,
+        'y_max': 30,
+        'mouse_enabled_x': False,
+        'mouse_enabled_y': False,
+        'curves': {
+            'InstantPoint': {
+                'size': defaultSize * 3,  # Larger point for visibility
+                'colour': '#00FFFF',      # Cyan
+            }
         }
     },
 
