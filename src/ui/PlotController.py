@@ -183,6 +183,9 @@ class PlotController(QtCore.QObject):
         self.click_callback = click_callback
         self.change_plot_callback = change_plot_callback
 
+        self.current_size = initial_size
+        self.current_time = 0.0
+
         # 1. Initialize Core Plot Widget WITH our Custom ViewBox
         is_freq_plot = any(c.get('is_frequency_analysis', False) for c in self.spec.get('curves', {}).values())
         is_inst_plot = self.spec.get('is_instantaneous', False)
@@ -276,16 +279,41 @@ class PlotController(QtCore.QObject):
         # --- Dynamic Checkboxes ---
         self.checkbox_layout = QtWidgets.QHBoxLayout()
         self.checkbox_layout.setSpacing(10)
-        # self._populate_checkboxes()
         top_bar_layout.addLayout(self.checkbox_layout)
         top_bar_layout.addSpacing(15)
 
-        # --- Local Point Size Slider ---
+        # --- Trail Length Field (Left Side) ---
+        is_inst_plot = self.spec.get('is_instantaneous', False)
+
+        self.trail_label = QtWidgets.QLabel("Trail (s):")
+        current_trail = self.spec.get('trail_time', 1.0)
+        self.trail_edit = QtWidgets.QLineEdit(f"{current_trail:.2f}")
+        self.trail_edit.setValidator(QtGui.QDoubleValidator(0.0, 60.0, 2))
+        self.trail_edit.setFixedWidth(40)
+        self.trail_edit.returnPressed.connect(self.apply_trail_length)
+
+        self.trail_apply_btn = QtWidgets.QPushButton()
+        self.trail_apply_btn.setFixedSize(24, 24)
+        self.trail_apply_btn.setToolTip("Apply Trail Length")
+        self.trail_apply_btn.clicked.connect(self.apply_trail_length)
+
+        top_bar_layout.addWidget(self.trail_label)
+        top_bar_layout.addWidget(self.trail_edit)
+        top_bar_layout.addWidget(self.trail_apply_btn)
+
+        self.trail_label.setVisible(is_inst_plot)
+        self.trail_edit.setVisible(is_inst_plot)
+        self.trail_apply_btn.setVisible(is_inst_plot)
+
+        if is_inst_plot:
+            top_bar_layout.addSpacing(15)
+
+        # --- Local Point Size Slider (Right Side) ---
         local_size_label = QtWidgets.QLabel("Size:")
         self.local_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.local_slider.setMinimum(1)
         self.local_slider.setMaximum(5)
-        self.local_slider.setValue(initial_size)
+        self.local_slider.setValue(int(initial_size))
         self.local_slider.setTickPosition(QtWidgets.QSlider.TickPosition.TicksBelow)
         self.local_slider.setTickInterval(1)
         self.local_slider.setFixedWidth(80)
@@ -336,7 +364,6 @@ class PlotController(QtCore.QObject):
         bg_color = palette.color(QtGui.QPalette.ColorRole.Window)
         text_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
         grid_color = palette.color(QtGui.QPalette.ColorRole.PlaceholderText)
-
         base_color = palette.color(QtGui.QPalette.ColorRole.Base)
         highlight_color = palette.color(QtGui.QPalette.ColorRole.Highlight)
 
@@ -374,6 +401,17 @@ class PlotController(QtCore.QObject):
                     background-color: {base_color.name()}; 
                     color: {text_color.name()}; 
                     selection-background-color: {highlight_color.name()}; 
+                }}
+            """)
+
+        # Style the new Trail Length fields
+        if hasattr(self, 'trail_apply_btn'):
+            self.trail_apply_btn.setIcon(qta.icon('fa5s.check', color=text_color.name()))
+            self.trail_edit.setStyleSheet(f"""
+                QLineEdit {{ 
+                    border: 1px solid gray; 
+                    background-color: {bg_color.name()}; 
+                    color: {text_color.name()}; 
                 }}
             """)
 
@@ -629,15 +667,32 @@ class PlotController(QtCore.QObject):
             self.curves[curve_name]['curve'].setVisible(visible)
 
     def set_symbol_size(self, size_value: int):
-        target_size = size_value
-        for item in self.widget.getPlotItem().items:
-            if isinstance(item, pg.ScatterPlotItem):
-                if isinstance(item, AnnotationMarker): continue
-                item.setSize(target_size)
-            elif isinstance(item, pg.PlotDataItem):
-                item.opts['symbolSize'] = size_value
-                if item.scatter is not None:
-                    item.scatter.setSize(target_size)
+        self.current_size = size_value
+
+        for name, curve in self.curves.items():
+            if 'curve' not in curve: continue
+
+            c_item = curve['curve']
+            multiplier = 2 if self.spec.get('is_instantaneous') else 1
+            final_size = size_value * multiplier
+
+            if isinstance(c_item, pg.ScatterPlotItem):
+                if type(c_item).__name__ == 'AnnotationMarker': continue
+                c_item.setSize(final_size)
+
+                # Also update the hover expansion size dynamically
+                if self.spec.get('is_instantaneous'):
+                    c_item.opts['hoverSize'] = final_size * 1.5
+
+            elif isinstance(c_item, pg.PlotDataItem):
+                c_item.opts['symbolSize'] = final_size
+                if c_item.scatter is not None:
+                    c_item.scatter.setSize(final_size)
+
+        # Force a data redraw using explicit time
+        if self.spec.get('is_instantaneous') or any(
+                c.get('is_frequency_analysis') for c in self.spec.get('curves', {}).values()):
+            self.set_playhead_value(self.current_time)
 
     def reset_zoom(self):
         y_min = self.spec.get('y_min')
@@ -658,6 +713,8 @@ class PlotController(QtCore.QObject):
             self.widget.enableAutoRange(axis=pg.ViewBox.XAxis)
 
     def set_playhead_value(self, value: float):
+        self.current_time = value  # <-- Store the exact time here
+
         is_freq_plot = any(c.get('is_frequency_analysis', False) for c in self.spec.get('curves', {}).values())
         is_inst_plot = self.spec.get('is_instantaneous', False)
 
@@ -760,3 +817,11 @@ class PlotController(QtCore.QObject):
 
         # Call setData using ScatterPlotItem's direct parameters
         curve['curve'].setData(x=final_x, y=final_y, brush=brushes, pen=pens)
+
+    def apply_trail_length(self):
+        val = float(self.trail_edit.text().replace(',', '.'))
+        self.spec['trail_time'] = val
+        self.trail_edit.clearFocus()
+
+        # Force a redraw using the explicitly tracked time
+        self.set_playhead_value(self.current_time)
