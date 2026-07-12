@@ -26,13 +26,9 @@ class AnalysisWorker(QtCore.QThread):
 
     def run(self):
         """This runs in a separate background thread."""
-        try:
-            audio_array = np.frombuffer(self.audio_bytes, dtype=np.int16)
-            audio_array = audio_array.astype(np.float32) / 32768.0
-            results = self.extractor.analyzePCM(audio_array, self.sample_rate)
+        audio_array = np.frombuffer(self.audio_bytes, dtype=np.int16)
+        audio_array = audio_array.astype(np.float32) / 32768.0
+        results = self.extractor.analyzePCM(audio_array, self.sample_rate)
 
-            # Emit the results back to the GUI
-            self.result_ready.emit(results)
-        except Exception as e:
-            logging.error(f"An error occurred while analyzing audio data: {e}")
-            self.error_occurred.emit(str(e))
+        # Emit the results back to the GUI
+        self.result_ready.emit(results)

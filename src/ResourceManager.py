@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 
 class ResourceManager:
@@ -28,3 +29,32 @@ class ResourceManager:
         else:
             logging.error(f"Resource Manager couldn't find {relative_path}")
             return None
+
+    def get_matching_files(self, regex_pattern, relative_dir=""):
+        """
+        Finds all files in the resources directory (or a specific relative_dir)
+        that match the provided regex pattern.
+        """
+        search_dir = os.path.join(self.base_dir, "resources", relative_dir)
+        matching_files = []
+
+        if not os.path.exists(search_dir):
+            logging.error(f"Resource Manager couldn't find the search directory: {search_dir}")
+            return matching_files
+
+        try:
+            compiled_pattern = re.compile(regex_pattern)
+        except re.error as e:
+            logging.error(f"Invalid regex pattern '{regex_pattern}': {e}")
+            return matching_files
+
+        # Walk through the directory and its subdirectories
+        for root, _, files in os.walk(search_dir):
+            for file in files:
+                if compiled_pattern.search(file):
+                    matching_files.append(os.path.join(root, file))
+
+        if not matching_files:
+            logging.info(f"No files matched the regex '{regex_pattern}' in {search_dir}")
+
+        return matching_files

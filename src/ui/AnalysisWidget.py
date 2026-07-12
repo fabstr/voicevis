@@ -191,8 +191,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         targets_menu = self.menu_bar.addMenu("&Targets")
         targets_menu.addAction("Set Targets...", self.open_targets_dialog)
         targets_menu.addSeparator()
-        targets_menu.addAction("Female", lambda: self.load_targets_from_path("target_female.json"))
-        targets_menu.addAction("Male", lambda: self.load_targets_from_path("target_male.json"))
+        targets_menu.addAction("Female", lambda: self.load_targets_from_path("targets/target_female.json"))
+        targets_menu.addAction("Male", lambda: self.load_targets_from_path("targets/target_male.json"))
         targets_menu.addSeparator()
         targets_menu.addAction("Import targets...", self.import_targets)
         targets_menu.addAction("Export targets...", self.export_targets)
@@ -210,8 +210,10 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         view_menu.addSeparator()
 
-        view_menu.addAction("Load simple layout", self.load_simple_layout)
-        view_menu.addAction("Load advanced layout", self.load_advanced_layout)
+
+        view_menu.addAction("Load simple layout", lambda: self.load_layout_from_file(self.resource_manager.get_absolute_path("layouts/layout_simple.json")))
+        view_menu.addAction("Load medium layout", lambda: self.load_layout_from_file(self.resource_manager.get_absolute_path("layouts/layout_medium.json")))
+        view_menu.addAction("Load advanced layout", lambda: self.load_layout_from_file(self.resource_manager.get_absolute_path("layouts/layout_advanced.json")))
 
         view_menu.addAction("Load Layout...", self.load_layout)
         view_menu.addAction("Save Layout...", self.save_layout)
@@ -1511,16 +1513,6 @@ class AnalysisWidget(QtWidgets.QWidget):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
                                            f"An error occurred while loading the layout:\n{str(e)}")
-
-    def load_simple_layout(self):
-        open_path = self.resource_manager.get_absolute_path("layout_simple.json")
-        if open_path is not None:
-            self.load_layout_from_file(open_path)
-
-    def load_advanced_layout(self):
-        open_path = self.resource_manager.get_absolute_path("layout_advanced.json")
-        if open_path is not None:
-            self.load_layout_from_file(open_path)
 
     #################### Auto-Save / Auto-Restore Logic ####################
 

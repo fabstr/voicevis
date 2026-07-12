@@ -1,0 +1,64 @@
+{
+    "global_size": 5,
+    "main_splitter_sizes": [
+        1271,
+        1270,
+        1271
+    ],
+    "columns": [
+        {
+            "plots": [
+                {
+                    "name": "Loudness",
+                    "local_size": 5,
+                    "toggles": {}
+                },
+                {
+                    "name": "Pitch",
+                    "local_size": 5,
+                    "toggles": {}
+                }
+            ],
+            "sizes": [
+                982,
+                981
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "Size",
+                    "local_size": 5,
+                    "toggles": {}
+                },
+                {
+                    "name": "Weight",
+                    "local_size": 5,
+                    "toggles": {}
+                }
+            ],
+            "sizes": [
+                982,
+                981
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "name": "Jitter",
+                    "local_size": 5,
+                    "toggles": {}
+                },
+                {
+                    "name": "Shimmer",
+                    "local_size": 5,
+                    "toggles": {}
+                }
+            ],
+            "sizes": [
+                982,
+                981
+            ]
+        }
+    ]
+}

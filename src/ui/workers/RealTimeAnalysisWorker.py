@@ -52,6 +52,8 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                 if len(new_samples) == 0:
                     continue
 
+                print(len(new_samples))
+
                 # Shift buffer and append new samples
                 self.sliding_buffer = np.roll(self.sliding_buffer, -len(new_samples))
                 self.sliding_buffer[-len(new_samples):] = new_samples
@@ -91,6 +93,10 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                                 jitter=results.jitter.get_last_y(),
                                 shimmer=results.shimmer.get_last_y(),
                                 weight_instantaneous=results.weight_instantaneous.get_last_y(),
+                                # weight_333ms_max=results.weight_333ms_max.get_last_y(),
+                                weight_333ms_max=0,
+                                pitch_5s_mean=0,
+                                size_5s_mean=0,
 
                                 # Individual Formants
                                 F1=results.F1.get_last_y(),

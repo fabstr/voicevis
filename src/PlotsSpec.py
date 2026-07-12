@@ -47,8 +47,8 @@ spec = {
 
     "Size": {
         'title': 'Size',
-        'y_min': -15,
-        'y_max': 25,
+        'y_min': 0,
+        'y_max': 30,
         'curves': {
             'Size': {
                 'size': defaultSize,
@@ -64,16 +64,69 @@ spec = {
     'Weight': {
         'title': 'Weight (softness)',
         'y_min': 0,
-        'y_max': 50,
+        'y_max': 5,
         'curves': {
             'Weight': {
                 'size': defaultSize,
                 'colour': weight,
-                'analysisResult': 'weight_instantaneous',  # Y-axis
+                'analysisResult': 'weight_instantaneous',
             },
+            # 'Weight 330 max max': {
+            #     'size': defaultSize,
+            #     'colour': 'blue',
+            #     'analysisResult': 'weight_333ms_max',
+            # },
         },
         'targets': {
             'Weight': {'colour': target_band}
+        }
+    },
+
+    '5s average pitch': {
+        'title': 'Pitch 5s average',
+        'y_min': 0,
+        'y_max': 300,
+        'curves': {
+            'Pitch': {
+                'size': defaultSize,
+                'colour': pitch,
+                'analysisResult': 'pitch_5s_mean',
+            },
+        },
+        'targets': {
+            'Pitch': {'colour': target_band},
+        }
+    },
+
+    '5s average size': {
+        'title': 'Size 5s average',
+        'y_min': 0,
+        'y_max': 30,
+        'curves': {
+            'Size': {
+                'size': defaultSize,
+                'colour': size,
+                'analysisResult': 'size_5s_mean',
+            },
+        },
+        'targets': {
+            'Size': {'colour': target_band},
+        }
+    },
+
+    '5s average weight': {
+        'title': 'Weight 5s average',
+        'y_min': 0,
+        'y_max': 40,
+        'curves': {
+            'Weight 330 max max': {
+                'size': defaultSize,
+                'colour': weight,
+                'analysisResult': 'weight_333ms_max',
+            },
+        },
+        'targets': {
+            'Weight': {'colour': target_band},
         }
     },
 
@@ -98,8 +151,8 @@ spec = {
 
     "Spectral slopes": {
         'title': 'Spectral slopes',
-        'y_min': 0,
-        'y_max': 8.0e-7,
+        'y_min': -1e-6,
+        'y_max': 1e-6,
         'curves': {
             'Spectral slopes': {
                 'size': defaultSize,
@@ -358,7 +411,7 @@ spec = {
     "Jitter": {
         'title': 'Jitter',
         'y_min': 0,
-        'y_max': 1,
+        'y_max': 0.2,
         'curves': {
             'Jitter': {
                 'size': defaultSize,

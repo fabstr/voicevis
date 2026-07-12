@@ -9,8 +9,8 @@
         },
         {
             "name": "pitch",
-            "min": 80.0,
-            "max": 130.0,
+            "min": 79.0,
+            "max": 143.0,
             "enabled": true
         },
         {
@@ -51,14 +51,14 @@
         },
         {
             "name": "size",
-            "min": -5.0,
-            "max": 5.0,
+            "min": 12.0,
+            "max": 21.0,
             "enabled": true
         },
         {
             "name": "weight",
-            "min": 0.0,
-            "max": 18.0,
+            "min": 5.0,
+            "max": 12.0,
             "enabled": true
         },
         {
@@ -95,6 +95,12 @@
             "name": "h1_a3",
             "min": 0.0,
             "max": 30.0,
+            "enabled": true
+        },
+        {
+            "name": "slopes",
+            "min": 0,
+            "max": 168E-9,
             "enabled": true
         }
     ]

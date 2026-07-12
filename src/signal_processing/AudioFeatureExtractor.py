@@ -1,17 +1,18 @@
 import logging
-import time
 
+import librosa
 import opensmile
 import miniaudio
 import numpy as np
 import pandas as pd
 import wave
 
-from scipy.signal import stft, spectrogram
+from scipy.signal import stft, spectrogram, lfilter
 
 from ResourceManager import ResourceManager
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
+from signal_processing.genderer import calculate_target_probabilities
 
 nperseg = 2048
 noverlap = 1536
@@ -142,6 +143,14 @@ class AudioFeatureExtractor:
         f2_pitch_clean = f2_clean / pitch_clean
         f3_pitch_clean = f3_clean / pitch_clean
 
+
+        # 1. Generate the raw structural NAQ array
+        naq_timeline = compute_native_naq_timeline(pcm_data, sampling_rate, pitch_clean, timepoints)
+
+        # 2. Compute the perceived heuristic profile using the new isolated method
+        weight3, weight3_average = calculate_weight3(naq_timeline, pitch_clean)
+        weight3_clean = np.where(valid_mask, weight3, np.nan)
+
         # 3. Construct the result dictionary using filtered arrays
         result = AudioFeatures(
             sample_rate=sampling_rate,
@@ -151,7 +160,7 @@ class AudioFeatureExtractor:
             loudness=SignalTimeSeries(x=timepoints, y=loudness_clean),
             jitter=SignalTimeSeries(x=timepoints, y=jitter_clean),
             shimmer=SignalTimeSeries(x=timepoints, y=shimmer_clean),
-            weight_instantaneous=calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean),
+            weight_instantaneous=SignalTimeSeries(x=timepoints, y=weight3_clean), #calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean),
             size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),
             spectrogram=calculate_spectrogram(pcm_data, sampling_rate),
             slopes=calculate_slopes(pcm_data, sampling_rate, timepoints),
@@ -170,24 +179,32 @@ class AudioFeatureExtractor:
             H1_A3=SignalTimeSeries(x=timepoints, y=h1_a3_clean),
         )
 
+        result.size_5s_mean = rolling_mean(timepoints, result.size, valid_mask)
+        result.pitch_5s_mean = rolling_mean(timepoints, result.pitch, valid_mask)
+        result.weight_333ms_max = rolling_mean(timepoints, result.weight_instantaneous, valid_mask)
+
+        probabilities = calculate_target_probabilities(result.size_5s_mean, result.pitch_5s_mean, result.weight_333ms_max)
+        # print(str(probabilities))
 
         return result
 
+
 def calculate_size(t, F1_Pitch, F2_Pitch, F3_Pitch, target_config) -> SignalTimeSeries:
-    if target_config is None or len(t) == 0:
-        return SignalTimeSeries()
+    # if target_config is None or len(t) == 0:
+    #     return SignalTimeSeries()
+    #
+    # if not target_config.has_all_bounds(["f1_pitch", "f2_pitch", "f3_pitch"]):
+    #     logging.error("No target defined for F1, F2 or F3. Size cannot be calculated.")
+    #     return SignalTimeSeries()
+    #
+    # # Calculate signed error vectors (Actual - Target)
+    # err_F1 = calculate_target_error(F1_Pitch, target_config.get_mean("f1_pitch"))
+    # err_F2 = calculate_target_error(F2_Pitch, target_config.get_mean("f2_pitch"))
+    # err_F3 = calculate_target_error(F3_Pitch, target_config.get_mean("f3_pitch"))
+    #
+    # size_y = signed_rms([err_F1, err_F2, err_F3])
 
-    if not target_config.has_all_bounds(["f1_pitch", "f2_pitch", "f3_pitch"]):
-        logging.error("No target defined for F1, F2 or F3. Size cannot be calculated.")
-        return SignalTimeSeries()
-
-    # Calculate signed error vectors (Actual - Target)
-    err_F1 = calculate_target_error(F1_Pitch, target_config.get_mean("f1_pitch"))
-    err_F2 = calculate_target_error(F2_Pitch, target_config.get_mean("f2_pitch"))
-    err_F3 = calculate_target_error(F3_Pitch, target_config.get_mean("f3_pitch"))
-
-    size_y = signed_rms([err_F1, err_F2, err_F3])
-
+    size_y = signed_rms([F1_Pitch, F2_Pitch, F3_Pitch])
     return SignalTimeSeries(x=t, y=size_y)
 
 def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512):
@@ -329,62 +346,20 @@ def remove_local_outliers_robust(data_array, window=50, threshold=3.0):
 
     return cleaned_series
 
-
-def calculate_range(y, window_size):
-    def trailing_window():
-        # Pad the start of the file with the mean of the first window_size (e.g. 5 s)
-        first_5s = y[:window_size]
-
-        # Handle the edge case where the first 5 seconds is entirely silence/NaN
-        if np.isnan(first_5s).all():
-            first_5s_mean = 0  # Fallback value
-        else:
-            first_5s_mean = np.nanmean(first_5s)
-
-        padded_y = np.pad(y, pad_width=(window_size - 1, 0), mode='constant', constant_values=first_5s_mean)
-
-        def robust_ptp(x):
-            if np.isnan(x).all():
-                return np.nan  # If the whole 5s window is silent, the range is NaN
-
-            # Calculate the distance between the 95th and 5th percentiles.
-            # This inherently ignores extreme isolated spikes.
-            return np.nanpercentile(x, 95) - np.nanpercentile(x, 5)
-
-        # 3. Compute the rolling range using the robust percentile function
-        rolling_range_series = pd.Series(padded_y).rolling(window=window_size, min_periods=1).apply(robust_ptp, raw=True)
-
-        # Clean up created NaNs and convert back to numpy
-        range_array = rolling_range_series.to_numpy()[window_size - 1:]
-        return range_array
-
-    def centered_window():
-        def robust_ptp(x):
-            if np.isnan(x).all():
-                return np.nan
-            return np.nanpercentile(x, 95) - np.nanpercentile(x, 5)
-
-        # center=True eliminates the phase delay.
-        # min_periods=1 handles the edges automatically (it looks forward at the start).
-        rolling_range = pd.Series(y).rolling(
-            window=window_size,
-            center=True,
-            min_periods=1
-        ).apply(robust_ptp, raw=True)
-        return rolling_range
-
-    return centered_window()
-
-
 def calculate_weight(t, H1_H2, H1_H3, H1_H4):
-    weight = signed_rms([
-        H1_H2,
-        H1_H3,
-        H1_H4
-    ])
-
+    weight = signed_rms([H1_H2, H1_H3, H1_H4])
     return SignalTimeSeries(x=t, y=weight)
 
+def rolling_mean(t: np.ndarray, series: SignalTimeSeries, valid_mask, window=500):
+    y = pd.Series(series.y).rolling(
+        window=window, # 2 s
+        center=True,
+        min_periods=1
+    ).mean()
+
+    y = np.where(valid_mask, y, np.nan)
+
+    return SignalTimeSeries(x=t, y=y)
 
 def signed_rms(array: np.ndarray) -> np.ndarray:
     # Stack them into a 2D array of shape (n, time_steps)
@@ -422,3 +397,72 @@ def calculate_spectrogram(samples, sampling_rate):
     Sxx_db = 10 * np.log10(np.clip(Sxx, 1e-10, None))
 
     return SpectrogramData(x=t_spec, y=f_spec, magnitude_db=Sxx_db)
+
+def compute_native_naq_timeline(pcm_data, sampling_rate, f0_timeline, timepoints) -> np.ndarray:
+    """
+    Natively isolates the glottal flow wave using frame-by-frame LPC
+    inverse filtering and calculates the Normalized Amplitude Quotient.
+    """
+    naq_timeline = np.zeros_like(timepoints)
+    window_duration = 0.050
+    window_samples = int(window_duration * sampling_rate)
+    lpc_order = 2 + int(sampling_rate / 1000)
+
+    for i, tp in enumerate(timepoints):
+        f0_val = f0_timeline[i]
+
+        # ⚠️ Updated: Handle np.nan checks introduced by your valid_mask
+        if np.isnan(f0_val) or f0_val <= 0:
+            continue
+
+        start_idx = max(0, int((tp - window_duration / 2) * sampling_rate))
+        end_idx = min(len(pcm_data), start_idx + window_samples)
+        audio_frame = pcm_data[start_idx:end_idx]
+
+        if len(audio_frame) < lpc_order * 2:
+            continue
+
+        try:
+            a_coefficients = librosa.lpc(audio_frame, order=lpc_order)
+            glottal_derivative = lfilter(a_coefficients, [1.0], audio_frame)
+            glottal_flow = lfilter([1.0], [1.0, -0.98], glottal_derivative)
+
+            av_discrete = np.max(glottal_flow) - np.min(glottal_flow)
+            dmin_discrete = np.abs(np.min(glottal_derivative))
+            t0_samples = sampling_rate / f0_val
+
+            if dmin_discrete > 1e-6:
+                naq_timeline[i] = av_discrete / (dmin_discrete * t0_samples)
+        except Exception:
+            continue
+
+    return naq_timeline
+
+def calculate_weight3(naq_timeline, f0_timeline) -> tuple[np.ndarray, float]:
+    """
+    Transforms raw physiological NAQ data into a perceptual vocal weight metric.
+    Applies inverse thickness mapping, context pitch anchoring, and silence suppression.
+    """
+    eps = 1e-6
+
+    # 1. Invert thickness: small NAQ profiles mean tight, sudden, heavy fold closures
+    glottal_heaviness = 1.0 / (naq_timeline + eps)
+
+    # 2. Min-max scale baseline variations to cleanly clip artifacts between 0.0 and 1.0
+    glottal_heaviness_norm = np.clip((glottal_heaviness - 1.0) / 10.0, 0, 1)
+
+    # 3. ⚠️ Updated: Clean NaNs from f0_timeline to prevent math scaling warnings
+    f0_safe = np.nan_to_num(f0_timeline, nan=0.0)
+
+    # Apply Pitch Interaction: Scales heavier configurations upward if pitch rises
+    f0_factor = f0_safe / 150.0
+    vocal_weight_timeline = glottal_heaviness_norm * f0_factor
+
+    # 4. Suppress metric entirely during silence or unvoiced speech pauses
+    vocal_weight_timeline[f0_safe == 0] = 0.0
+
+    # 5. Extract strict average tracking exclusively from active voiced frames
+    voiced_frames = vocal_weight_timeline[vocal_weight_timeline > 0]
+    average_vocal_weight = float(np.mean(voiced_frames)) if len(voiced_frames) > 0 else 0.0
+
+    return vocal_weight_timeline, average_vocal_weight
