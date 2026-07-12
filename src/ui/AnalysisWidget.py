@@ -14,8 +14,7 @@ import qtawesome as qta
 
 from ResourceManager import ResourceManager
 from PlotsSpec import spec, defaultSize
-from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig, calculate_size, \
-    calculate_weight
+from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
@@ -1175,19 +1174,6 @@ class AnalysisWidget(QtWidgets.QWidget):
             for band in controller.target_bands.values():
                 band['enabled'] = True
             controller.update_target_bands(new_config)
-
-        self.analysedAudioFeatures.size = calculate_size(
-            self.analysedAudioFeatures.F1_Pitch.x,
-            self.analysedAudioFeatures.F1_Pitch.y,
-            self.analysedAudioFeatures.F2_Pitch.y,
-            self.analysedAudioFeatures.F3_Pitch.y,
-            self.audioFeatureExtractor.target_config)
-
-        self.analysedAudioFeatures.weight_instantaneous = calculate_weight(
-            self.analysedAudioFeatures.H1_H2.x,
-            self.analysedAudioFeatures.H1_H2.y,
-            self.analysedAudioFeatures.H1_H3.y,
-            self.analysedAudioFeatures.H1_H4.y)
 
         self.update_plots()
 

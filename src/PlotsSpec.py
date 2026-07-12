@@ -64,7 +64,7 @@ spec = {
     'Weight': {
         'title': 'Weight (softness)',
         'y_min': 0,
-        'y_max': 5,
+        'y_max': 2,
         'curves': {
             'Weight': {
                 'size': defaultSize,
