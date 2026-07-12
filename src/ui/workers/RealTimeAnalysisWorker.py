@@ -26,23 +26,8 @@ class RealTimeAnalysisWorker(QtCore.QThread):
         self.samples_since_last_analysis = 0
         self.total_samples_processed = 0
 
-        # Tracks the last chronological point we emitted so we don't output duplicates
-        self.last_emitted_time = 0.0
-
         self.nperseg = nperseg
         self.noverlap = noverlap
-
-    def _safe_get_float(self, ts, idx):
-        """Helper to extract a float from a TimeSeries at a given index safely."""
-        if ts is None or not hasattr(ts, 'y') or len(ts.y) == 0:
-            return 0.0
-        return float(ts.y[idx]) if idx < len(ts.y) else float(ts.y[-1])
-
-    def _safe_get_opt(self, ts, idx):
-        """Helper to extract an Optional float from a TimeSeries safely."""
-        if ts is None or not hasattr(ts, 'y') or len(ts.y) == 0:
-            return None
-        return float(ts.y[idx]) if idx < len(ts.y) else float(ts.y[-1])
 
     def run(self):
         while self.is_running or not self.audio_queue.empty():
@@ -67,16 +52,16 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                 if len(new_samples) == 0:
                     continue
 
-                # --- THE FIX ---
-                # If the backlog is larger than our entire sliding window,
-                # just take the newest samples that fit into the window.
-                if len(new_samples) >= self.window_size_samples:
+                num_new = len(new_samples)
+
+                if num_new >= self.window_size_samples:
+                    # If incoming data exceeds or equals the buffer size,
+                    # just overwrite the whole buffer with the newest samples.
                     self.sliding_buffer[:] = new_samples[-self.window_size_samples:]
                 else:
-                    # Shift buffer and append new samples
-                    self.sliding_buffer = np.roll(self.sliding_buffer, -len(new_samples))
-                    self.sliding_buffer[-len(new_samples):] = new_samples
-                # ---------------
+                    # Normal operation: shift left and append to the end
+                    self.sliding_buffer = np.roll(self.sliding_buffer, -num_new)
+                    self.sliding_buffer[-num_new:] = new_samples
 
                 # Track time based on samples processed
                 self.total_samples_processed += len(new_samples)
@@ -94,74 +79,50 @@ class RealTimeAnalysisWorker(QtCore.QThread):
 
                         if results and hasattr(results, 'pitch') and len(results.pitch.x) > 0:
 
-                            # Determine the exact chronological start time of the sliding buffer
-                            buffer_duration = self.window_size_samples / self.sample_rate
-                            buffer_start_time = current_time - buffer_duration
+                            # --- LIVE SPECTROGRAM SLICING ---
+                            # Extract only the latest column (time bin) of the spectrogram matrix
+                            latest_spec = None
+                            if hasattr(results, 'spectrogram') and results.spectrogram.magnitude_db.size > 0:
+                                latest_spec = SpectrogramData(
+                                    x=np.array([current_time]),  # Sync to the current snapshot time
+                                    y=results.spectrogram.y,  # Keep the frequency bins intact
+                                    magnitude_db=results.spectrogram.magnitude_db[:, -1:]  # Slice the last column
+                                )
+                            # --------------------------------
 
-                            num_points = len(results.pitch.x)
+                            latest_point = FeatureSnapshot(
+                                time=current_time,
+                                pitch=results.pitch.get_last_y(),
+                                loudness=results.loudness.get_last_y(),
+                                slopes=results.slopes.get_last_y(),
+                                jitter=results.jitter.get_last_y(),
+                                shimmer=results.shimmer.get_last_y(),
+                                weight_instantaneous=results.weight_instantaneous.get_last_y(),
+                                # weight_333ms_max=results.weight_333ms_max.get_last_y(),
+                                weight_333ms_max=0,
+                                pitch_5s_mean=0,
+                                size_5s_mean=0,
 
-                            # Iterate through every point returned in the current analysis frame
-                            for i in range(num_points):
-                                point_rel_time = results.pitch.x[i]
-                                point_abs_time = buffer_start_time + point_rel_time
+                                # Individual Formants
+                                F1=results.F1.get_last_y(),
+                                F2=results.F2.get_last_y(),
+                                F3=results.F3.get_last_y(),
 
-                                # Only emit points newer than what we've already dispatched
-                                if point_abs_time > self.last_emitted_time:
+                                # Weight
+                                H1_H2=results.H1_H2.get_last_y(),
+                                H1_H3=results.H1_H3.get_last_y(),
+                                H1_H4=results.H1_H4.get_last_y(),
+                                H1_A3=results.H1_A3.get_last_y(),
 
-                                    # --- LIVE SPECTROGRAM SLICING ---
-                                    latest_spec = None
-                                    if hasattr(results, 'spectrogram') and results.spectrogram.magnitude_db.size > 0:
-                                        spec_db = results.spectrogram.magnitude_db
-                                        spec_x = results.spectrogram.x
+                                F1_Pitch=results.F1_Pitch.get_last_y() if len(results.F1_Pitch.y) > 0 else None,
+                                F2_Pitch=results.F2_Pitch.get_last_y() if len(results.F2_Pitch.y) > 0 else None,
+                                F3_Pitch=results.F3_Pitch.get_last_y() if len(results.F3_Pitch.y) > 0 else None,
 
-                                        # Align the spectrogram time bin to the current point
-                                        if len(spec_x) == num_points and i < spec_db.shape[1]:
-                                            col_idx = i
-                                        else:
-                                            col_idx = (np.abs(spec_x - point_rel_time)).argmin() if len(
-                                                spec_x) > 0 else -1
+                                size=results.size.get_last_y() if len(results.size.y) > 0 else None,
 
-                                        latest_spec = SpectrogramData(
-                                            x=np.array([point_abs_time]),
-                                            y=results.spectrogram.y,
-                                            magnitude_db=spec_db[:, col_idx:col_idx + 1]
-                                        )
-                                    # --------------------------------
-
-                                    latest_point = FeatureSnapshot(
-                                        time=point_abs_time,
-                                        pitch=self._safe_get_float(results.pitch, i),
-                                        loudness=self._safe_get_float(results.loudness, i),
-                                        slopes=self._safe_get_float(results.slopes, i),
-                                        jitter=self._safe_get_float(results.jitter, i),
-                                        shimmer=self._safe_get_float(results.shimmer, i),
-                                        weight_instantaneous=self._safe_get_float(results.weight_instantaneous, i),
-                                        weight_333ms_max=0,
-                                        pitch_5s_mean=0,
-                                        size_5s_mean=0,
-
-                                        # Individual Formants
-                                        F1=self._safe_get_float(results.F1, i),
-                                        F2=self._safe_get_float(results.F2, i),
-                                        F3=self._safe_get_float(results.F3, i),
-
-                                        # Weight
-                                        H1_H2=self._safe_get_float(results.H1_H2, i),
-                                        H1_H3=self._safe_get_float(results.H1_H3, i),
-                                        H1_H4=self._safe_get_float(results.H1_H4, i),
-                                        H1_A3=self._safe_get_float(results.H1_A3, i),
-
-                                        F1_Pitch=self._safe_get_opt(results.F1_Pitch, i),
-                                        F2_Pitch=self._safe_get_opt(results.F2_Pitch, i),
-                                        F3_Pitch=self._safe_get_opt(results.F3_Pitch, i),
-
-                                        size=self._safe_get_opt(results.size, i),
-
-                                        spectrogram=latest_spec
-                                    )
-
-                                    self.new_data_point.emit(latest_point)
-                                    self.last_emitted_time = point_abs_time
+                                spectrogram=latest_spec
+                            )
+                            self.new_data_point.emit(latest_point)
 
             except queue.Empty:
                 continue
