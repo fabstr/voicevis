@@ -27,7 +27,7 @@ white         = "#88888888"
 
 target_band = "#88888833"
 
-spec = {
+PlotsSpec = {
     'Pitch': {
         'title': 'Pitch (Hz)',
         'y_min': 0,

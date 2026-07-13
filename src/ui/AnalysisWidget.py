@@ -13,7 +13,7 @@ from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import qtawesome as qta
 
 from ResourceManager import ResourceManager
-from PlotsSpec import spec, defaultSize
+from PlotsSpec import PlotsSpec, defaultSize
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
@@ -22,7 +22,8 @@ from ui.TargetConfigDialog import TargetConfigDialog
 from ui.workers.AnalysisWorker import AnalysisWorker
 from ui.workers.PlaybackWorker import PlaybackWorker
 from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
-from ui.PlotController import PlotController
+from ui.plot.PlotController import PlotController
+from ui.plot.InstantaneousPlotController import InstantaneousPlotController
 
 class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
@@ -446,7 +447,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self._create_column()
         self._create_column()
 
-        available_plots = list(spec.keys())
+        available_plots = list(PlotsSpec.keys())
         p1 = available_plots[0] if len(available_plots) > 0 else None
         p2 = available_plots[1] if len(available_plots) > 1 else p1
         p3 = available_plots[2] if len(available_plots) > 2 else p1
@@ -475,19 +476,31 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         initial_size = self.size_slider.value() if hasattr(self, 'size_slider') else defaultSize
 
-        controller = PlotController(
+        plot = PlotsSpec.get(plot_name)
+        is_inst = plot.get('is_instantaneous', False)
+        controller_class = InstantaneousPlotController if is_inst else PlotController
+
+        controller = controller_class(
             plot_name=plot_name,
-            all_specs=spec,
+            all_specs=PlotsSpec,
             click_callback=self.on_mouse_clicked,
             change_plot_callback=self.handle_plot_selection,
             initial_size=initial_size
         )
+
+        # controller = PlotController(
+        #     plot_name=plot_name,
+        #     all_specs=spec,
+        #     click_callback=self.on_mouse_clicked,
+        #     change_plot_callback=self.handle_plot_selection,
+        #     initial_size=initial_size
+        # )
         if hasattr(self, 'active_tool_mode'):
             controller.set_tool_mode(self.active_tool_mode)
         return controller
 
     def add_plot_row(self):
-        available_plots = list(spec.keys())
+        available_plots = list(PlotsSpec.keys())
         default_plot = available_plots[0] if available_plots else None
 
         for col in self.columns:
@@ -515,7 +528,7 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def add_plot_column(self):
         num_rows = self.columns[0].count() if self.columns else 1
-        available_plots = list(spec.keys())
+        available_plots = list(PlotsSpec.keys())
         default_plot = available_plots[0] if available_plots else None
 
         new_col = self._create_column()
@@ -549,7 +562,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         current_size = old_controller.local_slider.value()
         new_controller = PlotController(
             plot_name=new_plot_name,
-            all_specs=spec,
+            all_specs=PlotsSpec,
             click_callback=self.on_mouse_clicked,
             change_plot_callback=self.handle_plot_selection,
             initial_size=current_size
@@ -754,7 +767,7 @@ class AnalysisWidget(QtWidgets.QWidget):
                 target_plot_key = None
 
                 for controller in self.plot_cells:
-                    plot_title = controller.spec.get('title', '')
+                    plot_title = controller.PlotsSpec.get('title', '')
                     if annotation['plot'] == controller.plot_name or annotation['plot'] == plot_title:
                         plot_widget = controller.widget
                         target_plot_key = controller.plot_name
@@ -1093,7 +1106,7 @@ class AnalysisWidget(QtWidgets.QWidget):
                     total_height = col.height()
                     col.setSizes([int(total_height / row_count)] * row_count)
 
-        for plot_key, plot_spec in spec.items():
+        for plot_key, plot_spec in PlotsSpec.items():
             is_visible = not plot_spec.get('hidden', False)
             self.handle_toggle_plot(plot_key, is_visible)
             if plot_key in self.menu_toggle_actions['plots']:
@@ -1440,7 +1453,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.columns.clear()
         self.plot_cells.clear()
 
-        available_plots = list(spec.keys())
+        available_plots = list(PlotsSpec.keys())
         fallback_plot = available_plots[0] if available_plots else None
         is_legacy_format = len(layout_data["columns"]) > 0 and isinstance(layout_data["columns"][0], list)
         vertical_sizes_to_apply = []
