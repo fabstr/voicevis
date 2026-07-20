@@ -12,6 +12,7 @@ analyzed file.
 
 import os
 import re
+import datetime
 import time
 import argparse
 from pathlib import Path
@@ -42,7 +43,6 @@ AUDIO_FILE_PATTERN = r"\.(wav|mp3)$"
 # Number of worker threads used to run AudioFeatureExtractor.analyzeFile()
 # concurrently across files.
 ANALYSIS_THREADS = 12
-
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +78,8 @@ def _draw_timeseries(ax, ts: SignalTimeSeries, label: str, color: str) -> None:
 def _draw_size_weight_scatter(
         fig, ax, weight_vals: np.ndarray, size_vals: np.ndarray, loudness_vals: np.ndarray
 ) -> None:
+    ax.set_facecolor("lightgray")  # Added neutral gray background
+
     n = min(weight_vals.size, size_vals.size, loudness_vals.size)
     x, y, c = weight_vals[:n], size_vals[:n], loudness_vals[:n]
 
@@ -91,7 +93,7 @@ def _draw_size_weight_scatter(
     ax.set_xlabel("Weight")
     ax.set_ylabel("Size")
     ax.set_title("Size vs Weight (Loudness)")
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, alpha=0.3, color="white")
     ax.set_xlim(0, 4)
     ax.set_ylim(0, 40)
 
@@ -99,6 +101,8 @@ def _draw_size_weight_scatter(
 def _draw_pitch_loudness_scatter(
         fig, ax, pitch_vals: np.ndarray, loudness_vals: np.ndarray, show_colorbar: bool = True
 ) -> None:
+    ax.set_facecolor("lightgray")  # Added neutral gray background
+
     n = min(pitch_vals.size, loudness_vals.size)
     x, c = pitch_vals[:n], loudness_vals[:n]
 
@@ -116,10 +120,14 @@ def _draw_pitch_loudness_scatter(
     ax.set_ylim(-1, 1)
     ax.set_yticks([])
     ax.set_title("Pitch (Loudness)")
+    ax.grid(True, alpha=0.3, color="white")
+
 
 def _draw_pitch_size_scatter(
         fig, ax, pitch_vals: np.ndarray, size_vals: np.ndarray, loudness_vals: np.ndarray
 ) -> None:
+    ax.set_facecolor("lightgray")  # Added neutral gray background
+
     n = min(pitch_vals.size, size_vals.size, loudness_vals.size)
     x, y, c = pitch_vals[:n], size_vals[:n], loudness_vals[:n]
 
@@ -131,8 +139,8 @@ def _draw_pitch_size_scatter(
 
     ax.set_xlabel("Pitch (Hz)")
     ax.set_ylabel("Size")
-    ax.set_title("Pitch vs Size")
-    ax.grid(True, alpha=0.3)
+    ax.set_title("Pitch vs Size (Loudness)")
+    ax.grid(True, alpha=0.3, color="white")
     ax.set_xlim(0, 450)
     ax.set_ylim(0, 40)
 
@@ -140,6 +148,8 @@ def _draw_pitch_size_scatter(
 def _draw_pitch_weight_scatter(
         fig, ax, pitch_vals: np.ndarray, weight_vals: np.ndarray, loudness_vals: np.ndarray
 ) -> None:
+    ax.set_facecolor("lightgray")  # Added neutral gray background
+
     n = min(pitch_vals.size, weight_vals.size, loudness_vals.size)
     x, y, c = pitch_vals[:n], weight_vals[:n], loudness_vals[:n]
 
@@ -150,8 +160,8 @@ def _draw_pitch_weight_scatter(
 
     ax.set_xlabel("Pitch (Hz)")
     ax.set_ylabel("Weight")
-    ax.set_title("Pitch vs Weight")
-    ax.grid(True, alpha=0.3)
+    ax.set_title("Pitch vs Weight (Loudness)")
+    ax.grid(True, alpha=0.3, color="white")
     ax.set_xlim(0, 450)
     ax.set_ylim(0, 4)
 
@@ -293,7 +303,7 @@ def create_combined_rotating_gif(features: AudioFeatures, out_path: Path, title:
     frames = np.arange(0, 360, 36)
     ani = animation.FuncAnimation(fig, update, frames=frames, interval=500)
     ani.save(out_path, writer='pillow', dpi=100)
-    print(f"  [Animation] Saved combined rotating GIF to {out_path.name}")
+    # print(f"  [Animation] Saved combined rotating GIF to {out_path.name}")
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +432,9 @@ def main():
 
         return features
 
+    now = datetime.datetime.now()
+    print(f"Starting analysis at {str(now)}. This may take a while...")
+
     # Both analysis and plotting run concurrently here.
     with ThreadPoolExecutor(max_workers=ANALYSIS_THREADS) as executor:
         future_to_path = {executor.submit(analyze_and_plot, path): path for path in files}
@@ -437,15 +450,20 @@ def main():
                 print(f"  [{completed}/{total}] Skipping {path} due to error: {exc}")
                 continue
 
-            print(f"[{completed}/{total}] Analyzed {path}")
+            status_line = f"[{completed}/{total}] Analyzed {path}"
+            print(f"\r{status_line[:80].ljust(80)}", end="", flush=True)
 
             all_weight.append(features.weight_instantaneous)
             all_size.append(features.size)
             all_pitch.append(features.pitch)
             all_loudness.append(features.loudness)
 
+    print("")
+
     if all_weight:
         start = time.perf_counter()
+        now = datetime.datetime.now()
+        print(f"Starting post processing to summarize at {str(now)}. This may take a while...")
 
         summary_weight = np.concatenate(all_weight) if all_weight else np.array([])
         summary_size = np.concatenate(all_size) if all_size else np.array([])
