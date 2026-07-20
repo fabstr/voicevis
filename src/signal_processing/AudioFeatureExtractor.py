@@ -14,8 +14,6 @@ from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, Spe
 from signal_processing.TargetConfig import TargetConfig
 from signal_processing.genderer import calculate_target_probabilities
 
-nperseg = 2048
-noverlap = 1536
 
 class AudioFeatureExtractor:
 
@@ -183,7 +181,7 @@ class AudioFeatureExtractor:
         result.pitch_5s_mean = rolling_mean(timepoints, result.pitch, valid_mask)
         result.weight_333ms_max = rolling_mean(timepoints, result.weight_instantaneous, valid_mask)
 
-        probabilities = calculate_target_probabilities(result.size_5s_mean, result.pitch_5s_mean, result.weight_333ms_max)
+        # probabilities = calculate_target_probabilities(result.size_5s_mean, result.pitch_5s_mean, result.weight_333ms_max)
         # print(str(probabilities))
 
         return result

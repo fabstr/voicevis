@@ -258,10 +258,6 @@ class PlotController(QtCore.QObject):
             logging.debug(f"Skipping set_curve_data for {curve_name}: incompatible data types. {e}")
             return
 
-        # 3. Guard against empty arrays post-conversion
-        if len(x_arr) == 0 or len(y_arr) == 0:
-            return
-
         if 'colorSource' in curve and audio_features_ctx:
             z_feature = curve['colorSource']
             if hasattr(audio_features_ctx, z_feature):
@@ -288,7 +284,16 @@ class PlotController(QtCore.QObject):
         data_container = getattr(audio_features_ctx, result_key)
         new_data = getattr(snapshot, result_key)
 
-        if snapshot.time is None or new_data is None or np.isnan(new_data):
+        # 1. Fast guard against empty data
+        if snapshot.time is None or new_data is None:
+            return
+
+        # 2. Safely check for NaN by attempting to cast to float
+        try:
+            if np.isnan(float(new_data)):
+                return
+        except (ValueError, TypeError):
+            # Silently skip this data point if it's a string, object, or other un-coercible type
             return
 
         curve['data_container'] = data_container

@@ -4,7 +4,6 @@ import numpy as np
 from PyQt6 import QtCore
 
 from signal_processing.AudioFeatures import FeatureSnapshot, SpectrogramData
-from signal_processing.AudioFeatureExtractor import nperseg, noverlap
 
 
 class RealTimeAnalysisWorker(QtCore.QThread):
@@ -25,9 +24,6 @@ class RealTimeAnalysisWorker(QtCore.QThread):
         self.analysis_step_samples = int(self.sample_rate * 0.01)
         self.samples_since_last_analysis = 0
         self.total_samples_processed = 0
-
-        self.nperseg = nperseg
-        self.noverlap = noverlap
 
     def run(self):
         while self.is_running or not self.audio_queue.empty():

@@ -347,6 +347,7 @@ PlotsSpec = {
 
     'Frequency Analysis': {
         'title': 'Frequency - Magnitude',
+        'is_frequency_analysis': True,
         'mouse_enabled_x': False,
         'mouse_enabled_y': False,
         'y_min': -90,
@@ -356,7 +357,7 @@ PlotsSpec = {
         'log_x': True,
         'x_ticks': [10, 110, 220, 1000, 5000, 10000],  # X-axis labels
         'curves': {
-            'Spectrum': {
+            'Frequency - Magnitude': {
                 'analysisResult': 'spectrogram',
                 'is_frequency_analysis': True,
                 'colour': '#9370DB',

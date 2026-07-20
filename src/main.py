@@ -8,8 +8,10 @@ from pathlib import Path
 
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import QStandardPaths, QThread
-
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMessageBox, QApplication
+
+from ResourceManager import ResourceManager
 
 
 class SyncFileHandler(logging.FileHandler):
@@ -118,6 +120,39 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
     error_box.exec()
 
 
+def set_application_icon(app: QtWidgets.QApplication):
+    """
+    Applies OS-specific workarounds to ensure taskbar and window icons
+    display correctly across Windows, Linux, and macOS.
+    """
+
+    if sys.platform == 'win32':
+        # Windows: Set AppUserModelID so the taskbar recognizes the unique app
+        # rather than grouping it under a generic "Python" executable.
+        import ctypes
+        try:
+            myappid = 'voicevis.voicevis.app.1.0'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+
+    elif sys.platform.startswith('linux'):
+        # Linux: Set application and desktop file name so Wayland/X11
+        # can map the running process to your voicevis.desktop file.
+        app.setApplicationName("VoiceVis")
+        app.setDesktopFileName("voicevis")
+
+    elif sys.platform == 'darwin':
+        # macOS: Sets the correct internal app name for the menu bar.
+        # (Note: Dock icons are still primarily handled via the .app bundle's .icns file).
+        app.setApplicationName("VoiceVis")
+
+    rm = ResourceManager()
+    icon_path = rm.get_absolute_path("icon.ico")
+    app.setWindowIcon(QIcon(icon_path))
+
+
+
 if __name__ == '__main__':
     setup_logging()
     sys.excepthook = global_exception_handler
@@ -128,7 +163,11 @@ if __name__ == '__main__':
     # imported here to avoid import order problems which makes the logging break
     from ui.MainWindow import MainWindow
 
+
+
+
     app = QtWidgets.QApplication(sys.argv)
+    set_application_icon(app)
     w = MainWindow()
     w.show()
     sys.exit(app.exec())

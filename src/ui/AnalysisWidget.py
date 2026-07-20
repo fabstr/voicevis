@@ -14,6 +14,7 @@ import qtawesome as qta
 
 from ResourceManager import ResourceManager
 from PlotsSpec import PlotsSpec, defaultSize
+from plot.FrequencyPlotController import FrequencyPlotController
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
@@ -477,8 +478,15 @@ class AnalysisWidget(QtWidgets.QWidget):
         initial_size = self.size_slider.value() if hasattr(self, 'size_slider') else defaultSize
 
         plot = PlotsSpec.get(plot_name)
+        is_freq_analysis = plot.get('is_frequency_analysis', False)
+
         is_inst = plot.get('is_instantaneous', False)
-        controller_class = InstantaneousPlotController if is_inst else PlotController
+        if is_freq_analysis:
+            controller_class = FrequencyPlotController
+        elif is_inst:
+            controller_class = InstantaneousPlotController
+        else:
+            controller_class = PlotController
 
         controller = controller_class(
             plot_name=plot_name,
@@ -970,6 +978,7 @@ class AnalysisWidget(QtWidgets.QWidget):
                     controller.set_curve_data(curve_name, [], [])
                 controller.set_playhead_value(0)
 
+        self.update_plots()
         self.handle_reset_zoom()
         logging.debug("All data cleared.")
 
@@ -1149,9 +1158,10 @@ class AnalysisWidget(QtWidgets.QWidget):
                     continue
 
                 is_spectrogram = curve_config.get('is_spectrogram', False)
-                is_frequency_analysis = curve_config.get('is_frequency_analysis', False)
+                is_frequency_analysis = controller.spec.get('is_frequency_analysis', False)
+                is_instantaneous = controller.spec.get('is_instantaneous', False)
 
-                if not is_spectrogram and not is_frequency_analysis and len(data.x) != len(data.y):
+                if not is_spectrogram and not is_frequency_analysis and not is_instantaneous and len(data.x) != len(data.y):
                     logging.error(f"Mismatch in dimensions for curve {curve_name}")
                     continue
 

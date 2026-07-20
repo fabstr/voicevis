@@ -14,6 +14,11 @@ class InstantaneousPlotController(PlotController):
     Manages custom fading trail logic, UI elements, and non-time X-axes.
     """
 
+    def __init__(self, plot_name, all_specs, click_callback, change_plot_callback, initial_size=2):
+        super().__init__(plot_name, all_specs, click_callback, change_plot_callback, initial_size=initial_size)
+
+        self.widget.setXLink(None)
+
     def _create_bottom_axis(self):
         # Override to use a raw axis instead of the formatted TimeAxisItem
         return pg.AxisItem(orientation='bottom')
