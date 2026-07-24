@@ -97,9 +97,10 @@ PlotsSpec = {
         'mouse_enabled_x': False,
         'mouse_enabled_y': False,
         'curves': {
-            'InstantPoint': {
+            'Size vs Weight': {
                 'size': defaultSize * 3,  # Larger point for visibility
                 'colour': '#00FFFF',      # Cyan
+                'colorSource': 'loudness'   # Z-axis (Color)
             }
         }
     },

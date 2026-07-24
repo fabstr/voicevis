@@ -68,6 +68,9 @@ class InstantaneousPlotController(PlotController):
             if 'analysisResult' in curve_spec:
                 self.curves[name]['analysisResult'] = curve_spec['analysisResult']
 
+            if 'colorSource' in curve_spec:
+                self.curves[name]['colorSource'] = curve_spec['colorSource']
+
             edge_pen = pg.mkPen(color=(128, 128, 128, 128), width=0.5)
             scatter_item = pg.ScatterPlotItem(
                 size=curve_spec.get('size', 6),
@@ -90,6 +93,12 @@ class InstantaneousPlotController(PlotController):
         if audio_features_ctx and hasattr(audio_features_ctx, x_key) and hasattr(audio_features_ctx, y_key):
             curve['x_container'] = getattr(audio_features_ctx, x_key)
             curve['y_container'] = getattr(audio_features_ctx, y_key)
+
+            if 'colorSource' in curve:
+                z_key = curve['colorSource']
+                if hasattr(audio_features_ctx, z_key):
+                    curve['z_container'] = getattr(audio_features_ctx, z_key)
+
             self._update_instantaneous_plot(curve, self.current_time)
 
     def append_curve_point(self, curve_name: str, snapshot: FeatureSnapshot, audio_features_ctx):
@@ -110,6 +119,15 @@ class InstantaneousPlotController(PlotController):
                 curve['x_container'] = x_cont
                 curve['y_container'] = y_cont
 
+                z_cont = None
+                z_val = None
+                if 'colorSource' in curve:
+                    z_key = curve['colorSource']
+                    if hasattr(audio_features_ctx, z_key) and hasattr(snapshot, z_key):
+                        z_cont = getattr(audio_features_ctx, z_key)
+                        curve['z_container'] = z_cont
+                        z_val = getattr(snapshot, z_key)
+
                 if hasattr(snapshot, 'time') and snapshot.time is not None:
                     if x_val is not None and not np.isnan(x_val):
                         if len(x_cont.x) == 0 or x_cont.x[-1] != snapshot.time:
@@ -120,6 +138,11 @@ class InstantaneousPlotController(PlotController):
                         if len(y_cont.x) == 0 or y_cont.x[-1] != snapshot.time:
                             y_cont.x = np.append(y_cont.x, snapshot.time)
                             y_cont.y = np.append(y_cont.y, y_val)
+
+                    if z_cont is not None and z_val is not None and not np.isnan(z_val):
+                        if len(z_cont.x) == 0 or z_cont.x[-1] != snapshot.time:
+                            z_cont.x = np.append(z_cont.x, snapshot.time)
+                            z_cont.y = np.append(z_cont.y, z_val)
 
                     self._update_instantaneous_plot(curve, snapshot.time)
                     return
@@ -173,7 +196,23 @@ class InstantaneousPlotController(PlotController):
         else:
             alphas = np.full(len(final_x), 255)
 
-        brushes = [pg.mkBrush(r, g, b, a) for a in alphas]
+        z_cont = curve.get('z_container')
+        if z_cont is not None and len(z_cont.x) > 0:
+            # Interpolate Z values for our current trail points
+            z_vals = np.interp(final_times, z_cont.x, z_cont.y)
+            cmap = pg.colormap.get('viridis')
+
+            # Extract 8-bit RGBA arrays from the colormap
+            mapped_colors = cmap.map(z_vals)
+            # Combine the RGB from the colormap with our fading alphas
+            brushes = [pg.mkBrush(c[0], c[1], c[2], a) for c, a in zip(mapped_colors, alphas)]
+        else:
+            # Fallback to single color from spec
+            curve_specs = list(self.spec.get('curves', {}).values())
+            base_color = pg.mkColor(curve_specs[0].get('colour', '#00FFFF') if curve_specs else '#00FFFF')
+            r, g, b = base_color.red(), base_color.green(), base_color.blue()
+            brushes = [pg.mkBrush(r, g, b, a) for a in alphas]
+
         pens = [pg.mkPen(color=(128, 128, 128, int(a * 0.5)), width=0.5) for a in alphas]
 
         curve['curve'].setData(x=final_x, y=final_y, brush=brushes, pen=pens)
