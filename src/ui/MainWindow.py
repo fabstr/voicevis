@@ -131,7 +131,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if hasattr(widget, 'is_playing') and widget.is_playing:
                 widget.stop_playback()
             if hasattr(widget, 'is_recording') and widget.is_recording:
-                widget.handle_record_stop()
+                widget.handle_start_record_stop()
             widget.deleteLater()
 
         # Remove from our tracking list and memory

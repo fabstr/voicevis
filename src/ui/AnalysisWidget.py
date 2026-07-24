@@ -14,17 +14,17 @@ import qtawesome as qta
 
 from ResourceManager import ResourceManager
 from PlotsSpec import PlotsSpec, defaultSize
-from plot.FrequencyPlotController import FrequencyPlotController
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
 from ui.TargetConfigDialog import TargetConfigDialog
-from ui.workers.AnalysisWorker import AnalysisWorker
-from ui.workers.PlaybackWorker import PlaybackWorker
-from ui.workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
+from workers.AnalysisWorker import AnalysisWorker
+from workers.PlaybackWorker import PlaybackWorker
+from workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
 from ui.plot.PlotController import PlotController
 from ui.plot.InstantaneousPlotController import InstantaneousPlotController
+from ui.plot.FrequencyPlotController import FrequencyPlotController
 
 class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
@@ -60,7 +60,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.zoom_x_icon = None
         self.zoom_y_icon = None
         self.measure_icon = None
-        self.record_stop_btn = None
+        self.record_start_stop_btn = None
         self.playback_btn = None
         self.clear_btn = None
         self.reset_zoom_btn = None
@@ -265,13 +265,13 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.zoom_y_icon = qta.icon('fa5s.arrows-alt-v', color=icon_color)
         self.measure_icon = qta.icon('fa5s.ruler-combined', color=icon_color)
 
-        self.record_stop_btn = QtWidgets.QPushButton()
-        self.record_stop_btn.setFixedSize(40, 40)
-        self.record_stop_btn.setIcon(self.record_icon)
-        self.record_stop_btn.setIconSize(QtCore.QSize(20, 20))
-        self.record_stop_btn.setToolTip("Record")
-        self.record_stop_btn.clicked.connect(self.handle_record_stop)
-        top_buttons_layout.addWidget(self.record_stop_btn)
+        self.record_start_stop_btn = QtWidgets.QPushButton()
+        self.record_start_stop_btn.setFixedSize(40, 40)
+        self.record_start_stop_btn.setIcon(self.record_icon)
+        self.record_start_stop_btn.setIconSize(QtCore.QSize(20, 20))
+        self.record_start_stop_btn.setToolTip("Record")
+        self.record_start_stop_btn.clicked.connect(self.handle_start_record_stop)
+        top_buttons_layout.addWidget(self.record_start_stop_btn)
 
         self.playback_btn = QtWidgets.QPushButton()
         self.playback_btn.setFixedSize(40, 40)
@@ -656,10 +656,10 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.measure_icon = qta.icon('fa5s.ruler-combined', color=icon_color)
 
             if hasattr(self, 'record_stop_btn'):
-                if "Record" in self.record_stop_btn.toolTip():
-                    self.record_stop_btn.setIcon(self.record_icon)
+                if "Record" in self.record_start_stop_btn.toolTip():
+                    self.record_start_stop_btn.setIcon(self.record_icon)
                 else:
-                    self.record_stop_btn.setIcon(self.stop_icon)
+                    self.record_start_stop_btn.setIcon(self.stop_icon)
 
             if hasattr(self, 'playback_btn'):
                 if "Play" in self.playback_btn.toolTip():
@@ -862,20 +862,29 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     #################### Record, playback ####################
 
-    def handle_record_stop(self):
+    def handle_start_record_stop(self):
         if self.is_playing:
             self.stop_playback()
 
-        self.is_recording = not self.is_recording
-
         if self.is_recording:
-            self.record_start()
-        else:
             self.record_stop()
+        else:
+            self.record_start()
+
 
     def record_start(self):
-        self.record_stop_btn.setIcon(self.stop_icon)
-        self.record_stop_btn.setToolTip("Stop Recording")
+        # Check if there are any available audio input devices
+        if not QMediaDevices.audioInputs():
+            QtWidgets.QMessageBox.critical(self, "Recording error", f"Could not find any microphone or audio input device.")
+            return
+
+        if self.is_playing:
+            self.stop_playback()
+
+        self.is_recording = True
+
+        self.record_start_stop_btn.setIcon(self.stop_icon)
+        self.record_start_stop_btn.setToolTip("Stop Recording")
 
         while not self.audio_queue.empty():
             self.audio_queue.get()
@@ -900,18 +909,18 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.audio_source.start(self.audio_buffer)
         self.poll_timer.start()
-        self.timer.start()
+        # self.timer.start()
 
     def record_stop(self):
-        self.record_stop_btn.setIcon(self.record_icon)
-        self.record_stop_btn.setToolTip("Record")
+        self.record_start_stop_btn.setIcon(self.record_icon)
+        self.record_start_stop_btn.setToolTip("Record")
 
         self.poll_timer.stop()
         self.read_audio_chunk()
 
         self.audio_source.stop()
         self.audio_buffer.close()
-        self.timer.stop()
+        # self.timer.stop()
 
         if hasattr(self, 'rt_worker'):
             self.rt_worker.stop()
@@ -922,6 +931,8 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         # Audio is now kept entirely in memory buffer, trigger final batch analysis
         self.select_analysis_from_memory()
+
+        self.is_recording = False
 
     def read_audio_chunk(self):
         current_pos = self.audio_buffer.pos()
@@ -960,7 +971,6 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.stop_playback()
         if self.is_recording:
             self.record_stop()
-            self.is_recording = False
 
         self.current_audio_file = None
         self.analysedAudioFeatures = AudioFeatures()
@@ -1234,24 +1244,16 @@ class AnalysisWidget(QtWidgets.QWidget):
     def keyPressEvent(self, event):
         key = event.key()
         if key == QtCore.Qt.Key.Key_Space:
-            if self.is_recording:
-                self.is_recording = False
-                self.record_stop()
-            elif self.is_playing:
+            if self.is_playing:
                 self.stop_playback()
-            else:
-                if not self.audio_data.isEmpty():
-                    self.seek_and_play()
+            elif not self.audio_data.isEmpty():
+                self.seek_and_play()
             event.accept()
 
         elif key == QtCore.Qt.Key.Key_R:
             if self.is_recording:
-                self.is_recording = False
                 self.record_stop()
             else:
-                if self.is_playing:
-                    self.stop_playback()
-                self.is_recording = True
                 self.record_start()
             event.accept()
 

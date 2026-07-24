@@ -1,44 +1,58 @@
 import subprocess
-import datetime
+from datetime import datetime, timezone
 import os
 
-def get_version():
+def write_version():
+    print("Generating version...")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+
+    tag = None
+    hash = None
+    dirty = False
+
     try:
-        # 1. Check for a tag matching the current commit exactly
+        # Attempt to find a git tag
         tag = subprocess.check_output(
             ["git", "describe", "--tags", "--exact-match"],
             stderr=subprocess.DEVNULL
         ).decode("utf-8").strip()
-        base_version = tag
     except subprocess.CalledProcessError:
-        # 2. No tag? Fall back to: YYYYMMDD-hash
-        date_str = datetime.datetime.now().strftime("%Y%m%d")
+        # If not, find the hash
         try:
-            git_hash = subprocess.check_output(
+            hash = subprocess.check_output(
                 ["git", "rev-parse", "--short", "HEAD"],
                 stderr=subprocess.DEVNULL
             ).decode("utf-8").strip()
-            base_version = f"{date_str}-{git_hash}"
         except Exception:
-            base_version = f"{date_str}-unknown"
+            hash = "unknown-git-hash"
 
-    # 3. Check for local uncommitted changes
+    # Look for uncommited changes
     try:
         status = subprocess.check_output(
             ["git", "status", "--porcelain"],
             stderr=subprocess.DEVNULL
         ).decode("utf-8").strip()
         if status:
-            base_version += "-DIRTY"
+            dirty = True
     except Exception:
         pass
 
-    return base_version
+    if tag is not None and not dirty:
+        version = f"{tag}"
+    elif tag is not None and dirty:
+        version = f"{tag}-DIRTY"
+    elif tag is None and not dirty:
+        version = f"{timestamp}-{hash}"
+    else:
+        version = f"{timestamp}-{hash}-DIRTY"
 
-if __name__ == "__main__":
-    version = get_version()
-    # Write to a file inside the source tree
+
     version_file = os.path.join("src", "_version.py")
     with open(version_file, "w", encoding="utf-8") as f:
         f.write(f'__version__ = "{version}"\n')
+        f.write(f'__build_time__ = "{timestamp}"\n')
     print(f"Generated {version_file} with version: {version}")
+
+
+if __name__ == "__main__":
+    write_version()

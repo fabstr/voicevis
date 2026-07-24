@@ -126,7 +126,7 @@ def _draw_pitch_loudness_scatter(
 def _draw_pitch_size_scatter(
         fig, ax, pitch_vals: np.ndarray, size_vals: np.ndarray, loudness_vals: np.ndarray
 ) -> None:
-    ax.set_facecolor("lightgray")  # Added neutral gray background
+    ax.set_facecolor("lightgray")
 
     n = min(pitch_vals.size, size_vals.size, loudness_vals.size)
     x, y, c = pitch_vals[:n], size_vals[:n], loudness_vals[:n]
@@ -134,12 +134,13 @@ def _draw_pitch_size_scatter(
     if x.size > 0:
         order = np.argsort(c)
         x_s, y_s, c_s = x[order], y[order], c[order]
-        # Omitted the colorbar here to save horizontal space, as it shares the Loudness scale
-        ax.scatter(x_s, y_s, c=c_s, cmap="viridis", s=SCATTER_POINT_SIZE, alpha=0.8, edgecolors="none")
+        sc = ax.scatter(x_s, y_s, c=c_s, cmap="viridis", s=SCATTER_POINT_SIZE, alpha=0.8, edgecolors="none")
+        # Added colorbar as requested
+        fig.colorbar(sc, ax=ax, label="Loudness", fraction=0.046, pad=0.04)
 
     ax.set_xlabel("Pitch (Hz)")
     ax.set_ylabel("Size")
-    ax.set_title("Pitch vs Size (Loudness)")
+    ax.set_title("Pitch vs Size")
     ax.grid(True, alpha=0.3, color="white")
     ax.set_xlim(0, 450)
     ax.set_ylim(0, 40)
@@ -148,7 +149,7 @@ def _draw_pitch_size_scatter(
 def _draw_pitch_weight_scatter(
         fig, ax, pitch_vals: np.ndarray, weight_vals: np.ndarray, loudness_vals: np.ndarray
 ) -> None:
-    ax.set_facecolor("lightgray")  # Added neutral gray background
+    ax.set_facecolor("lightgray")
 
     n = min(pitch_vals.size, weight_vals.size, loudness_vals.size)
     x, y, c = pitch_vals[:n], weight_vals[:n], loudness_vals[:n]
@@ -156,11 +157,13 @@ def _draw_pitch_weight_scatter(
     if x.size > 0:
         order = np.argsort(c)
         x_s, y_s, c_s = x[order], y[order], c[order]
-        ax.scatter(x_s, y_s, c=c_s, cmap="viridis", s=SCATTER_POINT_SIZE, alpha=0.8, edgecolors="none")
+        sc = ax.scatter(x_s, y_s, c=c_s, cmap="viridis", s=SCATTER_POINT_SIZE, alpha=0.8, edgecolors="none")
+        # Added colorbar as requested
+        fig.colorbar(sc, ax=ax, label="Loudness", fraction=0.046, pad=0.04)
 
     ax.set_xlabel("Pitch (Hz)")
     ax.set_ylabel("Weight")
-    ax.set_title("Pitch vs Weight (Loudness)")
+    ax.set_title("Pitch vs Weight")
     ax.grid(True, alpha=0.3, color="white")
     ax.set_xlim(0, 450)
     ax.set_ylim(0, 4)
@@ -196,36 +199,28 @@ def _draw_weight_size_pitch_3d(
 
 def plot_combined_figure(features: AudioFeatures, out_path: Path, title: str) -> None:
     """Single combined static figure per file."""
-    # Slightly wider figure to accommodate the 3 side-by-side plots comfortably
-    fig = Figure(figsize=(16, 13))
+    fig = Figure(figsize=(16, 16))
     FigureCanvasAgg(fig)
 
     fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.92)
 
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.1, 1], wspace=0.2)
+    # Use a 4x4 grid so we can place side-by-side plots and double-height plots easily
+    gs = fig.add_gridspec(4, 4, wspace=0.4, hspace=0.4)
 
-    gs_left = gs[0].subgridspec(3, 1, height_ratios=[1, 1, 0.8], hspace=0.3)
-    ax_pitch_t = fig.add_subplot(gs_left[0])
-    ax_weight_t = fig.add_subplot(gs_left[1], sharex=ax_pitch_t)
-    ax_size_t = fig.add_subplot(gs_left[2], sharex=ax_pitch_t)
+    # --- Column 1 (spans grid columns 0 and 1) ---
+    ax_size_t = fig.add_subplot(gs[0, 0:2])
+    ax_weight_t = fig.add_subplot(gs[1, 0:2], sharex=ax_size_t)
+    ax_pitch_t = fig.add_subplot(gs[2, 0:2], sharex=ax_size_t)
+    ax_size_weight = fig.add_subplot(gs[3, 0:2])
 
-    _draw_timeseries(ax_pitch_t, features.pitch, "Pitch", PlotsSpec.pitch)
-    _draw_timeseries(ax_weight_t, features.weight_instantaneous, "Weight", PlotsSpec.weight)
     _draw_timeseries(ax_size_t, features.size, "Size", PlotsSpec.size)
-    ax_pitch_t.set_ylim(0, 450)
-    ax_weight_t.set_ylim(0, 4)
+    _draw_timeseries(ax_weight_t, features.weight_instantaneous, "Weight", PlotsSpec.weight)
+    _draw_timeseries(ax_pitch_t, features.pitch, "Pitch", PlotsSpec.pitch)
+
     ax_size_t.set_ylim(0, 40)
-    ax_size_t.set_xlabel("Time (s)")
-
-    gs_right = gs[1].subgridspec(3, 1, height_ratios=[1.0, 0.35, 1.0], hspace=0.4, wspace=0.5)
-    ax_size_weight = fig.add_subplot(gs_right[0])
-
-    gs_pitch_row = gs_right[1].subgridspec(1, 3, wspace=0.5)
-    ax_pitch_strip = fig.add_subplot(gs_pitch_row[0])
-    ax_pitch_size = fig.add_subplot(gs_pitch_row[1])
-    ax_pitch_weight = fig.add_subplot(gs_pitch_row[2])
-
-    ax_3d = fig.add_subplot(gs_right[2], projection="3d")
+    ax_weight_t.set_ylim(0, 4)
+    ax_pitch_t.set_ylim(0, 450)
+    ax_pitch_t.set_xlabel("Time (s)")
 
     weight_y = features.weight_instantaneous.get_y_without_NaN()
     size_y = features.size.get_y_without_NaN()
@@ -234,10 +229,20 @@ def plot_combined_figure(features: AudioFeatures, out_path: Path, title: str) ->
 
     _draw_size_weight_scatter(fig, ax_size_weight, weight_y, size_y, loudness_y)
 
-    _draw_pitch_loudness_scatter(fig, ax_pitch_strip, pitch_y, loudness_y, show_colorbar=False)
+    # --- Column 2 ---
+    # Pitch strip spans columns 2 and 3
+    ax_pitch_strip = fig.add_subplot(gs[0, 2:4])
+
+    # Pitch vs Size and Pitch vs Weight sit side-by-side in columns 2 and 3
+    ax_pitch_size = fig.add_subplot(gs[1, 2])
+    ax_pitch_weight = fig.add_subplot(gs[1, 3])
+
+    # 3D plot spans rows 2 and 3, and columns 2 and 3, making it double-height and full width of the right side
+    ax_3d = fig.add_subplot(gs[2:4, 2:4], projection="3d")
+
+    _draw_pitch_loudness_scatter(fig, ax_pitch_strip, pitch_y, loudness_y, show_colorbar=True)
     _draw_pitch_size_scatter(fig, ax_pitch_size, pitch_y, size_y, loudness_y)
     _draw_pitch_weight_scatter(fig, ax_pitch_weight, pitch_y, weight_y, loudness_y)
-
     _draw_weight_size_pitch_3d(fig, ax_3d, weight_y, size_y, pitch_y, loudness_y)
 
     fig.suptitle(title)
@@ -246,35 +251,28 @@ def plot_combined_figure(features: AudioFeatures, out_path: Path, title: str) ->
 
 def create_combined_rotating_gif(features: AudioFeatures, out_path: Path, title: str) -> None:
     """Combined figure saved as a rotating GIF (36 degrees per frame, 500ms)."""
-    fig = Figure(figsize=(16, 13))
+    fig = Figure(figsize=(16, 16))
     FigureCanvasAgg(fig)
 
     fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.92)
 
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.1, 1], wspace=0.2)
+    # Use a 4x4 grid so we can place side-by-side plots and double-height plots easily
+    gs = fig.add_gridspec(4, 4, wspace=0.4, hspace=0.4)
 
-    gs_left = gs[0].subgridspec(3, 1, height_ratios=[1, 1, 0.8], hspace=0.3)
-    ax_pitch_t = fig.add_subplot(gs_left[0])
-    ax_weight_t = fig.add_subplot(gs_left[1], sharex=ax_pitch_t)
-    ax_size_t = fig.add_subplot(gs_left[2], sharex=ax_pitch_t)
+    # --- Column 1 (spans grid columns 0 and 1) ---
+    ax_size_t = fig.add_subplot(gs[0, 0:2])
+    ax_weight_t = fig.add_subplot(gs[1, 0:2], sharex=ax_size_t)
+    ax_pitch_t = fig.add_subplot(gs[2, 0:2], sharex=ax_size_t)
+    ax_size_weight = fig.add_subplot(gs[3, 0:2])
 
-    _draw_timeseries(ax_pitch_t, features.pitch, "Pitch", PlotsSpec.pitch)
-    _draw_timeseries(ax_weight_t, features.weight_instantaneous, "Weight", PlotsSpec.weight)
     _draw_timeseries(ax_size_t, features.size, "Size", PlotsSpec.size)
-    ax_pitch_t.set_ylim(0, 450)
-    ax_weight_t.set_ylim(0, 4)
+    _draw_timeseries(ax_weight_t, features.weight_instantaneous, "Weight", PlotsSpec.weight)
+    _draw_timeseries(ax_pitch_t, features.pitch, "Pitch", PlotsSpec.pitch)
+
     ax_size_t.set_ylim(0, 40)
-    ax_size_t.set_xlabel("Time (s)")
-
-    gs_right = gs[1].subgridspec(3, 1, height_ratios=[1.0, 0.35, 1.0], hspace=0.4, wspace=0.5)
-    ax_size_weight = fig.add_subplot(gs_right[0])
-
-    gs_pitch_row = gs_right[1].subgridspec(1, 3, wspace=0.5)
-    ax_pitch_strip = fig.add_subplot(gs_pitch_row[0])
-    ax_pitch_size = fig.add_subplot(gs_pitch_row[1])
-    ax_pitch_weight = fig.add_subplot(gs_pitch_row[2])
-
-    ax_3d = fig.add_subplot(gs_right[2], projection="3d")
+    ax_weight_t.set_ylim(0, 4)
+    ax_pitch_t.set_ylim(0, 450)
+    ax_pitch_t.set_xlabel("Time (s)")
 
     weight_y = features.weight_instantaneous.get_y_without_NaN()
     size_y = features.size.get_y_without_NaN()
@@ -283,12 +281,23 @@ def create_combined_rotating_gif(features: AudioFeatures, out_path: Path, title:
 
     _draw_size_weight_scatter(fig, ax_size_weight, weight_y, size_y, loudness_y)
 
-    _draw_pitch_loudness_scatter(fig, ax_pitch_strip, pitch_y, loudness_y, show_colorbar=False)
+    # --- Column 2 ---
+    # Pitch strip spans columns 2 and 3
+    ax_pitch_strip = fig.add_subplot(gs[0, 2:4])
+
+    # Pitch vs Size and Pitch vs Weight sit side-by-side in columns 2 and 3
+    ax_pitch_size = fig.add_subplot(gs[1, 2])
+    ax_pitch_weight = fig.add_subplot(gs[1, 3])
+
+    # 3D plot spans rows 2 and 3, and columns 2 and 3, making it double-height and full width of the right side
+    ax_3d = fig.add_subplot(gs[2:4, 2:4], projection="3d")
+
+    _draw_pitch_loudness_scatter(fig, ax_pitch_strip, pitch_y, loudness_y, show_colorbar=True)
     _draw_pitch_size_scatter(fig, ax_pitch_size, pitch_y, size_y, loudness_y)
     _draw_pitch_weight_scatter(fig, ax_pitch_weight, pitch_y, weight_y, loudness_y)
-
     _draw_weight_size_pitch_3d(fig, ax_3d, weight_y, size_y, pitch_y, loudness_y)
 
+    # 3D limits for consistent rotation scaling
     if weight_y.size > 0:
         ax_3d.set_xlim(weight_y.min(), weight_y.max())
         ax_3d.set_ylim(size_y.min(), size_y.max())
@@ -303,8 +312,6 @@ def create_combined_rotating_gif(features: AudioFeatures, out_path: Path, title:
     frames = np.arange(0, 360, 36)
     ani = animation.FuncAnimation(fig, update, frames=frames, interval=500)
     ani.save(out_path, writer='pillow', dpi=100)
-    # print(f"  [Animation] Saved combined rotating GIF to {out_path.name}")
-
 
 # ---------------------------------------------------------------------------
 # Summary Plotting
@@ -378,7 +385,19 @@ def create_summary_rotating_gif(
 # Main pipeline
 # ---------------------------------------------------------------------------
 
+__status_completed = 0
+__status_total = 0
+def print_status(status_line):
+    global __status_completed
+    global __status_total
+    status_line = status_line.format(completed=__status_completed, total=__status_total)
+    print(f"\r{status_line[:80].ljust(80)}", end="", flush=True)
+
+
 def main():
+    global __status_completed
+    global __status_total
+
     parser = argparse.ArgumentParser(
         description="Batch vocal characteristics analysis (.wav / .mp3 files)."
     )
@@ -433,31 +452,49 @@ def main():
         return features
 
     now = datetime.datetime.now()
-    print(f"Starting analysis at {str(now)}. This may take a while...")
+    print(f"Starting analysis of {args.root_dir} {str(now)}. This may take a while...")
 
-    # Both analysis and plotting run concurrently here.
-    with ThreadPoolExecutor(max_workers=ANALYSIS_THREADS) as executor:
-        future_to_path = {executor.submit(analyze_and_plot, path): path for path in files}
-        total = len(future_to_path)
-        completed = 0
+    __status_completed = 1
+    __status_total = len(files)
 
-        for future in as_completed(future_to_path):
-            path = future_to_path[future]
-            completed += 1
-            try:
-                features = future.result()
-            except Exception as exc:
-                print(f"  [{completed}/{total}] Skipping {path} due to error: {exc}")
-                continue
+    print_status("[{completed}/{total}]")
 
-            status_line = f"[{completed}/{total}] Analyzed {path}"
-            print(f"\r{status_line[:80].ljust(80)}", end="", flush=True)
+    for path in files:
+        print_status("[{completed}/{total}]: Analyzing and plotting " + str(path.stem))
 
-            all_weight.append(features.weight_instantaneous)
-            all_size.append(features.size)
-            all_pitch.append(features.pitch)
-            all_loudness.append(features.loudness)
+        features = analyze_and_plot(path)
 
+        all_weight.append(features.weight_instantaneous)
+        all_size.append(features.size)
+        all_pitch.append(features.pitch)
+        all_loudness.append(features.loudness)
+
+        __status_completed += 1
+
+    # # Both analysis and plotting run concurrently here.
+    # with ThreadPoolExecutor(max_workers=ANALYSIS_THREADS) as executor:
+    #     future_to_path = {executor.submit(analyze_and_plot, path): path for path in files}
+    #     total = len(future_to_path)
+    #     completed = 0
+    #
+    #     for future in as_completed(future_to_path):
+    #         path = future_to_path[future]
+    #         completed += 1
+    #         try:
+    #             features = future.result()
+    #         except Exception as exc:
+    #             print(f"  [{completed}/{total}] Skipping {path} due to error: {exc}")
+    #             continue
+    #
+    #         status_line = f"[{completed}/{total}]"
+    #         print(f"\r{status_line[:80].ljust(80)}", end="", flush=True)
+    #
+    #         all_weight.append(features.weight_instantaneous)
+    #         all_size.append(features.size)
+    #         all_pitch.append(features.pitch)
+    #         all_loudness.append(features.loudness)
+
+    print_status("[{completed}/{total}]")
     print("")
 
     if all_weight:

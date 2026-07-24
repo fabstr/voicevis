@@ -1,4 +1,4 @@
-from plot.PlotController import PlotController
+from ui.plot.PlotController import PlotController
 
 import pyqtgraph as pg
 from PyQt6 import QtWidgets, QtGui, QtCore
@@ -6,7 +6,6 @@ import numpy as np
 import qtawesome as qta
 
 from signal_processing.AudioFeatures import FeatureSnapshot
-from signal_processing.TargetConfig import TargetConfig
 
 class InstantaneousPlotController(PlotController):
     """

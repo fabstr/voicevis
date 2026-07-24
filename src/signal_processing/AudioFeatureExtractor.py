@@ -7,13 +7,16 @@ import numpy as np
 import pandas as pd
 import wave
 
+from line_profiler import profile
 from scipy.signal import stft, spectrogram, lfilter
+from scipy.ndimage import uniform_filter1d
 
 from ResourceManager import ResourceManager
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
 from signal_processing.genderer import calculate_target_probabilities
 
+from time import perf_counter
 
 class AudioFeatureExtractor:
 
@@ -60,6 +63,17 @@ class AudioFeatureExtractor:
         )
         self.target_config = targets
 
+
+        # warmup librosa
+        dummy_frame = np.zeros(1024, dtype=np.float32)
+        dummy_order = 2 + int(44100 / 1000)
+
+        # Force Numba to compile the function silently during startup
+        try:
+            _ = librosa.lpc(dummy_frame, order=dummy_order)
+        except Exception:
+            pass
+
     def analyzePCM(self, pcm_data, sampling_rate) -> AudioFeatures:
         """
         Perform analysis on samples.
@@ -70,7 +84,8 @@ class AudioFeatureExtractor:
         """
         df = self.smile.process_signal(pcm_data, sampling_rate)
         audio_length = len(pcm_data) / float(sampling_rate)
-        return self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
+        result = self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
+        return result
 
     def analyzeFile(self, path) -> AudioFeatures:
         """
@@ -141,12 +156,8 @@ class AudioFeatureExtractor:
         f2_pitch_clean = f2_clean / pitch_clean
         f3_pitch_clean = f3_clean / pitch_clean
 
-
-        # 1. Generate the raw structural NAQ array
-        naq_timeline = compute_native_naq_timeline(pcm_data, sampling_rate, pitch_clean, timepoints)
-
         # 2. Compute the perceived heuristic profile using the new isolated method
-        weight3, weight3_average = calculate_weight3(naq_timeline, pitch_clean)
+        weight3, weight3_average = calculate_weight3(pcm_data, sampling_rate, pitch_clean, timepoints, pitch_clean)
         weight3_clean = np.where(valid_mask, weight3, np.nan)
 
         # 3. Construct the result dictionary using filtered arrays
@@ -396,51 +407,51 @@ def calculate_spectrogram(samples, sampling_rate):
 
     return SpectrogramData(x=t_spec, y=f_spec, magnitude_db=Sxx_db)
 
-def compute_native_naq_timeline(pcm_data, sampling_rate, f0_timeline, timepoints) -> np.ndarray:
-    """
-    Natively isolates the glottal flow wave using frame-by-frame LPC
-    inverse filtering and calculates the Normalized Amplitude Quotient.
-    """
-    naq_timeline = np.zeros_like(timepoints)
-    window_duration = 0.050
-    window_samples = int(window_duration * sampling_rate)
-    lpc_order = 2 + int(sampling_rate / 1000)
 
-    for i, tp in enumerate(timepoints):
-        f0_val = f0_timeline[i]
+def calculate_weight3(pcm_data, sampling_rate, pitch_clean, timepoints, f0_timeline) -> tuple[np.ndarray, float]:
+    def compute_native_naq_timeline(pcm_data, sampling_rate, f0_timeline, timepoints) -> np.ndarray:
+        """
+        Natively isolates the glottal flow wave using frame-by-frame LPC
+        inverse filtering and calculates the Normalized Amplitude Quotient.
+        """
+        naq_timeline = np.zeros_like(timepoints)
+        window_duration = 0.050
+        window_samples = int(window_duration * sampling_rate)
+        lpc_order = 2 + int(sampling_rate / 1000)
 
-        # ⚠️ Updated: Handle np.nan checks introduced by your valid_mask
-        if np.isnan(f0_val) or f0_val <= 0:
-            continue
+        for i, tp in enumerate(timepoints):
+            f0_val = f0_timeline[i]
 
-        start_idx = max(0, int((tp - window_duration / 2) * sampling_rate))
-        end_idx = min(len(pcm_data), start_idx + window_samples)
-        audio_frame = pcm_data[start_idx:end_idx]
+            # ⚠️ Updated: Handle np.nan checks introduced by your valid_mask
+            if np.isnan(f0_val) or f0_val <= 0:
+                continue
 
-        if len(audio_frame) < lpc_order * 2:
-            continue
+            start_idx = max(0, int((tp - window_duration / 2) * sampling_rate))
+            end_idx = min(len(pcm_data), start_idx + window_samples)
+            audio_frame = pcm_data[start_idx:end_idx]
 
-        try:
-            a_coefficients = librosa.lpc(audio_frame, order=lpc_order)
-            glottal_derivative = lfilter(a_coefficients, [1.0], audio_frame)
-            glottal_flow = lfilter([1.0], [1.0, -0.98], glottal_derivative)
+            if len(audio_frame) < lpc_order * 2:
+                continue
 
-            av_discrete = np.max(glottal_flow) - np.min(glottal_flow)
-            dmin_discrete = np.abs(np.min(glottal_derivative))
-            t0_samples = sampling_rate / f0_val
+            try:
+                a_coefficients = librosa.lpc(audio_frame, order=lpc_order)
+                glottal_derivative = lfilter(a_coefficients, [1.0], audio_frame)
+                glottal_flow = lfilter([1.0], [1.0, -0.98], glottal_derivative)
 
-            if dmin_discrete > 1e-6:
-                naq_timeline[i] = av_discrete / (dmin_discrete * t0_samples)
-        except Exception:
-            continue
+                av_discrete = np.max(glottal_flow) - np.min(glottal_flow)
+                dmin_discrete = np.abs(np.min(glottal_derivative))
+                t0_samples = sampling_rate / f0_val
 
-    return naq_timeline
+                if dmin_discrete > 1e-6:
+                    naq_timeline[i] = av_discrete / (dmin_discrete * t0_samples)
+            except Exception:
+                continue
 
-def calculate_weight3(naq_timeline, f0_timeline) -> tuple[np.ndarray, float]:
-    """
-    Transforms raw physiological NAQ data into a perceptual vocal weight metric.
-    Applies inverse thickness mapping, context pitch anchoring, and silence suppression.
-    """
+        return naq_timeline
+
+    # 1. Generate the raw structural NAQ array
+    naq_timeline = compute_native_naq_timeline(pcm_data, sampling_rate, pitch_clean, timepoints)
+
     eps = 1e-6
 
     # 1. Invert thickness: small NAQ profiles mean tight, sudden, heavy fold closures
@@ -464,3 +475,52 @@ def calculate_weight3(naq_timeline, f0_timeline) -> tuple[np.ndarray, float]:
     average_vocal_weight = float(np.mean(voiced_frames)) if len(voiced_frames) > 0 else 0.0
 
     return vocal_weight_timeline, average_vocal_weight
+
+def calculate_weight4(path):
+    def zff_gci(x, fs):
+        """Zero-frequency filtering GCI detection (Murty & Yegnanarayana, 2008)."""
+        diff = np.diff(x, prepend=x[0]).astype(float)
+        y = lfilter([1], [1, -2, 1], diff)
+        y = lfilter([1], [1, -2, 1], y)
+        wlen = max(1, int(0.001 * fs))  # ~1 ms averaging window, applied 3x
+        for _ in range(3):
+            y = y - uniform_filter1d(y, size=2 * wlen + 1)
+        gci = np.where((y[:-1] < 0) & (y[1:] >= 0))[0]
+        return gci
+
+    def lpc_inverse_filter(x, fs, order=None):
+        order = order or int(2 + fs / 1000)
+        a = librosa.lpc(x.astype(float), order=order)
+        residual = lfilter(a, [1], x)  # ~ glottal flow derivative
+        flow = lfilter([1], [1, -0.99], residual)  # leaky integration -> flow
+        return flow
+
+    def compute_quotients(flow, gcis):
+        oqs, cqs, sqs = [], [], []
+        for i0, i1 in zip(gcis[:-1], gcis[1:]):
+            cycle = flow[i0:i1]
+            T0 = i1 - i0
+            if T0 < 4:
+                continue
+            goi = np.argmin(cycle)  # most-closed point = opening instant
+            open_seg = cycle[goi:]
+            if len(open_seg) < 2:
+                continue
+            peak = np.argmax(open_seg) + goi  # instant of max glottal opening
+            OQ = (T0 - goi) / T0
+            CQ = 1 - OQ
+            opening_dur = peak - goi
+            closing_dur = T0 - peak
+            if closing_dur <= 0:
+                continue
+            SQ = opening_dur / closing_dur
+            oqs.append(OQ);
+            cqs.append(CQ);
+            sqs.append(SQ)
+        return np.array(oqs), np.array(cqs), np.array(sqs)
+
+    x, fs = librosa.load(path, sr=None, mono=True)
+    flow = lpc_inverse_filter(x, fs)
+    gcis = zff_gci(x, fs)
+    oq, cq, sq = compute_quotients(flow, gcis)
+    return dict(OQ=oq.mean(), CQ=cq.mean(), SQ=sq.mean(), n_cycles=len(oq))

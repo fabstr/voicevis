@@ -14,20 +14,34 @@ permissions:
 
 jobs:
   build:
+    # 1. Define the matrix to run on all three operating systems
+    strategy:
+      matrix:
+        # os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [windows-latest]
+      # Set to false so if one OS build fails, the others will still continue
+      fail-fast: false
 
-    runs-on: windows-latest
+    # 2. Tell the job to use the current OS in the matrix
+    runs-on: ${{ matrix.os }}
 
     steps:
-
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Forces downloading all history and tags
 
-    - name: Set up Python 3.10
+    - name: Set up Python 3.14
       uses: actions/setup-python@v3
       with:
         python-version: "3.14"
+
+    # 3. Handle Linux-specific system dependencies for UI/Audio
+#    - name: Install Linux UI/Audio Dependencies
+#      if: runner.os == 'Linux'
+#      run: |
+#        sudo apt-get update
+#        sudo apt-get install -y libasound2-dev libgl1-mesa-glx libxcb-cursor0 libxcb-xinerama0
 
     - name: Install dependencies
       run: |
@@ -46,14 +60,13 @@ jobs:
 #      run: |
 #        pytest
 
-    - name: Build with PyInstaller
+    - name: Build
       run: |
-        python src/generate_version.py
-        pyinstaller VoiceVis.spec
+        python build.py
 
     - name: Read Version from Python
       id: get_version
-      shell: bash # Use bash to avoid PowerShell quote-escaping issues
+      shell: bash # Use bash to avoid PowerShell quote-escaping issues on Windows
       run: |
         python -c "
         import os
@@ -72,8 +85,8 @@ jobs:
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        # Use the variable set by our Python script
-        name: ${{ steps.get_version.outputs.ARTIFACT_NAME }}-Windows
+        # 4. Inject the OS name dynamically so artifacts don't overwrite each other
+        name: ${{ steps.get_version.outputs.ARTIFACT_NAME }}-${{ runner.os }}
         # PyInstaller outputs the folder to dist/<name> in onedir mode
         path: dist/VoiceVis-*/
         retention-days: 3

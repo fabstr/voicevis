@@ -2,9 +2,8 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtWidgets, QtGui, QtCore
 
-from plot.DirectionalViewBox import DirectionalViewBox
-from plot.FrequencyAxisItem import FrequencyAxisItem
-from plot.TimeAxisItem import TimeAxisItem
+from ui.plot.DirectionalViewBox import DirectionalViewBox
+from ui.plot.TimeAxisItem import TimeAxisItem
 from signal_processing.AudioFeatures import FeatureSnapshot
 from signal_processing.TargetConfig import TargetConfig
 import logging

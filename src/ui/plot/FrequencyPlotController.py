@@ -1,8 +1,8 @@
 import numpy as np
 import pyqtgraph as pg
 
-from plot.FrequencyAxisItem import FrequencyAxisItem
-from plot.PlotController import PlotController
+from ui.plot.FrequencyAxisItem import FrequencyAxisItem
+from ui.plot.PlotController import PlotController
 from signal_processing.AudioFeatures import FeatureSnapshot
 
 
