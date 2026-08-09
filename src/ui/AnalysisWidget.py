@@ -568,7 +568,18 @@ class AnalysisWidget(QtWidgets.QWidget):
             return
 
         current_size = old_controller.local_slider.value()
-        new_controller = PlotController(
+
+        plot = PlotsSpec.get(new_plot_name)
+        is_freq_analysis = plot.get('is_frequency_analysis', False)
+        is_inst = plot.get('is_instantaneous', False)
+        if is_freq_analysis:
+            controller_class = FrequencyPlotController
+        elif is_inst:
+            controller_class = InstantaneousPlotController
+        else:
+            controller_class = PlotController
+
+        new_controller = controller_class(
             plot_name=new_plot_name,
             all_specs=PlotsSpec,
             click_callback=self.on_mouse_clicked,
