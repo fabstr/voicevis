@@ -305,9 +305,11 @@ magSpecFieldNameIsFull = 1
 nHarmonics = 100
 harmonicDifferences = H1-H2;H1-H3;H1-H4;H1-A3
 harmonicDifferencesLog = 1
-nHarmonicMagnitudes = 0
-firstHarmonicMagnitude = 1
+  ; F0 (index 0) plus the first 5 harmonics
+nHarmonicMagnitudes = 6
+firstHarmonicMagnitude = 0
 outputLogRelMagnitudes = 1
+outputLinearMagnitudes = 1
 formantAmplitudes=1
 formantAmplitudesLogRel = 1
 formantAmplitudesStart = 1

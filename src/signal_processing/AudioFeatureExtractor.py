@@ -126,6 +126,9 @@ class AudioFeatureExtractor:
         f1 = df['F1frequency_sma3nz'].to_numpy()
         f2 = df['F2frequency_sma3nz'].to_numpy()
         f3 = df['F3frequency_sma3nz'].to_numpy()
+        f1_amp = df['F1amplitudeLogRelF0_sma3nz'].to_numpy()
+        f2_amp = df['F2amplitudeLogRelF0_sma3nz'].to_numpy()
+        f3_amp = df['F3amplitudeLogRelF0_sma3nz'].to_numpy()
 
         # Extract loudness
         loudness = df['Loudness_sma3'].to_numpy()
