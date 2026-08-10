@@ -1,0 +1,352 @@
+# The plot layer
+
+Everything that draws a graph lives here. This document explains how the pieces
+fit together and why the structure is the way it is.
+
+Related documents:
+
+- [`../../SeriesRegistry.md`](../../SeriesRegistry.md) — what can be plotted
+- [`renderers/README.md`](renderers/README.md) — the drawing strategies
+- [`layers/README.md`](layers/README.md) — the spectrogram and target-band overlays
+
+---
+
+## The core idea
+
+A plot is **not** a fixed thing with a name. A plot is a *choice of series*:
+
+```
+PlotConfig(x=["time"], y=["F1", "F2", "F3"], colour=None, spectrogram=True)
+```
+
+Everything else follows from that choice. What kind of plot it is, whether a
+playhead makes sense, whether clicking should seek, whether it joins the shared
+time axis — all derived, never stored and never chosen separately.
+
+This replaced an earlier design in which each kind of plot was a different
+class (`PlotController`, `InstantaneousPlotController`,
+`FrequencyPlotController`) selected by dispatching on flags in a hard-coded
+catalogue of 23 named plots. Because the kind lived in the *class*, changing
+what a cell showed meant constructing a replacement widget and swapping it into
+the splitter — which threw away the zoom state and orphaned any annotation
+markers attached to the old plot.
+
+---
+
+## Who owns what
+
+```mermaid
+graph TD
+    AW["AnalysisWidget<br/><i>transport, grid, files</i>"]
+
+    AW --> HUB["PlotDataHub<br/><i>the data + the clock</i>"]
+    AW --> SYNC["TimeAxisSyncGroup<br/><i>the shared X range</i>"]
+    AW --> CELLS["PlotCell &times; N"]
+
+    CELLS --> BAR["SeriesSelectorBar<br/><i>X / Y / Colour / trail / size</i>"]
+    CELLS --> PW["pg.PlotWidget<br/>+ DirectionalViewBox"]
+    CELLS --> REND["PlotRenderer<br/><i>swappable</i>"]
+    CELLS --> SPEC["SpectrogramBackground"]
+    CELLS --> TB["TargetBandLayer"]
+    CELLS --> PH["playhead<br/><i>InfiniteLine</i>"]
+
+    REND -.reads.-> HUB
+    SPEC -.reads.-> HUB
+    SYNC -.drives X of.-> PW
+
+    BAR -->|config_changed| CELLS
+
+    classDef owned fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    classDef state fill:#3d3050,stroke:#a98ac8,color:#e8eef5
+    class HUB,SYNC state
+    class BAR,PW,REND,SPEC,TB,PH owned
+```
+
+`PlotDataHub` and `TimeAxisSyncGroup` are shared by every cell. Everything under
+a `PlotCell` belongs to that cell alone.
+
+**The cell is never destroyed.** `PlotCell.apply_config()` swaps the renderer,
+retargets the layers and relabels the axes in place. The widget keeps its slot
+in the splitter, its annotations and — unless the series actually changed — its
+zoom.
+
+---
+
+## How the kind is derived
+
+```mermaid
+flowchart TD
+    START["PlotConfig.kind"] --> Q{"first X series?"}
+    Q -->|time| TS["TIME_SCATTER<br/>TimeScatterRenderer"]
+    Q -->|frequency| SS["SPECTRUM_SLICE<br/>SpectrumSliceRenderer"]
+    Q -->|anything else| TR["TRAIL<br/>TrailRenderer"]
+
+    TS --> TSF["playhead, click-to-seek,<br/>joins the time sync group,<br/>may show a spectrogram"]
+    SS --> SSF["log-frequency axis,<br/>redrawn as the playhead moves"]
+    TR --> TRF["fading trail over the last<br/><i>trail_time</i> seconds"]
+
+    classDef kind fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    classDef note fill:#333,stroke:#777,color:#ddd
+    class TS,SS,TR kind
+    class TSF,SSF,TRF note
+```
+
+Because the kind is a property of the data, a cell can move between all three by
+changing a combo box.
+
+---
+
+## The rules a configuration must satisfy
+
+`PlotConfig.normalised()` is total: it never raises and always returns something
+renderable. It is applied on construction, on every edit and on every load.
+
+| Rule | Reason |
+|---|---|
+| An `exclusive` series (`time`, `frequency`, `magnitude`) is alone on its axis | Time cannot share an axis with pitch |
+| At most one axis may hold several series | `y=[F1,F2,F3]` against `x=time` is meaningful; many-against-many is not |
+| `colour` is kept only when both axes hold exactly one series | With several series each already uses its own registry colour |
+| `spectrogram` only on `TIME_SCATTER`, and only when Y is empty or entirely in Hz | The image is drawn in true Hz; see [layers](layers/README.md) |
+| `SPECTRUM_SLICE` forces `y = ["magnitude"]` | There is nothing else to put on that axis |
+| An empty Y axis is legal only with `spectrogram` | Otherwise the plot would be blank |
+| `trail_time` is clamped to 0–60 s | |
+
+The selector bar enforces the same rules *visibly*: when picking several X
+series forces Y down to one, the Y button updates so the reduction is seen
+rather than silently applied. Controls that cannot apply are disabled with a
+tooltip saying why, instead of being hidden or silently ignored.
+
+---
+
+## Data flow
+
+`PlotDataHub` is the single owner of the analysed data and of the display time.
+Nothing else holds a reference to a `SignalTimeSeries` — a re-analysis replaces
+those objects wholesale, and cached references go stale silently.
+
+```mermaid
+flowchart LR
+    subgraph sources["Sources"]
+        AWK["AnalysisWorker<br/><i>batch, off-thread</i>"]
+        RTW["RealTimeAnalysisWorker<br/><i>live, ~100 Hz</i>"]
+    end
+
+    AWK -->|"result_ready"| SF["hub.set_features()"]
+    RTW -->|"new_data_point"| AS["hub.append_snapshot()"]
+
+    SF --> HUB[("PlotDataHub<br/>revision++<br/>dirty = true")]
+    AS --> HUB
+
+    HUB -->|"get_xy(key)"| R1["renderers"]
+    HUB -->|"spectrogram()"| R2["SpectrogramBackground"]
+
+    TICK["frame timer<br/>33 ms"] --> TK{"hub.take_dirty()"}
+    TK -->|true| OD["cell.on_data_changed()<br/><i>full redraw</i>"]
+    TK -->|false| SKIP["skip"]
+    TICK --> OT["cell.on_time_changed(t)<br/><i>every frame, cheap</i>"]
+
+    classDef hub fill:#3d3050,stroke:#a98ac8,color:#e8eef5
+    class HUB hub
+```
+
+### Two update paths, deliberately separate
+
+| | `on_data_changed()` | `on_time_changed(t)` |
+|---|---|---|
+| When | Only when the data actually changed | Every frame |
+| Time scatter | One `setData` per series | Move the playhead line |
+| Trail | Re-cache, then redraw | Re-slice the trail window |
+| Spectrum slice | Redraw | Pick the nearest column |
+| Spectrogram | Rebuild the image (throttled) | — |
+
+This split is the reason playback is cheap. The previous implementation bound
+the 33 ms timer to a method that re-pushed **every curve's entire array for
+every plot on every frame**. Now a playback frame across four plots holding 4000
+points each costs about **0.04 ms**, because `take_dirty()` is false and nothing
+calls `setData` at all.
+
+Renderers additionally remember the revision they last drew, so a redundant
+`on_data_changed()` is free.
+
+### Live recording
+
+`append_snapshot` is the only place in the application that appends a live
+sample. Previously every visible curve in every cell appended the same snapshot
+to the same shared series, so a feature shown in two plots was recorded twice.
+
+Internally the hub switches each series to a capacity-doubling buffer for the
+duration of the recording (`begin_recording` / `end_recording`), because
+appending with `np.append` reallocates on every sample and makes a long
+recording quadratic.
+
+---
+
+## Time-axis synchronisation
+
+Every plot whose X axis is time shares one range, owned by
+`TimeAxisSyncGroup`.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant VB as A view box
+    participant G as TimeAxisSyncGroup
+    participant O as The other time plots
+
+    U->>VB: pan or zoom
+    VB->>G: sigXRangeChanged
+    Note over G: ignored while<br/>_applying is set
+    G->>G: range = (lo, hi)
+    G->>VB: setXRange
+    G->>O: setXRange
+
+    Note over G: during playback / recording
+    G->>G: follow(t, mode)
+    G->>VB: setXRange
+    G->>O: setXRange
+```
+
+A group rather than `setXLink`: the old code elected the first time plot in the
+list as master and linked the rest to it. That election had to be redone on
+every add, remove or reconfiguration, and had to be torn down if the master was
+later switched to a non-time plot. A group is order-independent, survives
+reconfiguration, and lets a zoom on *any* plot propagate to all the others.
+
+`follow(t, mode)` also owns the scrolling behaviour:
+
+| Mode | Behaviour |
+|---|---|
+| `recording` | A 10 s window with 1 s of space ahead of the playhead |
+| `playing` | Keeps the current width; pages forward when the playhead passes 50 % of the view |
+| `idle` | Does nothing |
+
+Because the group owns the width, zooming during playback immediately changes
+how far each page jumps.
+
+---
+
+## Mouse tools
+
+`DirectionalViewBox` provides pan, single-axis rubber-band zoom, and a measure
+tool. `AnalysisWidget` broadcasts the active mode to every cell.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pan
+    Pan --> ZoomX: zoom-X button
+    Pan --> ZoomY: zoom-Y button
+    Pan --> Measure: measure button
+    ZoomX --> Pan: toggle off / reset
+    ZoomY --> Pan: toggle off / reset
+    Measure --> Pan: toggle off / reset
+    ZoomX --> ZoomY: buttons are mutually exclusive
+    ZoomY --> ZoomX
+```
+
+Two subtleties worth knowing before touching this file:
+
+**The axis lock lives in the drag handler, not in `setRange`.** An earlier
+version overrode `setRange` and, whenever `zoom_axis` was `'y'`, replaced any
+requested X range with the current one. `setXRange` funnels through `setRange`,
+so for as long as the zoom-Y tool was armed *every programmatic X update was
+silently discarded* — axis synchronisation, the recording window, playback
+paging and reset-zoom all stopped working. Constraining inside `mouseDragEvent`
+applies the lock only to user drags, which was the intent.
+
+**Measure mode disables mouse interaction but still receives drag events.**
+`setMouseEnabled(False, False)` suppresses the *effect* of the default handlers
+while `mouseDragEvent` is still delivered. That ordering is what makes measuring
+work; it is load-bearing and not obvious.
+
+The readout is produced by a formatter supplied by the renderer, so a time plot
+reports `Δt` in mm:ss and the spectrum plot converts its log-scaled axis back to
+Hz.
+
+---
+
+## Drawing order
+
+```mermaid
+graph LR
+    A["z = -30<br/>spectrogram image"] --> B["z = -20<br/>target bands"] --> C["z = 0<br/>curves and points"] --> D["annotation markers<br/>playhead"]
+
+    classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    class A,B,C,D l
+```
+
+This is what lets formant tracks be read against the harmonics behind them.
+
+---
+
+## Interaction with `AnalysisWidget`
+
+The widget owns the transport (the playback clock, the audio buffer, the
+recording state) and the grid of cells. It does **not** own the current time:
+`AnalysisWidget.current_playback_time` is a property delegating to the hub.
+
+Signals a cell emits upward:
+
+| Signal | Meaning |
+|---|---|
+| `config_changed(cell)` | The selection changed; re-check sync-group membership and persist |
+| `seek_requested(t)` | A click on a time plot. Non-time plots never emit this |
+| `annotation_requested(cell, x, y)` | A double click on empty space |
+| `annotation_clicked(cell, marker)` | A click within 15 px of an existing marker |
+
+Methods the widget calls downward: `apply_config`, `on_data_changed`,
+`on_time_changed`, `set_point_size`, `set_tool_mode`, `update_targets`,
+`reset_zoom`, `apply_theme`, `dispose`.
+
+There is exactly one construction path (`create_plot_cell`) and no per-kind
+dispatch anywhere outside `PlotCell.RENDERERS`.
+
+---
+
+## Layout persistence
+
+`LayoutSerializer` reads every layout format the application has ever written:
+
+```mermaid
+flowchart TD
+    F["a layout file or the QSettings blob"] --> D{"entry shape"}
+    D -- "has an x key" --> V2["v2 — a series selection,<br/>used directly"]
+    D -- "has a name key" --> V1["v1 — a preset name,<br/>PlotConfig.from_preset()"]
+    D -- "is a bare string" --> V0["oldest — the column<br/>was a list of names"]
+    V2 --> C["PlotConfig"]
+    V1 --> C
+    V0 --> C
+    C --> N["normalised()"]
+
+    classDef v fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    class V2,V1,V0 v
+```
+
+Anything unreadable falls back to the default plot **and logs a warning** —
+silent substitution is how a user ends up reporting that their layout changed by
+itself.
+
+The `QSettings` key is deliberately unchanged (`AudioAnalyzer` /
+`LiveMultiPlotWidget` / `last_active_layout`). Renaming it would have silently
+discarded every existing user's saved layout. Old blobs are read, upgraded in
+memory, and written back in the current schema.
+
+---
+
+## File map
+
+| File | Responsibility |
+|---|---|
+| `PlotConfig.py` | What a plot shows; derives the kind; validates |
+| `PlotCell.py` | The widget: bar + plot + renderer + layers; the only construction path |
+| `PlotDataHub.py` | Owns the data and the clock; the only live-append path |
+| `SeriesSelectorBar.py` | The X / Y / Colour / spectrogram / trail / size controls |
+| `MultiSeriesSelector.py` | A drop-down that can check several series at once |
+| `TimeAxisSyncGroup.py` | The shared X range and the playhead-following behaviour |
+| `DirectionalViewBox.py` | Pan, single-axis zoom, measure |
+| `PlotTheme.py` | Palette-derived colours; public pyqtgraph API only |
+| `ColourMapping.py` | Normalised viridis and the colour bar |
+| `TimeAxisItem.py` | mm:ss ticks, with precision following the zoom |
+| `FrequencyAxisItem.py` | A curated log-frequency tick list |
+| `LayoutSerializer.py` | Layout schema and migration |
+| `renderers/` | The three drawing strategies — see [README](renderers/README.md) |
+| `layers/` | Spectrogram and target bands — see [README](layers/README.md) |

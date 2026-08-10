@@ -4,7 +4,7 @@ import pyqtgraph as pg
 
 
 class AnnotationMarker(pg.ScatterPlotItem):
-    def __init__(self, x, y, text, plot_name, plot_widget, app_ref):
+    def __init__(self, x, y, text, plot_name, plot_widget, app_ref, series_key=None):
         # Draw a yellow star at the exact coordinates
         super().__init__(
             x=[x], y=[y],
@@ -14,6 +14,9 @@ class AnnotationMarker(pg.ScatterPlotItem):
         self.y_val = y
         self.text_val = text
         self.plot_name = plot_name
+        # Which data series the annotation belongs to. Plots no longer have
+        # fixed names, so this is what lets a marker find its way home.
+        self.series_key = series_key
         self.plot_widget = plot_widget
         self.app_ref = app_ref
 
@@ -26,7 +29,8 @@ class AnnotationMarker(pg.ScatterPlotItem):
             "time": self.x_val,
             "y": self.y_val,
             "text": self.text_val,
-            "plot": self.plot_name
+            "plot": self.plot_name,
+            "series": self.series_key,
         }
 
     @staticmethod

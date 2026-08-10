@@ -13,7 +13,8 @@ from PyQt6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
 import qtawesome as qta
 
 from ResourceManager import ResourceManager
-from PlotsSpec import PlotsSpec, defaultSize
+import SeriesRegistry as Registry
+from SeriesRegistry import DEFAULT_POINT_SIZE as defaultSize
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
@@ -22,9 +23,13 @@ from ui.TargetConfigDialog import TargetConfigDialog
 from workers.AnalysisWorker import AnalysisWorker
 from workers.PlaybackWorker import PlaybackWorker
 from workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
-from ui.plot.PlotController import PlotController
-from ui.plot.InstantaneousPlotController import InstantaneousPlotController
-from ui.plot.FrequencyPlotController import FrequencyPlotController
+from ui.plot import LayoutSerializer
+from ui.plot.LayoutSerializer import Layout, LayoutColumn
+from ui.plot.PlotCell import PlotCell
+from ui.plot.PlotConfig import PlotConfig
+from ui.plot.PlotDataHub import PlotDataHub
+from ui.plot.TimeAxisSyncGroup import (MODE_IDLE, MODE_PLAYING, MODE_RECORDING,
+                                       TimeAxisSyncGroup)
 
 class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
@@ -109,7 +114,10 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.resource_manager = ResourceManager()
 
         self.sampling_rate = 44100
-        self.analysedAudioFeatures = AudioFeatures()
+
+        # Owns the analysed data and the display time; every plot reads through it.
+        self.hub = PlotDataHub()
+        self.sync_group = TimeAxisSyncGroup(self)
 
         self.annotations = []
         self.plots = {}
@@ -117,8 +125,6 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.is_recording = False
         self.is_playing = False
         self.playback_start_time = 0.0
-
-        self.current_playback_time = 0
 
         self.audio_device = None
         self.audio_stream = None
@@ -135,15 +141,29 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.help_window = None
         self.sample_text_window = None
 
-        self.menu_toggle_actions = {
-            'plots': {}
-        }
-
         app = QtWidgets.QApplication.instance()
         if app:
             app.aboutToQuit.connect(self.save_state_on_exit)
 
         self.restore_previous_state()
+
+    #################### Shared state ####################
+
+    @property
+    def analysedAudioFeatures(self) -> AudioFeatures:
+        return self.hub.features
+
+    @analysedAudioFeatures.setter
+    def analysedAudioFeatures(self, features: AudioFeatures):
+        self.hub.set_features(features)
+
+    @property
+    def current_playback_time(self) -> float:
+        return self.hub.current_time
+
+    @current_playback_time.setter
+    def current_playback_time(self, value: float):
+        self.hub.set_time(value)
 
     def setup_audio(self):
         self.audio_format = QAudioFormat()
@@ -174,7 +194,7 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.timer = QtCore.QTimer()
         self.timer.setInterval(33)
-        self.timer.timeout.connect(self.update_plots)
+        self.timer.timeout.connect(self._on_frame_tick)
 
     def setupMenu(self):
         self.menu_bar = QtWidgets.QMenuBar(self)
@@ -448,15 +468,14 @@ class AnalysisWidget(QtWidgets.QWidget):
         self._create_column()
         self._create_column()
 
-        available_plots = list(PlotsSpec.keys())
-        p1 = available_plots[0] if len(available_plots) > 0 else None
-        p2 = available_plots[1] if len(available_plots) > 1 else p1
-        p3 = available_plots[2] if len(available_plots) > 2 else p1
-        p4 = available_plots[3] if len(available_plots) > 3 else p1
+        defaults = [PlotConfig.from_preset(name, self._point_size())
+                    for name in Registry.DEFAULT_LAYOUT]
 
-        # Populate the initial 2x2 grid
-        self._add_specific_row([p1, p2])
-        self._add_specific_row([p3, p4])
+        self._add_specific_row(defaults[0:2])
+        self._add_specific_row(defaults[2:4])
+
+    def _point_size(self):
+        return self.size_slider.value() if getattr(self, 'size_slider', None) else defaultSize
 
     def _create_column(self):
         col = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
@@ -464,177 +483,94 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.columns.append(col)
         return col
 
-    def _add_specific_row(self, plot_names):
+    def _add_specific_row(self, configs):
         for i, col in enumerate(self.columns):
-            name = plot_names[i] if i < len(plot_names) else plot_names[-1]
-            controller = self.create_plot_cell(name)
-            self.plot_cells.append(controller)
-            col.addWidget(controller.container)
-        self.sync_all_x_axes()
+            config = configs[i] if i < len(configs) else configs[-1]
+            cell = self.create_plot_cell(config)
+            self.plot_cells.append(cell)
+            col.addWidget(cell)
 
-    def create_plot_cell(self, plot_name):
-        if not plot_name: return None
+    def create_plot_cell(self, config: PlotConfig = None) -> PlotCell:
+        """Build one plot. Every cell is built here; there is no per-kind dispatch."""
+        if config is None:
+            config = PlotConfig.from_preset(Registry.DEFAULT_PRESET, self._point_size())
 
-        initial_size = self.size_slider.value() if hasattr(self, 'size_slider') else defaultSize
+        cell = PlotCell(config, self.hub, parent=self)
+        cell.config_changed.connect(self._on_cell_config_changed)
+        cell.seek_requested.connect(self._on_seek_requested)
+        cell.annotation_requested.connect(self._on_annotation_requested)
+        cell.annotation_clicked.connect(self._on_annotation_clicked)
 
-        plot = PlotsSpec.get(plot_name)
-        is_freq_analysis = plot.get('is_frequency_analysis', False)
+        cell.set_tool_mode(self.active_tool_mode)
+        cell.update_targets(self.audioFeatureExtractor.target_config)
+        self._register_with_sync_group(cell)
+        cell.on_data_changed()
+        cell.on_time_changed(self.current_playback_time)
+        return cell
 
-        is_inst = plot.get('is_instantaneous', False)
-        if is_freq_analysis:
-            controller_class = FrequencyPlotController
-        elif is_inst:
-            controller_class = InstantaneousPlotController
-        else:
-            controller_class = PlotController
-
-        controller = controller_class(
-            plot_name=plot_name,
-            all_specs=PlotsSpec,
-            click_callback=self.on_mouse_clicked,
-            change_plot_callback=self.handle_plot_selection,
-            initial_size=initial_size
-        )
-
-        # controller = PlotController(
-        #     plot_name=plot_name,
-        #     all_specs=spec,
-        #     click_callback=self.on_mouse_clicked,
-        #     change_plot_callback=self.handle_plot_selection,
-        #     initial_size=initial_size
-        # )
-        if hasattr(self, 'active_tool_mode'):
-            controller.set_tool_mode(self.active_tool_mode)
-        return controller
+    def _dispose_cells(self, cells):
+        for cell in cells:
+            self.sync_group.unregister(cell.view_box)
+            cell.dispose()
+            cell.setParent(None)
+            cell.deleteLater()
 
     def add_plot_row(self):
-        available_plots = list(PlotsSpec.keys())
-        default_plot = available_plots[0] if available_plots else None
-
         for col in self.columns:
-            controller = self.create_plot_cell(default_plot)
-            self.plot_cells.append(controller)
-            col.addWidget(controller.container)
+            cell = self.create_plot_cell()
+            self.plot_cells.append(cell)
+            col.addWidget(cell)
 
-        self.sync_all_x_axes()
-        self.update_plots()
-
-        if hasattr(self, 'size_slider'):
-            self.handle_symbol_size_change(self.size_slider.value())
+        self.handle_symbol_size_change(self._point_size())
 
     def remove_plot_row(self):
         if len(self.columns) == 0 or self.columns[0].count() <= 1:
             return
 
-        widgets_to_remove = []
+        removed = []
         for col in self.columns:
-            last_widget = col.widget(col.count() - 1)
-            widgets_to_remove.append(last_widget)
-            last_widget.deleteLater()
+            widget = col.widget(col.count() - 1)
+            if isinstance(widget, PlotCell):
+                removed.append(widget)
 
-        self.plot_cells = [c for c in self.plot_cells if c.container not in widgets_to_remove]
+        self.plot_cells = [c for c in self.plot_cells if c not in removed]
+        self._dispose_cells(removed)
 
     def add_plot_column(self):
         num_rows = self.columns[0].count() if self.columns else 1
-        available_plots = list(PlotsSpec.keys())
-        default_plot = available_plots[0] if available_plots else None
-
         new_col = self._create_column()
 
         for _ in range(num_rows):
-            controller = self.create_plot_cell(default_plot)
-            self.plot_cells.append(controller)
-            new_col.addWidget(controller.container)
+            cell = self.create_plot_cell()
+            self.plot_cells.append(cell)
+            new_col.addWidget(cell)
 
-        self.sync_all_x_axes()
-        self.update_plots()
-
-        if hasattr(self, 'size_slider'):
-            self.handle_symbol_size_change(self.size_slider.value())
+        self.handle_symbol_size_change(self._point_size())
 
     def remove_plot_column(self):
         if len(self.columns) <= 1:
             return
 
         col_to_remove = self.columns.pop()
+        removed = [col_to_remove.widget(i) for i in range(col_to_remove.count())]
+        removed = [w for w in removed if isinstance(w, PlotCell)]
 
-        widgets_to_remove = [col_to_remove.widget(i) for i in range(col_to_remove.count())]
-        self.plot_cells = [c for c in self.plot_cells if c.container not in widgets_to_remove]
-
+        self.plot_cells = [c for c in self.plot_cells if c not in removed]
+        self._dispose_cells(removed)
         col_to_remove.deleteLater()
 
-    def handle_plot_selection(self, old_controller, new_plot_name):
-        if old_controller.plot_name == new_plot_name:
-            return
+    def _on_cell_config_changed(self, cell: PlotCell):
+        """A cell changed what it shows; re-check its place in the time group."""
+        self._register_with_sync_group(cell)
 
-        current_size = old_controller.local_slider.value()
-
-        plot = PlotsSpec.get(new_plot_name)
-        is_freq_analysis = plot.get('is_frequency_analysis', False)
-        is_inst = plot.get('is_instantaneous', False)
-        if is_freq_analysis:
-            controller_class = FrequencyPlotController
-        elif is_inst:
-            controller_class = InstantaneousPlotController
+    def _register_with_sync_group(self, cell: PlotCell):
+        if cell.follows_time_axis:
+            self.sync_group.register(cell.view_box)
         else:
-            controller_class = PlotController
+            self.sync_group.unregister(cell.view_box)
 
-        new_controller = controller_class(
-            plot_name=new_plot_name,
-            all_specs=PlotsSpec,
-            click_callback=self.on_mouse_clicked,
-            change_plot_callback=self.handle_plot_selection,
-            initial_size=current_size
-        )
-        if hasattr(self, 'active_tool_mode'):
-            new_controller.set_tool_mode(self.active_tool_mode)
-
-        splitter = old_controller.container.parentWidget()
-        if isinstance(splitter, QtWidgets.QSplitter):
-            index = splitter.indexOf(old_controller.container)
-            splitter.replaceWidget(index, new_controller.container)
-        else:
-            parent_layout = old_controller.container.parentWidget().layout()
-            if parent_layout:
-                parent_layout.replaceWidget(old_controller.container, new_controller.container)
-
-        new_controller.container.show()
-        self.plot_cells[self.plot_cells.index(old_controller)] = new_controller
-        old_controller.container.deleteLater()
-        old_controller.deleteLater()
-
-        if new_plot_name in self.menu_toggle_actions['plots']:
-            self.menu_toggle_actions['plots'][new_plot_name].setChecked(True)
-
-        new_controller.update_target_bands(self.audioFeatureExtractor.target_config)
-        self.sync_all_x_axes()
-        self.update_plots()
-        new_controller.set_symbol_size(current_size)
-
-    def sync_all_x_axes(self):
-        master_widget = None
-
-        for cell in self.plot_cells:
-            # Check the cell's spec to see if it contains a frequency curve
-            is_freq_plot = any(
-                curve.get('is_frequency_analysis', False)
-                for curve in cell.spec.get('curves', {}).values()
-            )
-
-            is_inst_plot = cell.spec.get('is_instantaneous', False)
-
-            if is_freq_plot or is_inst_plot:
-                # Explicitly clear any existing link so it doesn't accidentally
-                # pan/zoom when you scrub the time plots
-                cell.widget.setXLink(None)
-            else:
-                # First time-based plot becomes the master anchor
-                if master_widget is None:
-                    master_widget = cell.widget
-                    master_widget.setXLink(None)  # Clear stale links on the master
-                else:
-                    # Link all subsequent time plots to the master
-                    cell.widget.setXLink(master_widget)
+    def _time_cells(self):
+        return [cell for cell in self.plot_cells if cell.follows_time_axis]
 
     # --- Theme Switching Methods ---
     def set_theme_os_default(self):
@@ -782,29 +718,13 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.load_audio_to_memory(active_audio_path)
 
             for annotation in annotations:
-                plot_widget = None
-                target_plot_key = None
-
-                for controller in self.plot_cells:
-                    plot_title = controller.PlotsSpec.get('title', '')
-                    if annotation['plot'] == controller.plot_name or annotation['plot'] == plot_title:
-                        plot_widget = controller.widget
-                        target_plot_key = controller.plot_name
-                        break
-
-                if plot_widget:
-                    annotation['plot'] = target_plot_key
-                    marker = AnnotationMarker(
-                        annotation['time'],
-                        annotation['y'],
-                        annotation['text'],
-                        target_plot_key,
-                        plot_widget,
-                        self
-                    )
-                    plot_widget.addItem(marker)
-                    annotation['marker'] = marker
-                    self.annotations.append(annotation)
+                cell = self._cell_for_annotation(annotation)
+                if cell is None:
+                    logging.warning("No plot shows %r; skipping its annotation",
+                                    annotation.get('series') or annotation.get('plot'))
+                    continue
+                self._attach_annotation(cell, annotation['time'], annotation['y'],
+                                        annotation['text'])
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Load Error",
@@ -863,7 +783,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.worker.start()
 
     def on_analysis_finished(self, results):
-        self.analysedAudioFeatures = results
+        self.hub.set_features(results)
         self.current_playback_time = 0
         self.update_plots()
         self.handle_reset_zoom()
@@ -901,6 +821,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.audio_queue.get()
 
         self.recording_start_offset = self.current_playback_time
+        self.hub.begin_recording()
 
         self.rt_worker = RealTimeAnalysisWorker(self.audioFeatureExtractor, self.audio_queue, self.sampling_rate)
         self.rt_worker.new_data_point.connect(self.append_live_data)
@@ -920,7 +841,8 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.audio_source.start(self.audio_buffer)
         self.poll_timer.start()
-        # self.timer.start()
+        # Drives the playhead and the sliding window while recording.
+        self.timer.start()
 
     def record_stop(self):
         self.record_start_stop_btn.setIcon(self.record_icon)
@@ -931,19 +853,22 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.audio_source.stop()
         self.audio_buffer.close()
-        # self.timer.stop()
+        self.timer.stop()
 
         if hasattr(self, 'rt_worker'):
             self.rt_worker.stop()
             self.rt_worker.wait()
 
+        self.hub.end_recording()
+
+        # Clear the recording flag before moving the playhead, or update_playhead
+        # reads the position straight back off the (now closed) audio buffer.
+        self.is_recording = False
         self.current_playback_time = 0
         self.update_playhead()
 
         # Audio is now kept entirely in memory buffer, trigger final batch analysis
         self.select_analysis_from_memory()
-
-        self.is_recording = False
 
     def read_audio_chunk(self):
         current_pos = self.audio_buffer.pos()
@@ -955,20 +880,14 @@ class AnalysisWidget(QtWidgets.QWidget):
                 self.audio_queue.put(new_bytes)
 
     def append_live_data(self, latest_point: FeatureSnapshot):
-        if hasattr(latest_point, 'time'):
-            latest_point.time += self.recording_start_offset
-        elif hasattr(latest_point, 'timestamp'):
-            latest_point.timestamp += self.recording_start_offset
+        """Hand one live analysis frame to the hub.
 
-        for controller in self.plot_cells:
-            for curve_name in controller.curves.keys():
-                controller.append_curve_point(
-                    curve_name=curve_name,
-                    snapshot=latest_point,
-                    audio_features_ctx=self.analysedAudioFeatures
-                )
-
-        self.update_playhead()
+        Plots are not touched here: the frame timer picks the new data up. The
+        old code appended the same snapshot once per visible curve, so a feature
+        shown in two plots was recorded twice.
+        """
+        latest_point.time += self.recording_start_offset or 0.0
+        self.hub.append_snapshot(latest_point)
 
     def handle_playback(self):
         if self.is_recording: return
@@ -984,21 +903,13 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.record_stop()
 
         self.current_audio_file = None
-        self.analysedAudioFeatures = AudioFeatures()
         self.audio_data.clear()
-        self.current_playback_time = 0
+        self.hub.clear()
 
         if hasattr(self, 'recording_start_offset'):
             self.recording_start_offset = 0
 
         self.clear_annotations()
-
-        if hasattr(self, 'plot_cells'):
-            for controller in self.plot_cells:
-                for curve_name in controller.curves.keys():
-                    controller.set_curve_data(curve_name, [], [])
-                controller.set_playhead_value(0)
-
         self.update_plots()
         self.handle_reset_zoom()
         logging.debug("All data cleared.")
@@ -1007,7 +918,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.is_playing = False
         self.playback_btn.setIcon(self.play_icon)
 
-        if hasattr(self, 'play_worker'):
+        if self.play_worker is not None:
             self.play_worker.stop_backend()
 
         self.timer.stop()
@@ -1039,74 +950,65 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.playback_btn.setIcon(self.pause_icon)
         self.timer.start()
 
-    def update_playhead(self):
+    def _transport_mode(self):
+        if self.is_recording:
+            return MODE_RECORDING
+        return MODE_PLAYING if self.is_playing else MODE_IDLE
+
+    def _advance_transport(self):
+        """Move the clock forward from whichever source is currently driving."""
         if self.is_playing:
-            self.current_playback_time = time.time() - self.playback_start_time if self.is_playing else 0
-            if self.current_playback_time > self.analysedAudioFeatures.length_seconds:
+            self.current_playback_time = time.time() - self.playback_start_time
+            if self.current_playback_time > self.hub.length_seconds:
                 self.stop_playback()
                 self.current_playback_time = 0
 
         elif self.is_recording:
             self.current_playback_time = self.audio_buffer.pos() / (2 * self.sampling_rate)
             total_duration = self.audio_data.size() / (2 * self.sampling_rate)
-            self.analysedAudioFeatures.length_seconds = max(self.analysedAudioFeatures.length_seconds, total_duration)
+            features = self.hub.features
+            features.length_seconds = max(features.length_seconds, total_duration)
 
+    def _on_frame_tick(self):
+        """The only per-frame work while playing or recording.
+
+        Curve data is only re-pushed when it has actually changed, so playback
+        costs one playhead move per plot instead of a full redraw of every
+        series in the grid.
+        """
+        self._advance_transport()
+
+        if self.hub.take_dirty():
+            for cell in self.plot_cells:
+                cell.on_data_changed()
+
+        current_time = self.current_playback_time
+        for cell in self.plot_cells:
+            cell.on_time_changed(current_time)
+
+        self.sync_group.follow(current_time, self._transport_mode(), self.hub.length_seconds)
+        self._update_time_edit()
+
+    def _update_time_edit(self):
         if hasattr(self, 'time_edit') and not self.time_edit.hasFocus():
             self.time_edit.setText(self.format_time(self.current_playback_time))
 
-        for controller in self.plot_cells:
-            controller.set_playhead_value(self.current_playback_time)
-
-        # Find the first standard time-based plot to act as the viewport driver
-        time_plot_cell = next(
-            (c for c in self.plot_cells
-             if not c.spec.get('is_instantaneous') and not any(
-                cv.get('is_frequency_analysis') for cv in c.spec.get('curves', {}).values())),
-            None
-        )
-
-        if time_plot_cell:
-            if self.is_recording:
-                view_window_seconds = 10.0
-
-                # Add a 1-second visual buffer so the playhead isn't clipped by the right border
-                future_padding = 1.0
-
-                min_x = max(0.0, self.current_playback_time - view_window_seconds + future_padding)
-                max_x = max(view_window_seconds, self.current_playback_time + future_padding)
-
-                time_plot_cell.widget.setXRange(min_x, max_x, padding=0)
-
-            elif self.is_playing:
-                view_box = time_plot_cell.widget.getViewBox()
-                x_range = view_box.viewRange()[0]
-                min_x, max_x = x_range[0], x_range[1]
-                view_width = max_x - min_x
-
-                total_length = getattr(self.analysedAudioFeatures, 'length_seconds', 0.0) or 0.0
-
-                if view_width < (total_length - 0.01):
-                    future_buffer = 0.50 * view_width
-                    if self.current_playback_time > (max_x - future_buffer):
-                        new_max_x = self.current_playback_time + future_buffer
-                        new_min_x = new_max_x - view_width
-                        time_plot_cell.widget.setXRange(new_min_x, new_max_x, padding=0)
-                    elif self.current_playback_time < min_x:
-                        new_min_x = max(0.0, self.current_playback_time - future_buffer)
-                        new_max_x = new_min_x + view_width
-                        time_plot_cell.widget.setXRange(new_min_x, new_max_x, padding=0)
+    def update_playhead(self):
+        """Move the playhead outside the frame loop, e.g. after a seek."""
+        self._advance_transport()
+        current_time = self.current_playback_time
+        for cell in self.plot_cells:
+            cell.on_time_changed(current_time)
+        self.sync_group.follow(current_time, self._transport_mode(), self.hub.length_seconds)
+        self._update_time_edit()
 
     #################### Misc plot stuff ####################
 
     def handle_symbol_size_change(self, value):
-        if not hasattr(self, 'plot_cells'): return
-
-        for controller in self.plot_cells:
-            if hasattr(controller, 'local_slider'):
-                controller.local_slider.blockSignals(True)
-                controller.local_slider.setValue(value)
-                controller.local_slider.blockSignals(False)
-            controller.set_symbol_size(value)
+        if not getattr(self, 'plot_cells', None):
+            return
+        for cell in self.plot_cells:
+            cell.set_point_size(value)
 
     def handle_reset_zoom(self):
         if hasattr(self, 'btn_zoom_x'):
@@ -1115,15 +1017,15 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.btn_measure.setChecked(False)
             self.active_tool_mode = None
 
-        if not hasattr(self, 'plot_cells'): return
-        for controller in self.plot_cells:
-            controller.set_tool_mode(None)
-            controller.reset_zoom()
+        if not getattr(self, 'plot_cells', None):
+            return
 
-    def handle_toggle_plot(self, plot_key: str, checked: bool):
-        for controller in self.plot_cells:
-            if controller.plot_name == plot_key:
-                controller.set_plot_visible(checked)
+        for cell in self.plot_cells:
+            cell.set_tool_mode(None)
+            cell.reset_zoom()
+
+        # Time plots share one X range, so they are reset together.
+        self.sync_group.reset(self.hub.length_seconds)
 
     def handle_reset_plots(self):
         col_count = len(self.columns)
@@ -1136,64 +1038,11 @@ class AnalysisWidget(QtWidgets.QWidget):
                     total_height = col.height()
                     col.setSizes([int(total_height / row_count)] * row_count)
 
-        for plot_key, plot_spec in PlotsSpec.items():
-            is_visible = not plot_spec.get('hidden', False)
-            self.handle_toggle_plot(plot_key, is_visible)
-            if plot_key in self.menu_toggle_actions['plots']:
-                self.menu_toggle_actions['plots'][plot_key].setChecked(is_visible)
-
-        if hasattr(self, 'plot_cells'):
-            for controller in self.plot_cells:
-                for cb in getattr(controller, 'toggles', []):
-                    cb.setChecked(True)
-
     def update_plots(self):
-        for controller in self.plot_cells:
-
-            # --- Handle Instantaneous Plots ---
-            if controller.spec.get('is_instantaneous'):
-                for curve_name in controller.curves.keys():
-                    controller.set_curve_data(
-                        curve_name=curve_name,
-                        x=[], y=[],  # The controller pulls x/y directly from audio_features_ctx
-                        data_container=None,
-                        audio_features_ctx=self.analysedAudioFeatures
-                    )
-                continue
-
-            # --- Handle Standard Time-Series & Frequency Plots ---
-            for curve_name, curve_config in controller.curves.items():
-                result_key = curve_config.get('analysisResult')
-
-                # Skip if there's no analysis result mapped to this curve
-                if not result_key:
-                    continue
-
-                if not hasattr(self.analysedAudioFeatures, result_key):
-                    logging.error(f"Unknown curve: {result_key}")
-                    continue
-
-                data = getattr(self.analysedAudioFeatures, result_key)
-                if not hasattr(data, 'x') or not hasattr(data, 'y'):
-                    logging.error(f"Missing x or y data for {curve_name}")
-                    continue
-
-                is_spectrogram = curve_config.get('is_spectrogram', False)
-                is_frequency_analysis = controller.spec.get('is_frequency_analysis', False)
-                is_instantaneous = controller.spec.get('is_instantaneous', False)
-
-                if not is_spectrogram and not is_frequency_analysis and not is_instantaneous and len(data.x) != len(data.y):
-                    logging.error(f"Mismatch in dimensions for curve {curve_name}")
-                    continue
-
-                controller.set_curve_data(
-                    curve_name=curve_name,
-                    x=data.get_x_without_NaN(),
-                    y=data.get_y_without_NaN(),
-                    data_container=data,
-                    audio_features_ctx=self.analysedAudioFeatures
-                )
-
+        """Re-read every plot from the hub. Called on data changes, not per frame."""
+        for cell in self.plot_cells:
+            cell.on_data_changed()
+        self.hub.take_dirty()
         self.update_playhead()
 
     #################### Targets ####################
@@ -1243,10 +1092,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         if hasattr(self, 'target_name_label'):
             self.target_name_label.setText(f"|  Target: {new_config.config_name}")
 
-        for controller in self.plot_cells:
-            for band in controller.target_bands.values():
-                band['enabled'] = True
-            controller.update_target_bands(new_config)
+        for cell in self.plot_cells:
+            cell.update_targets(new_config)
 
         self.update_plots()
 
@@ -1275,55 +1122,72 @@ class AnalysisWidget(QtWidgets.QWidget):
         else:
             super().keyPressEvent(event)
 
-    def on_mouse_clicked(self, event, plot_widget, plot_name):
-        if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            pos = event.scenePos()
-            mouse_point = plot_widget.plotItem.vb.mapSceneToView(pos)
+    def _on_seek_requested(self, target_time: float):
+        """A click on a time plot. Non-time plots never emit this."""
+        self.current_playback_time = target_time
+        if self.is_playing:
+            self.seek_and_play()
+        else:
+            self.update_playhead()
 
-            target_time = mouse_point.x()
-            if target_time < 0: target_time = 0
-            target_y = mouse_point.y()
+    def _on_annotation_requested(self, cell, target_time, target_y):
+        self.add_annotation(cell, target_time, target_y)
 
-            HIT_RADIUS_PIXELS = 15
-            clicked_marker = None
-
-            for ann in self.annotations:
-                if ann['plot'] == plot_name:
-                    marker = ann['marker']
-                    marker_pt = QtCore.QPointF(marker.x_val, marker.y_val)
-                    scene_pt = plot_widget.plotItem.vb.mapViewToScene(marker_pt)
-
-                    if scene_pt:
-                        dist = ((scene_pt.x() - pos.x()) ** 2 + (scene_pt.y() - pos.y()) ** 2) ** 0.5
-                        if dist <= HIT_RADIUS_PIXELS:
-                            clicked_marker = marker
-                            break
-
-            if clicked_marker:
-                self.add_annotation(
-                    plot_name, plot_widget,
-                    clicked_marker.x_val, clicked_marker.y_val,
-                    existing_marker=clicked_marker
-                )
-            else:
-                if event.double():
-                    self.add_annotation(plot_name, plot_widget, target_time, target_y)
-                else:
-                    self.current_playback_time = target_time
-                    if self.is_playing:
-                        self.seek_and_play()
-                    self.update_playhead()
+    def _on_annotation_clicked(self, cell, marker):
+        self.add_annotation(cell, marker.x_val, marker.y_val, existing_marker=marker)
 
     #################### Annotations  ####################
 
-    def add_annotation(self, plot_name, plot, target_time, target_y, existing_marker=None):
+    def _cell_for_annotation(self, annotation):
+        """Find the plot an annotation belongs on.
+
+        Plots no longer have fixed names, so match on the data series first and
+        only then fall back to the stored plot name, which is what annotation
+        files written by earlier versions carry.
+        """
+        series_key = annotation.get('series')
+        if series_key:
+            for cell in self._time_cells():
+                if series_key in cell.config.y:
+                    return cell
+
+        name = annotation.get('plot')
+        if not name:
+            return None
+
+        preset = Registry.PRESETS_BY_NAME.get(name)
+        for cell in self._time_cells():
+            if cell.config.title() == name:
+                return cell
+            if preset and list(preset.y) == list(cell.config.y):
+                return cell
+        return None
+
+    def _attach_annotation(self, cell, target_time, target_y, text):
+        series_key = cell.config.y[0] if cell.config.y else None
+        marker = AnnotationMarker(target_time, target_y, text, cell.config.title(),
+                                  cell.plot_widget, self, series_key=series_key)
+        cell.add_annotation_marker(marker)
+        record = {
+            "time": target_time,
+            "y": target_y,
+            "text": text,
+            "plot": cell.config.title(),
+            "series": series_key,
+            "marker": marker,
+            "cell": cell,
+        }
+        self.annotations.append(record)
+        return record
+
+    def add_annotation(self, cell, target_time, target_y, existing_marker=None):
         if self.is_playing:
             self.stop_playback()
             self.paused_time = time.time() - self.playback_start_time
 
         dialog = QtWidgets.QDialog(self)
         title = "Edit Annotation" if existing_marker else "New Annotation"
-        dialog.setWindowTitle(f"{title} - {plot_name} @ {target_time:.2f}s")
+        dialog.setWindowTitle(f"{title} - {cell.config.title()} @ {target_time:.2f}s")
         dialog.setMinimumWidth(400)
 
         layout = QtWidgets.QVBoxLayout(dialog)
@@ -1343,7 +1207,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             btn_layout.addWidget(delete_btn)
 
             def on_delete():
-                plot.removeItem(existing_marker)
+                cell.remove_annotation_marker(existing_marker)
                 self.annotations = [a for a in self.annotations if a.get('marker') != existing_marker]
                 dialog.accept()
 
@@ -1363,15 +1227,7 @@ class AnalysisWidget(QtWidgets.QWidget):
                             ann['text'] = new_text
                             break
                 else:
-                    marker = AnnotationMarker(target_time, target_y, new_text, plot_name, plot, self)
-                    plot.addItem(marker)
-                    self.annotations.append({
-                        "time": target_time,
-                        "y": target_y,
-                        "text": new_text,
-                        "plot": plot_name,
-                        "marker": marker
-                    })
+                    self._attach_annotation(cell, target_time, target_y, new_text)
             dialog.accept()
 
         save_btn.clicked.connect(on_save)
@@ -1380,14 +1236,9 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def clear_annotations(self):
         for ann in self.annotations:
-            marker = ann.get('marker')
-            plot_name = ann.get('plot')
-
-            if marker:
-                for controller in self.plot_cells:
-                    if controller.plot_name == plot_name:
-                        controller.widget.removeItem(marker)
-                        break
+            marker, cell = ann.get('marker'), ann.get('cell')
+            if marker is not None and cell is not None:
+                cell.remove_annotation_marker(marker)
         self.annotations.clear()
 
     def save_annotations(self):
@@ -1428,107 +1279,60 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     #################### Layout Management ####################
 
-    def get_current_layout_data(self):
-        layout_data = {
-            "global_size": self.size_slider.value() if hasattr(self, 'size_slider') else defaultSize,
-            "main_splitter_sizes": self.plot_splitter.sizes(),
-            "columns": []
-        }
+    def get_current_layout(self) -> Layout:
+        layout = Layout(
+            global_size=self._point_size(),
+            main_splitter_sizes=self.plot_splitter.sizes(),
+        )
 
         for col in self.columns:
-            col_data = {
-                "plots": [],
-                "sizes": col.sizes()
-            }
-            for i in range(col.count()):
-                widget = col.widget(i)
-                for controller in self.plot_cells:
-                    if controller.container == widget:
-                        toggles_state = {}
-                        for cb in getattr(controller, 'toggles', []):
-                            toggles_state[cb.text()] = cb.isChecked()
+            configs = [col.widget(i).config for i in range(col.count())
+                       if isinstance(col.widget(i), PlotCell)]
+            layout.columns.append(LayoutColumn(configs=configs, sizes=col.sizes()))
 
-                        local_size = controller.local_slider.value() if hasattr(controller,
-                                                                                'local_slider') else defaultSize
+        return layout
 
-                        col_data["plots"].append({
-                            "name": controller.plot_name,
-                            "local_size": local_size,
-                            "toggles": toggles_state
-                        })
-                        break
-
-            layout_data["columns"].append(col_data)
-        return layout_data
+    def get_current_layout_data(self):
+        return LayoutSerializer.dump(self.get_current_layout())
 
     def apply_layout_data(self, layout_data):
-        if "columns" not in layout_data:
-            raise ValueError("Invalid layout configuration format.")
+        layout = LayoutSerializer.load(layout_data, self._point_size())
+        if layout.is_empty:
+            raise ValueError("Layout contains no plots.")
 
-        if "global_size" in layout_data and hasattr(self, 'size_slider'):
+        if hasattr(self, 'size_slider'):
             self.size_slider.blockSignals(True)
-            self.size_slider.setValue(layout_data["global_size"])
+            self.size_slider.setValue(layout.global_size)
             self.size_slider.blockSignals(False)
+
+        self._dispose_cells(list(self.plot_cells))
+        self.plot_cells.clear()
 
         for col in self.columns:
             col.setParent(None)
             col.deleteLater()
         self.columns.clear()
-        self.plot_cells.clear()
 
-        available_plots = list(PlotsSpec.keys())
-        fallback_plot = available_plots[0] if available_plots else None
-        is_legacy_format = len(layout_data["columns"]) > 0 and isinstance(layout_data["columns"][0], list)
         vertical_sizes_to_apply = []
 
-        for col_data in layout_data["columns"]:
+        for column in layout.columns:
             new_col = self._create_column()
-            plot_items = col_data if is_legacy_format else col_data.get("plots", [])
+            for config in column.configs:
+                cell = self.create_plot_cell(config)
+                self.plot_cells.append(cell)
+                new_col.addWidget(cell)
 
-            for plot_item in plot_items:
-                if isinstance(plot_item, dict):
-                    plot_name = plot_item.get("name", fallback_plot)
-                    local_size = plot_item.get("local_size", self.size_slider.value())
-                    toggles_state = plot_item.get("toggles", {})
-                else:
-                    plot_name = plot_item
-                    local_size = self.size_slider.value()
-                    toggles_state = {}
+            if column.sizes:
+                vertical_sizes_to_apply.append((new_col, column.sizes))
 
-                valid_plot = plot_name if plot_name in available_plots else fallback_plot
-
-                controller = self.create_plot_cell(valid_plot)
-                self.plot_cells.append(controller)
-                new_col.addWidget(controller.container)
-
-                if hasattr(controller, 'local_slider'):
-                    controller.local_slider.blockSignals(True)
-                    controller.local_slider.setValue(local_size)
-                    controller.local_slider.blockSignals(False)
-                if hasattr(controller, 'set_symbol_size'):
-                    controller.set_symbol_size(local_size)
-
-                if toggles_state:
-                    for cb in getattr(controller, 'toggles', []):
-                        if cb.text() in toggles_state:
-                            cb.setChecked(toggles_state[cb.text()])
-
-                controller.update_target_bands(self.audioFeatureExtractor.target_config)
-                if hasattr(controller, 'apply_theme'):
-                    controller.apply_theme()
-
-            if not is_legacy_format and "sizes" in col_data:
-                vertical_sizes_to_apply.append((new_col, col_data["sizes"]))
-
-        self.sync_all_x_axes()
         self.update_plots()
 
         def apply_splitter_sizes():
             for col_widget, sizes in vertical_sizes_to_apply:
                 col_widget.setSizes(sizes)
 
-            if not is_legacy_format and "main_splitter_sizes" in layout_data:
-                self.plot_splitter.setSizes(layout_data["main_splitter_sizes"])
+            if layout.main_splitter_sizes:
+                self.plot_splitter.setSizes(layout.main_splitter_sizes)
             else:
                 self.handle_reset_plots()
 

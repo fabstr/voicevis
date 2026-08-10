@@ -1,4 +1,5 @@
 {
+    "version": 2,
     "global_size": 5,
     "main_splitter_sizes": [
         760,
@@ -11,19 +12,40 @@
         {
             "plots": [
                 {
-                    "name": "Pitch",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "pitch"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "Size",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "size"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "Weight",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "weight_instantaneous"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 }
             ],
             "sizes": [
@@ -35,19 +57,40 @@
         {
             "plots": [
                 {
-                    "name": "Loudness",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "loudness"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "Spectrogram",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": true,
+                    "local_size": 5
                 },
                 {
-                    "name": "Formants",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "F1",
+                        "F2",
+                        "F3"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 }
             ],
             "sizes": [
@@ -59,19 +102,40 @@
         {
             "plots": [
                 {
-                    "name": "F3/Pitch",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "F3_Pitch"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "F2/Pitch",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "F2_Pitch"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "F1/Pitch",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "F1_Pitch"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 }
             ],
             "sizes": [
@@ -83,19 +147,40 @@
         {
             "plots": [
                 {
-                    "name": "H1_H4",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "H1_H4"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "H1_H3",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "H1_H3"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "H1_H2",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "H1_H2"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 }
             ],
             "sizes": [
@@ -107,19 +192,40 @@
         {
             "plots": [
                 {
-                    "name": "H1_A3",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "H1_A3"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "Jitter",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "jitter"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "Shimmer",
-                    "local_size": 5,
-                    "toggles": {}
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "shimmer"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 }
             ],
             "sizes": [

@@ -1,4 +1,5 @@
 {
+    "version": 2,
     "global_size": 5,
     "main_splitter_sizes": [
         1909,
@@ -8,18 +9,28 @@
         {
             "plots": [
                 {
-                    "name": "Loudness",
-                    "local_size": 5,
-                    "toggles": {
-                        "Loudness": true
-                    }
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "loudness"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "Pitch",
-                    "local_size": 5,
-                    "toggles": {
-                        "Pitch": true
-                    }
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "pitch"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 }
             ],
             "sizes": [
@@ -30,18 +41,28 @@
         {
             "plots": [
                 {
-                    "name": "Size",
-                    "local_size": 5,
-                    "toggles": {
-                        "Size": true
-                    }
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "size"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 },
                 {
-                    "name": "Weight",
-                    "local_size": 5,
-                    "toggles": {
-                        "Weight": true
-                    }
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "weight_instantaneous"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 5
                 }
             ],
             "sizes": [

@@ -1,13 +1,23 @@
+import math
+
 import pyqtgraph as pg
 
+MAX_DECIMALS = 3
+
+
 class TimeAxisItem(pg.AxisItem):
-    """Custom AxisItem to format raw seconds into mm:ss.xxx string format."""
+    """Formats raw seconds as mm:ss, with as much precision as the zoom needs."""
 
     def tickStrings(self, values, scale, spacing):
+        decimals = 0
+        if spacing and spacing < 1:
+            decimals = min(MAX_DECIMALS, max(1, int(math.ceil(-math.log10(spacing)))))
+
+        # Two digits for the seconds, plus the point and its decimals.
+        width = 2 + (decimals + 1 if decimals else 0)
+
         strings = []
-        for v in values:
-            val = max(0.0, float(v))
-            minutes = int(val // 60)
-            seconds = val % 60
-            strings.append(f"{minutes:02d}:{seconds:06.2f}")
+        for value in values:
+            seconds = max(0.0, float(value))
+            strings.append(f"{int(seconds // 60):02d}:{seconds % 60:0{width}.{decimals}f}")
         return strings

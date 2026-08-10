@@ -31,7 +31,7 @@ from scipy.stats import gaussian_kde
 
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries
-import PlotsSpec
+import SeriesRegistry as PlotsSpec
 
 SCATTER_POINT_SIZE = 1
 
