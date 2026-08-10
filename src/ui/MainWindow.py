@@ -1,9 +1,9 @@
-import sys
 import logging
+import os
+import sys
 import traceback
 
-from PyQt6 import QtWidgets, QtCore
-import qtawesome as qta
+from PyQt6 import QtCore, QtWidgets
 
 from ui.AnalysisWidget import AnalysisWidget
 
@@ -13,134 +13,100 @@ try:
 except ImportError:
     __version__ = "Dev-Snapshot"
 
-# --- NEW: Subclass to catch the close event properly ---
-class SessionDockWidget(QtWidgets.QDockWidget):
-    closed = QtCore.pyqtSignal(object)
+BASE_TITLE = f"VoiceVis {__version__}"
 
-    def closeEvent(self, event):
-        # Emit our custom signal before proceeding with the standard close
-        self.closed.emit(self)
-        super().closeEvent(event)
+#: Pixels a new window is offset from the one it was opened from.
+CASCADE_OFFSET = 30
+
+
+def report_exception(exc_type, exc_value, exc_traceback):
+    """Route an uncaught exception to a dialog on the main thread."""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+    window = MainWindow.active_window()
+    if window is None:
+        logging.critical("No window available to report the exception in.")
+        return
+
+    # Emitting rather than constructing the dialog here guarantees it is drawn
+    # on the GUI thread even when the exception came from a worker.
+    window.show_error_signal.emit(exc_type, exc_value, exc_traceback)
 
 
 class MainWindow(QtWidgets.QMainWindow):
+    """One analysis session. File > New opens another window."""
+
     show_error_signal = QtCore.pyqtSignal(object, object, object)
+
+    #: Every window currently open. This list is also what keeps them alive --
+    #: a top-level window with no parent is garbage collected once the last
+    #: Python reference to it goes away.
+    _open_windows = []
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"VoiceVis {__version__}")
+        self.setWindowTitle(BASE_TITLE)
         self.resize(800, 900)
 
         self.show_error_signal.connect(self.show_error_dialog)
-        sys.excepthook = self.handle_exception
+        sys.excepthook = report_exception
 
-        # --- DOCK WIDGET SETUP ---
-        self.setDockOptions(
-            QtWidgets.QMainWindow.DockOption.AllowTabbedDocks |
-            QtWidgets.QMainWindow.DockOption.AnimatedDocks
-        )
-        self.setTabPosition(QtCore.Qt.DockWidgetArea.AllDockWidgetAreas,
-                            QtWidgets.QTabWidget.TabPosition.North)
+        self.session = AnalysisWidget()
+        self.setCentralWidget(self.session)
 
-        dummy_central = QtWidgets.QWidget()
-        self.setCentralWidget(dummy_central)
-        dummy_central.hide()
+        self.session.new_session_signal.connect(self.open_new_window)
+        self.session.close_session_signal.connect(self.close)
+        self.session.file_loaded_signal.connect(self._update_title)
 
-        self.dock_widgets = []
+        self._cascade()
+        MainWindow._open_windows.append(self)
 
-        # Start with one default session
-        self.add_new_session()
+    # --- Window management -----------------------------------------------
 
-    def handle_exception(self, exc_type, exc_value, exc_traceback):
-        """Catches global exceptions and routes them to the main thread."""
-        # Let keyboard interrupts exit gracefully
-        if issubclass(exc_type, KeyboardInterrupt):
-            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+    @classmethod
+    def open_new_window(cls) -> "MainWindow":
+        window = cls()
+        window.show()
+        return window
+
+    @classmethod
+    def active_window(cls):
+        """The window an exception should be reported in."""
+        app = QtWidgets.QApplication.instance()
+        active = app.activeWindow() if app else None
+        if isinstance(active, cls):
+            return active
+        return cls._open_windows[-1] if cls._open_windows else None
+
+    def _cascade(self):
+        """Offset from the most recently opened window so the new one is visible."""
+        if not MainWindow._open_windows:
             return
+        previous = MainWindow._open_windows[-1]
+        self.move(previous.pos() + QtCore.QPoint(CASCADE_OFFSET, CASCADE_OFFSET))
 
-        # Log the error
-        logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    def _update_title(self, file_path):
+        name = os.path.basename(file_path) if file_path else ""
+        self.setWindowTitle(f"{name} - {BASE_TITLE}" if name else BASE_TITLE)
 
-        # Emit the signal instead of directly creating a QMessageBox.
-        # This guarantees the dialog is drawn in the main GUI thread safely.
-        self.show_error_signal.emit(exc_type, exc_value, exc_traceback)
+    def closeEvent(self, event):
+        self.session.shutdown()
+
+        if self in MainWindow._open_windows:
+            MainWindow._open_windows.remove(self)
+
+        super().closeEvent(event)
+        self.deleteLater()
+
+    # --- Error reporting --------------------------------------------------
 
     def show_error_dialog(self, exc_type, exc_value, exc_traceback):
         tb_string = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-
-        # Launch our custom dialog instead of standard QMessageBox
-        error_dialog = ExceptionDialog(exc_value, tb_string, self)
-        error_dialog.exec()
-
-    def add_new_session(self):
-        new_session = AnalysisWidget()
-        session_num = len(self.dock_widgets) + 1
-        tab_name = f"Session {session_num}"
-
-        new_session.new_session_signal.connect(self.add_new_session)
-
-        # Create our custom dock widget
-        dock = SessionDockWidget(tab_name, self)
-        dock.setWidget(new_session)
-
-        # --- NEW: Connect the widget's close signal to the dock's close slot ---
-        new_session.close_session_signal.connect(dock.close)
-
-        # Adding the window icon here automatically places it in the Tab
-        dock.setWindowIcon(qta.icon('fa5s.file-audio'))
-
-        # Allow it to be closed, moved, and floated (torn off)
-        dock.setFeatures(
-            QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetClosable |
-            QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetMovable |
-            QtWidgets.QDockWidget.DockWidgetFeature.DockWidgetFloatable
-        )
-
-        # Connect the close signal for cleanup
-        dock.closed.connect(self.close_dock)
-
-        # Docking Logic:
-        # If it's the first dock, drop it into the main area.
-        # Otherwise, stack it behind the most recently added dock (creating a tab).
-        if not self.dock_widgets:
-            self.addDockWidget(QtCore.Qt.DockWidgetArea.TopDockWidgetArea, dock)
-        else:
-            self.tabifyDockWidget(self.dock_widgets[-1], dock)
-
-        self.dock_widgets.append(dock)
-
-        # Bring the new tab to the front
-        dock.raise_()
-
-        # Rename dock when a file is loaded
-        new_session.file_loaded_signal.connect(
-            lambda file_path, d=dock: self.update_dock_name(d, file_path)
-        )
-
-    def update_dock_name(self, dock, file_path):
-        if file_path:
-            import os
-            filename = os.path.basename(file_path)
-            dock.setWindowTitle(filename)
-
-    def close_dock(self, dock):
-        # Extract the LiveMultiPlotWidget from the dock
-        widget = dock.widget()
-        if widget:
-            # Using hasattr() acts as a safety net in case the widget isn't fully initialized
-            if hasattr(widget, 'is_playing') and widget.is_playing:
-                widget.stop_playback()
-            if hasattr(widget, 'is_recording') and widget.is_recording:
-                widget.handle_start_record_stop()
-            widget.deleteLater()
-
-        # Remove from our tracking list and memory
-        if dock in self.dock_widgets:
-            self.dock_widgets.remove(dock)
-        dock.deleteLater()
-
-        if len(self.dock_widgets) == 0:
-            sys.exit(0)
+        ExceptionDialog(exc_value, tb_string, self).exec()
 
 
 class ExceptionDialog(QtWidgets.QDialog):

@@ -12,7 +12,7 @@
 - zoom in plots
 - reset zoom
 - reset plots
-- dockable windows
+- one session per window; File > New opens another window
 
 ## Analysis
 - probably need target defined

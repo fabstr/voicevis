@@ -31,6 +31,9 @@ from ui.plot.PlotDataHub import PlotDataHub
 from ui.plot.TimeAxisSyncGroup import (MODE_IDLE, MODE_PLAYING, MODE_RECORDING,
                                        TimeAxisSyncGroup)
 
+#: How long to wait for a background thread to finish when closing a session.
+WORKER_SHUTDOWN_MS = 2000
+
 class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
     new_session_signal = QtCore.pyqtSignal()
@@ -141,11 +144,35 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.help_window = None
         self.sample_text_window = None
 
-        app = QtWidgets.QApplication.instance()
-        if app:
-            app.aboutToQuit.connect(self.save_state_on_exit)
-
         self.restore_previous_state()
+
+    #################### Lifecycle ####################
+
+    def shutdown(self):
+        """Release audio devices and threads before the window closes.
+
+        Each session saves its own layout here rather than on ``aboutToQuit``.
+        With one session per window, a connection to the application outlives
+        the widget it belongs to, and firing it after the window has gone would
+        reach a deleted C++ object.
+        """
+        if self.is_recording:
+            self._teardown_recording()
+        if self.is_playing:
+            self.stop_playback()
+
+        self.timer.stop()
+        self.poll_timer.stop()
+
+        for worker in (self.play_worker, self.rt_worker, self.worker):
+            if worker is not None and worker.isRunning():
+                worker.wait(WORKER_SHUTDOWN_MS)
+
+        for window in (self.help_window, self.sample_text_window):
+            if window is not None:
+                window.close()
+
+        self.save_state_on_exit()
 
     #################### Shared state ####################
 
@@ -845,6 +872,20 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.timer.start()
 
     def record_stop(self):
+        self._teardown_recording()
+
+        self.current_playback_time = 0
+        self.update_playhead()
+
+        # Audio is now kept entirely in memory buffer, trigger final batch analysis
+        self.select_analysis_from_memory()
+
+    def _teardown_recording(self):
+        """Stop capture and live analysis, without starting a re-analysis.
+
+        Separate from ``record_stop`` so that closing the window can release the
+        microphone without kicking off a batch analysis nobody will see.
+        """
         self.record_start_stop_btn.setIcon(self.record_icon)
         self.record_start_stop_btn.setToolTip("Record")
 
@@ -855,20 +896,16 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.audio_buffer.close()
         self.timer.stop()
 
-        if hasattr(self, 'rt_worker'):
+        if self.rt_worker is not None:
             self.rt_worker.stop()
             self.rt_worker.wait()
 
         self.hub.end_recording()
 
-        # Clear the recording flag before moving the playhead, or update_playhead
-        # reads the position straight back off the (now closed) audio buffer.
+        # Clear the recording flag before anything moves the playhead, or
+        # update_playhead reads the position straight back off the (now closed)
+        # audio buffer.
         self.is_recording = False
-        self.current_playback_time = 0
-        self.update_playhead()
-
-        # Audio is now kept entirely in memory buffer, trigger final batch analysis
-        self.select_analysis_from_memory()
 
     def read_audio_chunk(self):
         current_pos = self.audio_buffer.pos()
