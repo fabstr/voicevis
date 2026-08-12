@@ -192,6 +192,35 @@ Keeping the transform explicit confines log-awareness to three named places:
 old code it was scattered across `if spec.get('log_x')` branches in the bounds
 setup, the reset and the update path.
 
+### Colouring a spectrum slice
+
+Both the outline and the area under it take the `magnitude` series colour, so
+recolouring that series changes the whole curve rather than just its edge.
+
+The colour dimension works here too, and behaves differently depending on what
+drives it:
+
+| Colour source | Result |
+|---|---|
+| *(none)* | The `magnitude` series colour, fill at `FILL_ALPHA` |
+| `frequency` — the X axis | Viridis **gradient along the curve** |
+| An ordinary series | One viridis tint for the whole curve, changing as the playhead moves |
+
+`frequency` is offered as a colour source only for this kind (see
+`PlotConfig.colour_candidates`). It is the axis that actually varies along the
+curve — a slice is a single instant, so a time series has just one value there.
+
+Two things this needs care with:
+
+**The gradient goes on the fill only, and the outline is dropped.** A `QPen`
+whose brush is a gradient corrupts the curve's bounding rect, which rescales the
+axes and mangles the shape. The filled area defines the curve on its own.
+
+**The colour bar gets explicit Hz ticks.** The gradient is linear along the
+plot's log-frequency axis, so a linear legend would disagree with what is drawn,
+and `ColorBarItem`'s axis renders `inf` in log mode. Instead the bar's levels are
+set in the same log space and labelled at the same frequencies as the X axis.
+
 ---
 
 ## Adding a renderer

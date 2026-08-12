@@ -155,20 +155,18 @@ MAGNITUDE_KEY = "magnitude"
 # Overrides live here rather than on the cell or the plot because a series
 # should look the same in every plot and every window.
 
-#: The shipped colour of each series, by key.
-DEFAULT_COLOURS = OrderedDict((key, spec.colour) for key, spec in SERIES.items())
-
-_colour_overrides = {}
-
 _HEX_COLOUR = re.compile(r"^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 
-
-def _key_of(series) -> str:
-    return series.key if isinstance(series, SeriesSpec) else series
+FALLBACK_COLOUR = "#ffffff"
 
 
 def normalise_colour(colour: str) -> str:
-    """``#rrggbb`` (or ``#rrggbbaa``) in lower case. Raises on anything else."""
+    """``#rrggbb`` (or ``#rrggbbaa``) in lower case. Raises on anything else.
+
+    Everything is normalised on the way in so that colours can be compared as
+    plain strings -- Qt reports them lower case, and the shipped constants are
+    written mixed case.
+    """
     text = str(colour).strip()
     if not text.startswith("#"):
         text = "#" + text
@@ -177,15 +175,26 @@ def normalise_colour(colour: str) -> str:
     return text.lower()
 
 
+#: The shipped colour of each series, by key.
+DEFAULT_COLOURS = OrderedDict(
+    (key, normalise_colour(spec.colour)) for key, spec in SERIES.items())
+
+_colour_overrides = {}
+
+
+def _key_of(series) -> str:
+    return series.key if isinstance(series, SeriesSpec) else series
+
+
 def colour_of(series) -> str:
     """The colour a series is currently drawn in."""
     key = _key_of(series)
-    return _colour_overrides.get(key) or DEFAULT_COLOURS.get(key, "#FFFFFF")
+    return _colour_overrides.get(key) or DEFAULT_COLOURS.get(key, FALLBACK_COLOUR)
 
 
 def default_colour_of(series) -> str:
     """The colour a series ships with, ignoring any override."""
-    return DEFAULT_COLOURS.get(_key_of(series), "#FFFFFF")
+    return DEFAULT_COLOURS.get(_key_of(series), FALLBACK_COLOUR)
 
 
 def set_colour(series, colour: Optional[str]):
@@ -199,7 +208,7 @@ def set_colour(series, colour: Optional[str]):
         return
 
     value = normalise_colour(colour)
-    if value == DEFAULT_COLOURS[key].lower():
+    if value == DEFAULT_COLOURS[key]:
         _colour_overrides.pop(key, None)
     else:
         _colour_overrides[key] = value

@@ -209,7 +209,8 @@ class PlotConfig:
 
         if colour is not None:
             spec = Registry.get(colour)
-            if spec is None or not spec.is_signal or len(x) != 1 or len(y) != 1:
+            usable = spec is not None and (spec.is_signal or colour in _extra_colour_keys(kind))
+            if not usable or len(x) != 1 or len(y) != 1:
                 colour = None
 
         trail = self.trail_time
@@ -299,6 +300,21 @@ class PlotConfig:
 
         logging.warning("Unrecognised layout entry %r; using default plot", entry)
         return cls.from_preset(Registry.DEFAULT_PRESET, default_point_size)
+
+
+def _extra_colour_keys(kind: PlotKind) -> tuple:
+    """Non-signal series a plot kind may colour by.
+
+    A spectrum slice is one instant, so an ordinary time series has a single
+    value there. Frequency is the axis that actually varies along the curve,
+    which makes it the useful thing to map colour onto.
+    """
+    return (Registry.FREQUENCY_KEY,) if kind is PlotKind.SPECTRUM_SLICE else ()
+
+
+def colour_candidates(kind: PlotKind) -> List[str]:
+    """Every series that may drive the colour dimension for ``kind``."""
+    return [s.key for s in Registry.signal_series()] + list(_extra_colour_keys(kind))
 
 
 def _collapse_exclusive(keys: List[str]) -> List[str]:

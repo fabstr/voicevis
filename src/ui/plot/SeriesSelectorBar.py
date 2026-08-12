@@ -13,7 +13,8 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 
 import SeriesRegistry as Registry
 from ui.plot.MultiSeriesSelector import MultiSeriesSelector
-from ui.plot.PlotConfig import MAX_TRAIL_TIME, MIN_TRAIL_TIME, PlotConfig, PlotKind
+from ui.plot.PlotConfig import (MAX_TRAIL_TIME, MIN_TRAIL_TIME, PlotConfig, PlotKind,
+                                colour_candidates)
 
 MIN_POINT_SIZE = 1
 MAX_POINT_SIZE = 5
@@ -41,7 +42,10 @@ class SeriesSelectorBar(QtWidgets.QWidget):
 
         self.x_selector = MultiSeriesSelector(x_items, allow_multi=True, prefix="X: ")
         self.y_selector = MultiSeriesSelector(y_items, allow_multi=True, allow_none=True, prefix="Y: ")
-        self.colour_selector = MultiSeriesSelector(Registry.signal_series(), allow_multi=False,
+        # Frequency is only offered on a spectrum slice; _refresh_widgets greys
+        # it out everywhere else.
+        colour_items = Registry.signal_series() + [Registry.SERIES[Registry.FREQUENCY_KEY]]
+        self.colour_selector = MultiSeriesSelector(colour_items, allow_multi=False,
                                                    allow_none=True, prefix="Colour: ")
 
         self.spectrogram_check = QtWidgets.QCheckBox("Spectrogram")
@@ -179,6 +183,7 @@ class SeriesSelectorBar(QtWidgets.QWidget):
             colour_ok = config.colour_allowed()
             self.colour_selector.setEnabled(colour_ok)
             self.colour_selector.setToolTip("" if colour_ok else COLOUR_DISABLED_HINT)
+            self.colour_selector.set_available(colour_candidates(config.kind))
 
             spectrogram_ok = config.spectrogram_allowed()
             self.spectrogram_check.setEnabled(spectrogram_ok)
