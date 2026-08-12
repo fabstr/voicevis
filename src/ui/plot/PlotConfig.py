@@ -192,14 +192,21 @@ class PlotConfig:
             y = [Registry.MAGNITUDE_KEY]
             spectrogram = False
         elif kind is PlotKind.TIME_SCATTER:
-            # An empty value axis only makes sense as a bare spectrogram.
+            # Magnitude only exists inside a spectrum slice, so it is dropped
+            # on the way out of one -- otherwise changing X away from Frequency
+            # leaves the plot showing a series that has no data.
             if time_on_y:
+                x = _signals_only(x)
                 if not x and not spectrogram:
                     x = [default_value]
-            elif not y and not spectrogram:
-                y = [default_value]
+            else:
+                y = _signals_only(y)
+                if not y and not spectrogram:
+                    y = [default_value]
         else:
             spectrogram = False
+            x = _signals_only(x) or x
+            y = _signals_only(y)
             if not y:
                 y = [k for k in Registry.SERIES if Registry.SERIES[k].is_signal and k not in x][:1]
 
@@ -315,6 +322,11 @@ def _extra_colour_keys(kind: PlotKind) -> tuple:
 def colour_candidates(kind: PlotKind) -> List[str]:
     """Every series that may drive the colour dimension for ``kind``."""
     return [s.key for s in Registry.signal_series()] + list(_extra_colour_keys(kind))
+
+
+def _signals_only(keys: List[str]) -> List[str]:
+    """Drop the synthetic series, which are axes rather than measurements."""
+    return [k for k in keys if Registry.SERIES[k].is_signal]
 
 
 def _collapse_exclusive(keys: List[str]) -> List[str]:

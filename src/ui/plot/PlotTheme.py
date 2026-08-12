@@ -60,6 +60,12 @@ class PlotTheme:
             axis.setTextPen(self.text)
 
         plot_widget.showGrid(x=True, y=True, alpha=GRID_ALPHA)
+        # showGrid only ticks a checkbox, and the grid is applied from the
+        # signal that fires when it *changes*. Re-applying it to an already
+        # gridded plot is therefore a no-op -- which leaves axis items installed
+        # afterwards, when a cell changes plot kind, with no grid at all.
+        plot_item.updateGrid()
+
         if title is not None:
             plot_item.setTitle(title, color=self.text.name(), size=TITLE_SIZE)
 

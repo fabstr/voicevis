@@ -20,6 +20,8 @@ MIN_POINT_SIZE = 1
 MAX_POINT_SIZE = 5
 
 COLOUR_DISABLED_HINT = "Colouring needs exactly one series on each axis"
+Y_LOCKED_HINT = ("A spectrum slice only has magnitude to plot. "
+                 "Change X away from Frequency to plot something else.")
 SPECTROGRAM_DISABLED_HINT = ("The spectrogram is drawn in Hz, so it only lines up "
                              "with a Y axis in Hz (or no Y series at all)")
 
@@ -176,9 +178,10 @@ class SeriesSelectorBar(QtWidgets.QWidget):
             is_slice = config.kind is PlotKind.SPECTRUM_SLICE
             is_trail = config.kind is PlotKind.TRAIL
 
-            # X and Y each allow several series, but only one axis at a time.
-            self.x_selector.setEnabled(not is_slice)
+            # X is never disabled: changing it is the only way out of a plot
+            # kind, so locking it would strand the cell on whatever it shows.
             self.y_selector.setEnabled(not is_slice)
+            self.y_selector.setToolTip(Y_LOCKED_HINT if is_slice else "")
 
             colour_ok = config.colour_allowed()
             self.colour_selector.setEnabled(colour_ok)
