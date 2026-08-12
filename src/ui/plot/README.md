@@ -188,6 +188,19 @@ calls `setData` at all.
 Renderers additionally remember the revision they last drew, so a redundant
 `on_data_changed()` is free.
 
+### Colours
+
+Series colours are user-editable, so renderers must call
+`SeriesRegistry.colour_of(spec)` rather than reading `spec.colour` — see
+[the registry](../../SeriesRegistry.md#the-palette). A colour change is not a
+config change, so it goes through `PlotCell.refresh_colours()`, which rebuilds
+the renderer's items and leaves the configuration and the zoom alone. The
+palette is application-wide, so `MainWindow` fans the change out to every open
+window.
+
+A series used as a plot's *colour dimension* is unaffected: that always maps
+through viridis.
+
 ### Live recording
 
 `append_snapshot` is the only place in the application that appends a live
@@ -377,6 +390,7 @@ memory, and written back in the current schema.
 | `ScatterItem.py` | A scatter that tolerates `PlotItem`'s curve-wide settings |
 | `PlotTheme.py` | Palette-derived colours; public pyqtgraph API only |
 | `ColourMapping.py` | Normalised viridis and the colour bar |
+| `../SeriesColourDialog.py` | Lets the user recolour series (View > Series colours...) |
 | `TimeAxisItem.py` | mm:ss ticks, with precision following the zoom |
 | `FrequencyAxisItem.py` | A curated log-frequency tick list |
 | `LayoutSerializer.py` | Layout schema and migration |

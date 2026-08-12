@@ -69,8 +69,18 @@ def solid_brushes(colour, alpha: np.ndarray):
 
 
 def make_colour_bar(plot_item, label: str = "") -> pg.ColorBarItem:
-    """Attach a viridis colour bar to the right of ``plot_item``."""
+    """Attach a viridis colour bar to the right of ``plot_item``.
+
+    The label goes on the axis rather than through ``ColorBarItem(label=...)``:
+    the constructor draws its own, so setting both leaves the bar labelled
+    twice as soon as anything relabels it.
+    """
     bar = pg.ColorBarItem(values=(0.0, 1.0), colorMap=viridis(), width=15,
-                          interactive=False, label=label)
+                          interactive=False)
     plot_item.layout.addItem(bar, 2, 4)
+    set_colour_bar_label(bar, label)
     return bar
+
+
+def set_colour_bar_label(bar: pg.ColorBarItem, label: str):
+    bar.getAxis('right').setLabel(label)

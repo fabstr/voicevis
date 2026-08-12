@@ -19,6 +19,7 @@ from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, Targe
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
+from ui.SeriesColourDialog import SeriesColourDialog
 from ui.TargetConfigDialog import TargetConfigDialog
 from workers.AnalysisWorker import AnalysisWorker
 from workers.PlaybackWorker import PlaybackWorker
@@ -38,6 +39,8 @@ class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
     new_session_signal = QtCore.pyqtSignal()
     close_session_signal = QtCore.pyqtSignal()
+    #: The series palette is application-wide, so every window has to redraw.
+    series_colours_changed = QtCore.pyqtSignal()
 
     #################### Init ####################
 
@@ -250,6 +253,8 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         reset_plots_action = view_menu.addAction("Reset plot spacing")
         reset_plots_action.triggered.connect(self.handle_reset_plots)
+
+        view_menu.addAction("Series colours...", self.open_series_colour_dialog)
 
         view_menu.addSeparator()
 
@@ -1065,6 +1070,16 @@ class AnalysisWidget(QtWidgets.QWidget):
         # Time plots share one X range, so they are reset together.
         self.sync_group.reset(self.hub.length_seconds)
 
+    def open_series_colour_dialog(self):
+        dialog = SeriesColourDialog(parent=self)
+        # Live preview: repaint on every pick, and again if the user cancels.
+        dialog.colours_changed.connect(self.series_colours_changed.emit)
+        dialog.exec()
+
+    def refresh_series_colours(self):
+        for cell in self.plot_cells:
+            cell.refresh_colours()
+
     def handle_reset_plots(self):
         col_count = len(self.columns)
         if col_count > 0:
@@ -1426,11 +1441,20 @@ class AnalysisWidget(QtWidgets.QWidget):
             os.remove(tmp_path)
             settings.setValue("last_target_config", target_json_str)
 
+            settings.setValue("series_colours", json.dumps(Registry.colour_overrides()))
+
         except Exception as e:
             logging.error(f"Failed to auto-save application state: {e}")
 
     def restore_previous_state(self):
         settings = QtCore.QSettings("AudioAnalyzer", "LiveMultiPlotWidget")
+
+        colours_str = settings.value("series_colours", "")
+        if colours_str:
+            try:
+                Registry.apply_colour_overrides(json.loads(colours_str))
+            except Exception as e:
+                logging.error(f"Failed to restore series colours: {e}")
 
         target_json_str = settings.value("last_target_config", "")
         if target_json_str:

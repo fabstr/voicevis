@@ -187,6 +187,13 @@ class PlotCell(QtWidgets.QFrame):
 
     # --- Appearance and tools -------------------------------------------
 
+    def refresh_colours(self):
+        """Redraw after the series palette changed. Leaves the config and zoom alone."""
+        if self.renderer is not None:
+            self.renderer.rebuild()
+            self.renderer.set_point_size(self.config.point_size)
+            self.renderer.on_time_changed(self.hub.current_time)
+
     def set_point_size(self, size: int):
         self.config.point_size = int(size)
         self.bar.set_point_size(size)

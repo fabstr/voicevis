@@ -11,7 +11,7 @@ import abc
 import numpy as np
 import pyqtgraph as pg
 
-from ui.plot.ColourMapping import make_colour_bar, normalise, rgba
+from ui.plot.ColourMapping import make_colour_bar, normalise, rgba, set_colour_bar_label
 from ui.plot.DirectionalViewBox import plain_measure_formatter
 
 
@@ -49,6 +49,10 @@ class PlotRenderer(abc.ABC):
     def set_config(self, config):
         """Adopt a new config of the same kind, rebuilding items in place."""
         self.config = config
+        self.rebuild()
+
+    def rebuild(self):
+        """Recreate the items, e.g. after the series palette changed."""
         self._clear_items()
         self._build_items()
         self._sync_colour_bar()
@@ -133,7 +137,7 @@ class PlotRenderer(abc.ABC):
         if self.colour_bar is None:
             self.colour_bar = make_colour_bar(self.plot_item, spec.label)
         else:
-            self.colour_bar.getAxis('right').setLabel(spec.label)
+            set_colour_bar_label(self.colour_bar, spec.label)
 
     def _remove_colour_bar(self):
         if self.colour_bar is None:

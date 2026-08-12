@@ -61,6 +61,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.session.new_session_signal.connect(self.open_new_window)
         self.session.close_session_signal.connect(self.close)
         self.session.file_loaded_signal.connect(self._update_title)
+        self.session.series_colours_changed.connect(self.refresh_series_colours)
 
         self._cascade()
         MainWindow._open_windows.append(self)
@@ -72,6 +73,12 @@ class MainWindow(QtWidgets.QMainWindow):
         window = cls()
         window.show()
         return window
+
+    @classmethod
+    def refresh_series_colours(cls):
+        """The palette is application-wide, so repaint every open session."""
+        for window in cls._open_windows:
+            window.session.refresh_series_colours()
 
     @classmethod
     def active_window(cls):

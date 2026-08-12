@@ -48,7 +48,7 @@ classDiagram
 | `key` | The attribute name on `AudioFeatures` and `FeatureSnapshot`, or a synthetic name |
 | `label`, `unit` | Selector entries, axis labels, plot titles |
 | `default_min/max` | The range reset-zoom restores, and the spectrogram crop |
-| `colour` | The series' points, when no colour dimension is set |
+| `colour` | The colour the series *ships* with — see the palette below |
 | `target_key` | Looked up in `TargetConfig.get_bounds()`; `None` means no target band |
 | `kind` | Whether the series is real data or synthetic |
 | `exclusive` | Whether the series can share an axis with others |
@@ -80,6 +80,53 @@ but a few series deliberately share a target: `weight_instantaneous` and
 `F1_Pitch_rel_amplitude` and its siblings are **not** in the registry. They are
 declared on `AudioFeatures` but never assigned by the extractor and are absent
 from `FeatureSnapshot` — work in progress, not plottable data.
+
+---
+
+## The palette
+
+Users can recolour any series, so **nothing should read `spec.colour` directly**
+— call `colour_of(spec)`. `SeriesSpec` is frozen and its `colour` is only the
+shipped default; overrides live in a separate layer.
+
+```mermaid
+flowchart LR
+    Q["colour_of(series)"] --> O{"overridden?"}
+    O -- yes --> U["the user's choice"]
+    O -- no --> D["DEFAULT_COLOURS<br/><i>SeriesSpec.colour</i>"]
+
+    Z["series used as a plot's<br/>colour dimension"] --> V["viridis<br/><i>never the palette</i>"]
+
+    classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    classDef v fill:#3d3050,stroke:#a98ac8,color:#e8eef5
+    class U,D l
+    class V v
+```
+
+| Function | |
+|---|---|
+| `colour_of(series)` | What to draw it in now |
+| `default_colour_of(series)` | What it ships with |
+| `set_colour(key, colour)` | Override; `None` restores the default |
+| `reset_colours()` | Back to the shipped palette |
+| `colour_overrides()` / `apply_colour_overrides()` | Persistence |
+| `colourable_series()` | What to offer in the picker |
+
+Setting a series back to its default *removes* the override rather than storing
+it, so only real changes are saved and a future change to a shipped colour still
+reaches users who never touched it.
+
+**A series used as a plot's colour dimension is always mapped through viridis.**
+The palette says what a series looks like as *itself*; on the Z axis the colour
+encodes a value, not an identity, so a perceptually uniform ramp is the point.
+
+Overrides are application-wide — a series looks the same in every plot and every
+window — which is why they live in this module rather than on a cell. Changing
+one is not a `PlotConfig` change, so `PlotCell.refresh_colours()` rebuilds the
+items without touching the configuration or the zoom.
+
+`mass_analyzer.py` uses the module-level colour constants directly and so always
+renders with the defaults; it has no UI to change them from.
 
 ---
 

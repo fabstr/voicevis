@@ -44,7 +44,7 @@ class SpectrumSliceRenderer(PlotRenderer):
 
         self._add(pg.PlotDataItem(
             [], [],
-            pen=pg.mkPen(color=spec.colour, width=LINE_WIDTH),
+            pen=pg.mkPen(color=Registry.colour_of(spec), width=LINE_WIDTH),
             fillLevel=y_range[0],
             fillBrush=pg.mkBrush(FILL_COLOUR),
         ))

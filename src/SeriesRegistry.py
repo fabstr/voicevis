@@ -11,6 +11,8 @@ only as :data:`PRESETS`, used to seed the default layout and to migrate old
 layout files.
 """
 
+import logging
+import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
@@ -143,6 +145,90 @@ del _spec
 TIME_KEY = "time"
 FREQUENCY_KEY = "frequency"
 MAGNITUDE_KEY = "magnitude"
+
+
+# --- Palette -------------------------------------------------------------
+# ``SeriesSpec.colour`` is the colour a series *ships* with. The user can
+# override any of them, so nothing should read ``spec.colour`` directly --
+# call :func:`colour_of` instead.
+#
+# Overrides live here rather than on the cell or the plot because a series
+# should look the same in every plot and every window.
+
+#: The shipped colour of each series, by key.
+DEFAULT_COLOURS = OrderedDict((key, spec.colour) for key, spec in SERIES.items())
+
+_colour_overrides = {}
+
+_HEX_COLOUR = re.compile(r"^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+
+
+def _key_of(series) -> str:
+    return series.key if isinstance(series, SeriesSpec) else series
+
+
+def normalise_colour(colour: str) -> str:
+    """``#rrggbb`` (or ``#rrggbbaa``) in lower case. Raises on anything else."""
+    text = str(colour).strip()
+    if not text.startswith("#"):
+        text = "#" + text
+    if not _HEX_COLOUR.match(text):
+        raise ValueError(f"Not a hex colour: {colour!r}")
+    return text.lower()
+
+
+def colour_of(series) -> str:
+    """The colour a series is currently drawn in."""
+    key = _key_of(series)
+    return _colour_overrides.get(key) or DEFAULT_COLOURS.get(key, "#FFFFFF")
+
+
+def default_colour_of(series) -> str:
+    """The colour a series ships with, ignoring any override."""
+    return DEFAULT_COLOURS.get(_key_of(series), "#FFFFFF")
+
+
+def set_colour(series, colour: Optional[str]):
+    """Override a series' colour. ``None`` restores its default."""
+    key = _key_of(series)
+    if key not in SERIES:
+        raise KeyError(f"Unknown series: {key!r}")
+
+    if not colour:
+        _colour_overrides.pop(key, None)
+        return
+
+    value = normalise_colour(colour)
+    if value == DEFAULT_COLOURS[key].lower():
+        _colour_overrides.pop(key, None)
+    else:
+        _colour_overrides[key] = value
+
+
+def reset_colours():
+    """Put every series back to its shipped colour."""
+    _colour_overrides.clear()
+
+
+def colour_overrides() -> dict:
+    """Only the colours that differ from the defaults, for persistence."""
+    return dict(_colour_overrides)
+
+
+def apply_colour_overrides(mapping):
+    """Replace all overrides. Unusable entries are skipped, not fatal."""
+    reset_colours()
+    for key, colour in (mapping or {}).items():
+        try:
+            set_colour(key, colour)
+        except (KeyError, ValueError) as exc:
+            logging.warning("Ignoring saved colour for %r: %s", key, exc)
+
+
+def colourable_series():
+    """Series that are actually drawn, and so have a colour worth choosing."""
+    return [s for s in SERIES.values()
+            if s.kind not in (SeriesKind.TIME, SeriesKind.FREQUENCY)]
 
 
 def get(key: str) -> Optional[SeriesSpec]:

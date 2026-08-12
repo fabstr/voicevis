@@ -11,6 +11,8 @@ series run horizontally and time runs up the vertical axis.
 import numpy as np
 import pyqtgraph as pg
 
+import SeriesRegistry as Registry
+
 from ui.plot.DirectionalViewBox import time_measure_formatter, transposed_time_measure_formatter
 from ui.plot.PlotTheme import PlotTheme
 from ui.plot.ScatterItem import ScatterItem
@@ -52,7 +54,7 @@ class TimeScatterRenderer(PlotRenderer):
                 # mismatched lengths. ScatterPlotItem is never subsetted, so per
                 # point brushes belong on one.
                 item = ScatterItem(size=size, pen=edge_pen,
-                                   brush=pg.mkBrush(spec.colour))
+                                   brush=pg.mkBrush(Registry.colour_of(spec)))
                 item.opts['hoverSize'] = size * 1.5
                 self._add(item)
                 continue
@@ -61,7 +63,7 @@ class TimeScatterRenderer(PlotRenderer):
                 [], [],
                 pen=None,
                 symbol='o',
-                symbolBrush=spec.colour,
+                symbolBrush=Registry.colour_of(spec),
                 symbolPen=edge_pen,
                 symbolSize=size,
             ))
@@ -87,7 +89,7 @@ class TimeScatterRenderer(PlotRenderer):
             if colours is None:
                 # No colour data yet -- fall back to the series' own colour
                 # rather than leaving the previous frame's points on screen.
-                item.setData(x=x, y=y, brush=pg.mkBrush(spec.colour), pen=edge_pen)
+                item.setData(x=x, y=y, brush=pg.mkBrush(Registry.colour_of(spec)), pen=edge_pen)
             else:
                 item.setData(x=x, y=y,
                              brush=[pg.mkBrush(*c) for c in colours],

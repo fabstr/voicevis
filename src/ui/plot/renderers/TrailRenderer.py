@@ -9,6 +9,8 @@ needs its own brush.
 import numpy as np
 import pyqtgraph as pg
 
+import SeriesRegistry as Registry
+
 from ui.plot.ColourMapping import brushes, solid_brushes
 from ui.plot.PlotTheme import PlotTheme
 from ui.plot.ScatterItem import ScatterItem
@@ -25,7 +27,7 @@ class TrailRenderer(PlotRenderer):
         for spec in self._pair_specs():
             item = ScatterItem(size=size,
                                pen=PlotTheme.marker_edge_pen(),
-                               brush=pg.mkBrush(spec.colour))
+                               brush=pg.mkBrush(Registry.colour_of(spec)))
             item.opts['hoverSize'] = size * 1.5
             self._add(item)
 
@@ -65,7 +67,7 @@ class TrailRenderer(PlotRenderer):
             colours = self._colour_values(times)
 
             point_brushes = (brushes(colours, alpha) if colours is not None
-                             else solid_brushes(spec.colour, alpha))
+                             else solid_brushes(Registry.colour_of(spec), alpha))
             pens = [pg.mkPen(color=(128, 128, 128, int(a * 0.5)), width=0.5) for a in alpha]
 
             item.setData(x=x_values, y=y_values, brush=point_brushes, pen=pens)
