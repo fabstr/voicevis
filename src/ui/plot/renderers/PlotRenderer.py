@@ -78,8 +78,15 @@ class PlotRenderer(abc.ABC):
 
     # --- Axis / interaction hooks ---------------------------------------
 
-    def bottom_axis(self) -> pg.AxisItem:
-        return pg.AxisItem(orientation='bottom')
+    def axis_items(self) -> dict:
+        """The axis items this plot needs, keyed by side.
+
+        Both sides are always returned so that swapping renderers -- or moving
+        time from one axis to the other -- replaces every axis that was
+        specialised by the previous configuration.
+        """
+        return {'bottom': pg.AxisItem(orientation='bottom'),
+                'left': pg.AxisItem(orientation='left')}
 
     @staticmethod
     def x_transform(values):

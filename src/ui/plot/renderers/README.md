@@ -22,7 +22,7 @@ classDiagram
         +on_time_changed(t)
         +set_point_size(size)
         +apply_theme(theme)
-        +bottom_axis() AxisItem
+        +axis_items() dict
         +x_transform(values)
         +x_inverse(values)
         #_build_items()*
@@ -54,13 +54,13 @@ lifecycle, the revision guard, the colour bar and the viridis sampling.
 
 | | Time scatter | Trail | Spectrum slice |
 |---|---|---|---|
-| X axis | time | a feature | frequency (log) |
-| Y axis | 1–N features | a feature | magnitude |
+| X axis | time, or 1–N features | a feature | frequency (log) |
+| Y axis | 1–N features, or time | a feature | magnitude |
 | `follows_time_axis` | yes | no | no |
 | `shows_playhead` | yes | no | no |
 | `supports_seek` | yes | no | no |
 | `supports_spectrogram` | yes | no | no |
-| Bottom axis | `TimeAxisItem` | plain | `FrequencyAxisItem` |
+| Specialised axis | `TimeAxisItem`, on whichever side time is | none | `FrequencyAxisItem`, bottom |
 | Redrawn per frame | no | yes | yes |
 
 `supports_seek` is why clicking the trail plot no longer jumps the playhead to a
@@ -100,14 +100,47 @@ controllers cached them and went on drawing stale arrays after a re-analysis.
 
 ## `TimeScatterRenderer`
 
-One `pg.PlotDataItem` per Y series, with `pen=None` and a round symbol.
+One item per plotted series — but **which** item depends on whether the plot has
+a colour dimension:
 
-`PlotDataItem` rather than `ScatterPlotItem` on purpose: `clipToView` and
-`autoDownsample` only apply to the former, and these plots routinely hold tens
-of thousands of frames.
+| | Item | Clipped / downsampled |
+|---|---|---|
+| Plain series | `pg.PlotDataItem`, `pen=None`, round symbol | yes |
+| Colour-mapped series | `ScatterItem` | no |
 
-Because `time` is an exclusive series, this renderer is always one X against
-N Y — which is what makes `y=["F1","F2","F3"]` work with no special cases.
+`PlotDataItem` is the default because `clipToView` and `autoDownsample` only
+apply to it, and these plots routinely hold tens of thousands of frames.
+
+A colour dimension cannot use one. `PlotDataItem` subsets its x/y arrays for
+clipping and downsampling but passes `symbolBrush` through whole, so the scatter
+underneath ends up with more brushes than points and raises
+`Number of brushes does not match number of points`. It is intermittent by
+nature: auto-downsampling only kicks in past a few points per pixel, so it
+depends on the recording length and the zoom level. Per-point brushes therefore
+live on a scatter, which is never subsetted.
+
+Note that `PlotItem.addItem` *overwrites* whatever `clipToView` and
+`autoDownsample` were passed to the constructor, using the plot-wide settings.
+They have to be applied after the item is added or they silently do nothing.
+
+Because `time` is an exclusive series it is always alone on its axis, so this
+renderer is always one time axis against N value series — which is what makes
+`y=["F1","F2","F3"]` work with no special cases.
+
+**Orientation.** Time may be on either axis. The renderer reads
+`config.time_on_y` and:
+
+- iterates `config.value_specs()` rather than `y_specs()`, so it does not care
+  which axis the quantities are on;
+- swaps the `setData` arguments — `setData(x=values, y=times)` when transposed;
+- returns the `TimeAxisItem` for `'left'` instead of `'bottom'` from
+  `axis_items()`;
+- reports `Δt` on the vertical axis via `transposed_time_measure_formatter`.
+
+`axis_items()` always returns *both* sides. Moving time from one axis to the
+other has to replace the specialised axis and restore a plain one on the side it
+came from, so returning only the side that changed would leave a stale
+`TimeAxisItem` behind.
 
 When a colour series is set (only possible at one series per axis), point
 brushes come from the normalised viridis mapping. If the colour series has no
@@ -124,9 +157,8 @@ history with each point fading out by age:
 alpha = 255 * (1 - clip((t_now - t_point) / trail_time, 0, 1))
 ```
 
-One `pg.ScatterPlotItem` per pair. The point count is bounded by the trail
-window and every point needs its own brush, so a scatter item is the right
-choice here.
+One `ScatterItem` per pair. The point count is bounded by the trail window and
+every point needs its own brush, so a scatter is the right choice here.
 
 The colour dimension is normalised over the **whole** series rather than the
 visible window, so colours do not shimmer as the window slides.
@@ -166,7 +198,7 @@ setup, the reset and the update path.
 
 1. Subclass `PlotRenderer`; implement `_build_items` and `_refresh`.
 2. Set the capability flags and, if the axis is not linear data space, override
-   `bottom_axis`, `x_transform`/`x_inverse` and `measure_formatter`.
+   `axis_items`, `x_transform`/`x_inverse` and `measure_formatter`.
 3. Add a `PlotKind` in [`../PlotConfig.py`](../PlotConfig.py) and teach
    `PlotConfig.kind` how to derive it from the X selection.
 4. Register it in `PlotCell.RENDERERS`.

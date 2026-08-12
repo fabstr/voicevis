@@ -30,25 +30,34 @@ class TimeAxisSyncGroup(QtCore.QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._members = []
+        #: view box -> which of its axes carries time ('x' or 'y')
+        self._members = {}
         self._range = (0.0, RECORD_WINDOW)
         self._applying = False
 
     # --- Membership ------------------------------------------------------
 
-    def register(self, view_box):
-        if view_box in self._members:
+    def register(self, view_box, axis: str = 'x'):
+        """Join ``view_box`` to the group, syncing the named axis.
+
+        A transposed plot has time running up its Y axis, so the group drives
+        whichever axis actually carries time.
+        """
+        if self._members.get(view_box) == axis:
             return
-        self._members.append(view_box)
-        view_box.sigXRangeChanged.connect(self._on_member_changed)
+        if view_box in self._members:
+            self.unregister(view_box)
+
+        self._members[view_box] = axis
+        self._signal(view_box, axis).connect(self._on_member_changed)
         self._apply_to(view_box)
 
     def unregister(self, view_box):
-        if view_box not in self._members:
+        axis = self._members.pop(view_box, None)
+        if axis is None:
             return
-        self._members.remove(view_box)
         try:
-            view_box.sigXRangeChanged.disconnect(self._on_member_changed)
+            self._signal(view_box, axis).disconnect(self._on_member_changed)
         except TypeError:
             logging.debug("View box was already disconnected from the time sync group")
 
@@ -58,6 +67,10 @@ class TimeAxisSyncGroup(QtCore.QObject):
 
     def __len__(self):
         return len(self._members)
+
+    @staticmethod
+    def _signal(view_box, axis: str):
+        return view_box.sigYRangeChanged if axis == 'y' else view_box.sigXRangeChanged
 
     # --- Range -----------------------------------------------------------
 
@@ -90,7 +103,11 @@ class TimeAxisSyncGroup(QtCore.QObject):
         self.set_range(0.0, length if length > 0 else RECORD_WINDOW)
 
     def _apply_to(self, view_box):
-        view_box.setXRange(self._range[0], self._range[1], padding=0)
+        low, high = self._range
+        if self._members.get(view_box) == 'y':
+            view_box.setYRange(low, high, padding=0)
+        else:
+            view_box.setXRange(low, high, padding=0)
 
     def _on_member_changed(self, view_box, new_range):
         """A user pan or zoom on one member becomes the group's range."""

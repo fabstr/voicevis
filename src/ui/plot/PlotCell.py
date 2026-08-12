@@ -52,6 +52,14 @@ class PlotCell(QtWidgets.QFrame):
         self.plot_widget.setStyleSheet("border: none;")
         self.plot_widget.setDownsampling(mode='peak', auto=True)
 
+        # Drop pyqtgraph's own "Plot Options" menu, keeping the view box one.
+        # It applies Downsample and Clip to View to everything the plot tracks
+        # as a curve, including ScatterPlotItems, which have no such methods --
+        # so opening it and ticking a box raises AttributeError on any trail
+        # plot. Its other entries (log mode, FFT, subtract mean) would also
+        # silently fight the transforms this module applies itself.
+        self.plot_item.setMenuEnabled(False, None)
+
         self.playhead = pg.InfiniteLine(angle=90, movable=False)
         self.plot_widget.addItem(self.playhead)
 
@@ -91,6 +99,11 @@ class PlotCell(QtWidgets.QFrame):
     def follows_time_axis(self) -> bool:
         return self.renderer is not None and self.renderer.follows_time_axis
 
+    @property
+    def time_axis(self) -> str:
+        """Which axis the sync group should drive: 'x', or 'y' when transposed."""
+        return self.config.time_axis or 'x'
+
     # --- Configuration ---------------------------------------------------
 
     def _on_bar_changed(self, config: PlotConfig):
@@ -99,14 +112,17 @@ class PlotCell(QtWidgets.QFrame):
     def apply_config(self, config: PlotConfig, from_bar=False):
         """Adopt a new configuration in place, keeping the widget alive."""
         config = config.normalised()
-        kind_changed = config.kind is not self.config.kind
         previous = self.config
+        kind_changed = config.kind is not previous.kind
+        # Moving time between the axes keeps the kind but swaps which side the
+        # time axis, the playhead and the sync group act on.
+        transposed = config.time_on_y is not previous.time_on_y
         self.config = config
 
         if not from_bar:
             self.bar.set_config(config)
 
-        if kind_changed or self.renderer is None:
+        if kind_changed or transposed or self.renderer is None:
             self._build_renderer()
             self._apply_axes()
         else:
@@ -123,6 +139,9 @@ class PlotCell(QtWidgets.QFrame):
     def _sync_to_config(self):
         """Bring the playhead, layers and labels in line with the config."""
         config = self.config
+        # The playhead marks a moment in time, so it runs across whichever axis
+        # is not the time axis.
+        self.playhead.setAngle(0 if config.time_on_y else 90)
         self.playhead.setVisible(self.renderer.shows_playhead)
         self.spectrogram.set_visible(config.spectrogram and self.renderer.supports_spectrogram)
         self.targets.set_series(config.y_specs(), config.x_specs())
@@ -140,7 +159,7 @@ class PlotCell(QtWidgets.QFrame):
         self.view_box.measure_formatter = self.renderer.measure_formatter
 
     def _apply_axes(self):
-        self.plot_item.setAxisItems({'bottom': self.renderer.bottom_axis()})
+        self.plot_item.setAxisItems(self.renderer.axis_items())
         self._apply_labels()
         self.apply_theme()
 
@@ -163,7 +182,8 @@ class PlotCell(QtWidgets.QFrame):
     def refresh_spectrogram(self, throttle=False):
         if not self.spectrogram.visible:
             return
-        self.spectrogram.refresh(self.hub, self.config.effective_y_range(), throttle=throttle)
+        self.spectrogram.refresh(self.hub, self.config.value_range(),
+                                 transposed=self.config.time_on_y, throttle=throttle)
 
     # --- Appearance and tools -------------------------------------------
 
@@ -180,18 +200,20 @@ class PlotCell(QtWidgets.QFrame):
         self.targets.update(target_config)
 
     def reset_zoom(self):
-        y_range = self.config.effective_y_range()
-        if y_range:
-            self.plot_widget.setYRange(y_range[0], y_range[1], padding=0)
+        # The sync group owns the time axis and resets every time plot together,
+        # so only restore the axis it does not drive.
+        time_axis = self.config.time_axis if self.follows_time_axis else None
 
-        if self.follows_time_axis:
-            # The sync group owns X for time plots; it resets them together.
-            return
+        if time_axis != 'y':
+            y_range = self.config.effective_y_range()
+            if y_range:
+                self.plot_widget.setYRange(y_range[0], y_range[1], padding=0)
 
-        x_range = self.config.effective_x_range()
-        if x_range:
-            low, high = self.renderer.x_transform([x_range[0], x_range[1]])
-            self.plot_widget.setXRange(float(low), float(high), padding=0)
+        if time_axis != 'x':
+            x_range = self.config.effective_x_range()
+            if x_range:
+                low, high = self.renderer.x_transform([x_range[0], x_range[1]])
+                self.plot_widget.setXRange(float(low), float(high), padding=0)
 
     def apply_theme(self):
         theme = PlotTheme.from_palette()
@@ -245,7 +267,9 @@ class PlotCell(QtWidgets.QFrame):
         elif event.double():
             self.annotation_requested.emit(self, point.x(), point.y())
         elif self.renderer.supports_seek:
-            self.seek_requested.emit(max(0.0, point.x()))
+            # Read the time off whichever axis carries it.
+            clicked = point.y() if self.config.time_on_y else point.x()
+            self.seek_requested.emit(max(0.0, clicked))
 
     # --- Teardown --------------------------------------------------------
 

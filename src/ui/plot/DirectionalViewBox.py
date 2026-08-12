@@ -27,6 +27,11 @@ def time_measure_formatter(x0: float, x1: float, y0: float, y1: float) -> str:
     return f"Δt: {format_time_delta(x1 - x0)}\nΔy: {y1 - y0:.3f}"
 
 
+def transposed_time_measure_formatter(x0: float, x1: float, y0: float, y1: float) -> str:
+    """For plots with time on the Y axis."""
+    return f"Δx: {x1 - x0:.3f}\nΔt: {format_time_delta(y1 - y0)}"
+
+
 def plain_measure_formatter(x0: float, x1: float, y0: float, y1: float) -> str:
     return f"Δx: {x1 - x0:.3f}\nΔy: {y1 - y0:.3f}"
 

@@ -76,23 +76,42 @@ zoom.
 
 ```mermaid
 flowchart TD
-    START["PlotConfig.kind"] --> Q{"first X series?"}
-    Q -->|time| TS["TIME_SCATTER<br/>TimeScatterRenderer"]
-    Q -->|frequency| SS["SPECTRUM_SLICE<br/>SpectrumSliceRenderer"]
-    Q -->|anything else| TR["TRAIL<br/>TrailRenderer"]
+    START["PlotConfig.kind"] --> QF{"X is frequency?"}
+    QF -- yes --> SS["SPECTRUM_SLICE<br/>SpectrumSliceRenderer"]
+    QF -- no --> QT{"is time on<br/>either axis?"}
+    QT -- "on X" --> TS["TIME_SCATTER"]
+    QT -- "on Y" --> TSY["TIME_SCATTER<br/><i>transposed</i>"]
+    QT -- neither --> TR["TRAIL<br/>TrailRenderer"]
 
     TS --> TSF["playhead, click-to-seek,<br/>joins the time sync group,<br/>may show a spectrogram"]
+    TSY --> TSF
     SS --> SSF["log-frequency axis,<br/>redrawn as the playhead moves"]
     TR --> TRF["fading trail over the last<br/><i>trail_time</i> seconds"]
 
     classDef kind fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
     classDef note fill:#333,stroke:#777,color:#ddd
-    class TS,SS,TR kind
+    class TS,TSY,SS,TR kind
     class TSF,SSF,TRF note
 ```
 
 Because the kind is a property of the data, a cell can move between all three by
 changing a combo box.
+
+### Time on either axis
+
+`time` is offered on X and on Y. Selecting it on Y **transposes** the plot: the
+value series run horizontally and time runs up the vertical axis. Everything
+that has a direction follows: the time axis item moves to the left, the playhead
+becomes horizontal, click-to-seek reads the Y coordinate, target bands become
+vertical, the spectrogram image is drawn frequency-across/time-up, and the sync
+group drives the Y range instead of the X range.
+
+`PlotConfig` exposes this as `time_on_y`, `time_axis` (`'x'`, `'y'` or `None`)
+and `value_keys()` — the series that are *not* the time axis. Code that cares
+about "the quantities being plotted" should use `value_keys()`/`value_specs()`
+rather than `y`, so it works in both orientations.
+
+Time on both axes is not a thing, and `normalised()` drops the Y one.
 
 ---
 
@@ -104,11 +123,12 @@ renderable. It is applied on construction, on every edit and on every load.
 | Rule | Reason |
 |---|---|
 | An `exclusive` series (`time`, `frequency`, `magnitude`) is alone on its axis | Time cannot share an axis with pitch |
+| Time sits on at most one axis | Selecting it on both drops the Y one |
 | At most one axis may hold several series | `y=[F1,F2,F3]` against `x=time` is meaningful; many-against-many is not |
 | `colour` is kept only when both axes hold exactly one series | With several series each already uses its own registry colour |
-| `spectrogram` only on `TIME_SCATTER`, and only when Y is empty or entirely in Hz | The image is drawn in true Hz; see [layers](layers/README.md) |
+| `spectrogram` only on `TIME_SCATTER`, and only when the value axis is empty or entirely in Hz | The image is drawn in true Hz; see [layers](layers/README.md) |
 | `SPECTRUM_SLICE` forces `y = ["magnitude"]` | There is nothing else to put on that axis |
-| An empty Y axis is legal only with `spectrogram` | Otherwise the plot would be blank |
+| An empty value axis is legal only with `spectrogram` | Otherwise the plot would be blank |
 | `trail_time` is clamped to 0–60 s | |
 
 The selector bar enforces the same rules *visibly*: when picking several X
@@ -183,8 +203,10 @@ recording quadratic.
 
 ## Time-axis synchronisation
 
-Every plot whose X axis is time shares one range, owned by
-`TimeAxisSyncGroup`.
+Every plot with a time axis shares one range, owned by `TimeAxisSyncGroup`.
+Members register with the axis that actually carries time, so a transposed plot
+joins the same group on its Y axis: zooming the time axis of any plot moves all
+of them, whichever way round they are drawn.
 
 ```mermaid
 sequenceDiagram
@@ -194,16 +216,16 @@ sequenceDiagram
     participant O as The other time plots
 
     U->>VB: pan or zoom
-    VB->>G: sigXRangeChanged
+    VB->>G: sigXRangeChanged (or sigYRangeChanged)
     Note over G: ignored while<br/>_applying is set
     G->>G: range = (lo, hi)
-    G->>VB: setXRange
-    G->>O: setXRange
+    G->>VB: set the registered axis
+    G->>O: set each member's own time axis
 
     Note over G: during playback / recording
     G->>G: follow(t, mode)
-    G->>VB: setXRange
-    G->>O: setXRange
+    G->>VB: set the registered axis
+    G->>O: set each member's own time axis
 ```
 
 A group rather than `setXLink`: the old code elected the first time plot in the
@@ -261,6 +283,15 @@ work; it is load-bearing and not obvious.
 The readout is produced by a formatter supplied by the renderer, so a time plot
 reports `Δt` in mm:ss and the spectrum plot converts its log-scaled axis back to
 Hz.
+
+**pyqtgraph's own "Plot Options" menu is disabled** (`setMenuEnabled(False, None)`);
+the view box menu stays. That menu applies *Downsample* and *Clip to View* to
+everything the plot tracks as a curve — including scatter items, which have
+neither method, so ticking a box raised `AttributeError` on any trail plot. Its
+other entries would also fight this module: log mode duplicates the manual
+`x_transform`, and FFT and subtract-mean silently change what the data means.
+`ScatterItem` additionally no-ops both methods, so the same calls arriving from
+anywhere else stay harmless.
 
 ---
 
@@ -343,6 +374,7 @@ memory, and written back in the current schema.
 | `MultiSeriesSelector.py` | A drop-down that can check several series at once |
 | `TimeAxisSyncGroup.py` | The shared X range and the playhead-following behaviour |
 | `DirectionalViewBox.py` | Pan, single-axis zoom, measure |
+| `ScatterItem.py` | A scatter that tolerates `PlotItem`'s curve-wide settings |
 | `PlotTheme.py` | Palette-derived colours; public pyqtgraph API only |
 | `ColourMapping.py` | Normalised viridis and the colour bar |
 | `TimeAxisItem.py` | mm:ss ticks, with precision following the zoom |

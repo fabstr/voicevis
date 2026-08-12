@@ -25,15 +25,18 @@ class TargetBandLayer:
     def set_series(self, y_specs, x_specs=None):
         """Rebuild the bands for a new axis selection.
 
-        Horizontal bands come from the Y series. A vertical band is added for
-        the X series too when both axes hold a single feature, which turns an
-        XY trail plot's targets into a box.
+        Every series with a target gets a band across the opposite axis: Y
+        series become horizontal bands, X series vertical ones. No axis needs
+        special-casing, because the series that are axes rather than
+        measurements -- time, frequency, magnitude -- carry no target key.
+
+        So a plot of F1/F2/F3 against time gets three horizontal bands; the same
+        plot transposed gets three vertical ones; and an XY trail plot gets one
+        of each, which reads as a target box.
         """
         wanted = {('horizontal', spec.key): spec for spec in y_specs if spec.target_key}
-
-        x_specs = list(x_specs or [])
-        if len(x_specs) == 1 and len(list(y_specs)) == 1 and x_specs[0].target_key:
-            wanted[('vertical', x_specs[0].key)] = x_specs[0]
+        wanted.update({('vertical', spec.key): spec
+                       for spec in (x_specs or []) if spec.target_key})
 
         for key in list(self._bands):
             if key not in wanted:

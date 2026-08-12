@@ -592,7 +592,8 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def _register_with_sync_group(self, cell: PlotCell):
         if cell.follows_time_axis:
-            self.sync_group.register(cell.view_box)
+            # A transposed plot has time on Y, so the group drives that axis.
+            self.sync_group.register(cell.view_box, cell.time_axis)
         else:
             self.sync_group.unregister(cell.view_box)
 

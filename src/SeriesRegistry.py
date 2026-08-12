@@ -109,17 +109,17 @@ for _spec in (
                colour=magnitude, kind=SeriesKind.MAGNITUDE),
 
     _signal("pitch", "Pitch", 0, 350, pitch, "pitch", "Hz"),
-    _signal("pitch_5s_mean", "Pitch (5 s mean)", 0, 300, pitch, "pitch", "Hz"),
+    # _signal("pitch_5s_mean", "Pitch (5 s mean)", 0, 300, pitch, "pitch", "Hz"),
 
     _signal("loudness", "Loudness", 0, 10, loudness, "loudness"),
 
-    _signal("weight_instantaneous", "Weight (softness)", 0, 2.5, weight, "weight"),
-    _signal("weight_333ms_max", "Weight (333 ms max)", 0, 40, weight, "weight"),
+    # _signal("weight_instantaneous", "Weight (softness)", 0, 2.5, weight, "weight"),
+    # _signal("weight_333ms_max", "Weight (333 ms max)", 0, 40, weight, "weight"),
 
     _signal("size", "Size", 0, 30, size, "size"),
-    _signal("size_5s_mean", "Size (5 s mean)", 0, 30, size, "size"),
+    # _signal("size_5s_mean", "Size (5 s mean)", 0, 30, size, "size"),
 
-    _signal("slopes", "Spectral slope", -1e-6, 1e-6, "#ff0000", "slopes"),
+    # _signal("slopes", "Spectral slope", -1e-6, 1e-6, "#ff0000", "slopes"),
 
     _signal("F1", "F1", 0, 3500, f1, "f1", "Hz"),
     _signal("F2", "F2", 0, 3500, f2, "f2", "Hz"),
@@ -190,16 +190,16 @@ class PlotPreset:
 PRESETS = (
     PlotPreset("Pitch", ("time",), ("pitch",)),
     PlotPreset("Size", ("time",), ("size",)),
-    PlotPreset("Weight", ("time",), ("weight_instantaneous",)),
-    PlotPreset("Size vs Weight", ("weight_instantaneous",), ("size",),
-               colour="loudness", trail_time=3.0),
+    # PlotPreset("Weight", ("time",), ("weight_instantaneous",)),
+    # PlotPreset("Size vs Weight", ("weight_instantaneous",), ("size",),
+    #            colour="loudness", trail_time=3.0),
 
-    PlotPreset("5s average pitch", ("time",), ("pitch_5s_mean",)),
-    PlotPreset("5s average size", ("time",), ("size_5s_mean",)),
-    PlotPreset("5s average weight", ("time",), ("weight_333ms_max",)),
+    # PlotPreset("5s average pitch", ("time",), ("pitch_5s_mean",)),
+    # PlotPreset("5s average size", ("time",), ("size_5s_mean",)),
+    # PlotPreset("5s average weight", ("time",), ("weight_333ms_max",)),
 
     PlotPreset("Loudness", ("time",), ("loudness",)),
-    PlotPreset("Spectral slopes", ("time",), ("slopes",)),
+    # PlotPreset("Spectral slopes", ("time",), ("slopes",)),
 
     PlotPreset("Formants", ("time",), ("F1", "F2", "F3")),
     PlotPreset("F1", ("time",), ("F1",)),
@@ -210,8 +210,8 @@ PRESETS = (
     PlotPreset("F2/Pitch", ("time",), ("F2_Pitch",)),
     PlotPreset("F1/Pitch", ("time",), ("F1_Pitch",)),
 
-    PlotPreset("Fullness", ("time",), ("size",),
-               colour="weight_instantaneous", y_range=(-15.0, 25.0)),
+    # PlotPreset("Fullness", ("time",), ("size",),
+    #            colour="weight_instantaneous", y_range=(-15.0, 25.0)),
 
     PlotPreset("Spectrogram", ("time",), (), spectrogram=True),
     PlotPreset("Frequency Analysis", ("frequency",), ("magnitude",)),
@@ -230,7 +230,7 @@ PRESETS_BY_NAME = OrderedDict((p.name, p) for p in PRESETS)
 DEFAULT_PRESET = "Pitch"
 
 #: What a fresh session shows before any layout is restored.
-DEFAULT_LAYOUT = ("Pitch", "Size", "Weight", "Size vs Weight")
+DEFAULT_LAYOUT = ("Pitch", "Size", "Loudness")
 
 
 def self_check():

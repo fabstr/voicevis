@@ -11,6 +11,7 @@ import pyqtgraph as pg
 
 from ui.plot.ColourMapping import brushes, solid_brushes
 from ui.plot.PlotTheme import PlotTheme
+from ui.plot.ScatterItem import ScatterItem
 from ui.plot.renderers.PlotRenderer import PlotRenderer
 
 #: Markers here are sparser than on a time plot, so they can afford to be bigger.
@@ -22,9 +23,9 @@ class TrailRenderer(PlotRenderer):
     def _build_items(self):
         size = self.config.point_size * SIZE_MULTIPLIER
         for spec in self._pair_specs():
-            item = pg.ScatterPlotItem(size=size,
-                                      pen=PlotTheme.marker_edge_pen(),
-                                      brush=pg.mkBrush(spec.colour))
+            item = ScatterItem(size=size,
+                               pen=PlotTheme.marker_edge_pen(),
+                               brush=pg.mkBrush(spec.colour))
             item.opts['hoverSize'] = size * 1.5
             self._add(item)
 

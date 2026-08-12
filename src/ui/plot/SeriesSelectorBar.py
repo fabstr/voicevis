@@ -35,7 +35,9 @@ class SeriesSelectorBar(QtWidgets.QWidget):
 
         x_items = [Registry.SERIES[Registry.TIME_KEY],
                    Registry.SERIES[Registry.FREQUENCY_KEY]] + Registry.signal_series()
-        y_items = Registry.signal_series() + [Registry.SERIES[Registry.MAGNITUDE_KEY]]
+        # Time is offered on both axes: putting it on Y transposes the plot.
+        y_items = ([Registry.SERIES[Registry.TIME_KEY]] + Registry.signal_series()
+                   + [Registry.SERIES[Registry.MAGNITUDE_KEY]])
 
         self.x_selector = MultiSeriesSelector(x_items, allow_multi=True, prefix="X: ")
         self.y_selector = MultiSeriesSelector(y_items, allow_multi=True, allow_none=True, prefix="Y: ")

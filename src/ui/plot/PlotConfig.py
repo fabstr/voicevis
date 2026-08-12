@@ -49,16 +49,35 @@ class PlotConfig:
 
     @property
     def kind(self) -> PlotKind:
-        head = self.x[0] if self.x else None
-        if head == Registry.TIME_KEY:
-            return PlotKind.TIME_SCATTER
-        if head == Registry.FREQUENCY_KEY:
+        # Frequency on X wins: it means a spectrum slice whatever Y holds.
+        if self.x[:1] == [Registry.FREQUENCY_KEY]:
             return PlotKind.SPECTRUM_SLICE
+        if self.x[:1] == [Registry.TIME_KEY] or self.y[:1] == [Registry.TIME_KEY]:
+            return PlotKind.TIME_SCATTER
         return PlotKind.TRAIL
 
     @property
     def is_time_domain(self) -> bool:
         return self.kind is PlotKind.TIME_SCATTER
+
+    @property
+    def time_on_y(self) -> bool:
+        """True when the plot is transposed: time running up the Y axis."""
+        return self.y[:1] == [Registry.TIME_KEY]
+
+    @property
+    def time_axis(self) -> Optional[str]:
+        """Which axis carries time, if either."""
+        if self.kind is not PlotKind.TIME_SCATTER:
+            return None
+        return 'y' if self.time_on_y else 'x'
+
+    def value_keys(self) -> List[str]:
+        """The plotted quantities, i.e. whatever is not the time axis."""
+        return self.x if self.time_on_y else self.y
+
+    def value_specs(self) -> List[SeriesSpec]:
+        return [Registry.SERIES[k] for k in self.value_keys() if k in Registry.SERIES]
 
     def x_specs(self) -> List[SeriesSpec]:
         return [Registry.SERIES[k] for k in self.x if k in Registry.SERIES]
@@ -72,6 +91,8 @@ class PlotConfig:
     def effective_x_range(self) -> Optional[Tuple[float, float]]:
         if self.x_range is not None:
             return tuple(self.x_range)
+        if not self.x:
+            return SPECTROGRAM_ONLY_RANGE if self.spectrogram else None
         return Registry.union_range(self.x)
 
     def effective_y_range(self) -> Optional[Tuple[float, float]]:
@@ -81,12 +102,17 @@ class PlotConfig:
             return SPECTROGRAM_ONLY_RANGE if self.spectrogram else None
         return Registry.union_range(self.y)
 
+    def value_range(self) -> Optional[Tuple[float, float]]:
+        """The range of the non-time axis."""
+        return self.effective_x_range() if self.time_on_y else self.effective_y_range()
+
     def x_axis_label(self) -> str:
-        specs = self.x_specs()
-        return specs[0].axis_label if len(specs) == 1 else self._joined_label(specs)
+        return self._axis_label(self.x_specs())
 
     def y_axis_label(self) -> str:
-        specs = self.y_specs()
+        return self._axis_label(self.y_specs())
+
+    def _axis_label(self, specs: List[SeriesSpec]) -> str:
         if not specs:
             return Registry.SERIES[Registry.FREQUENCY_KEY].axis_label if self.spectrogram else ""
         return specs[0].axis_label if len(specs) == 1 else self._joined_label(specs)
@@ -100,30 +126,34 @@ class PlotConfig:
         return f"{names} ({units.pop()})" if len(units) == 1 else names
 
     def title(self) -> str:
-        x_specs, y_specs = self.x_specs(), self.y_specs()
-
-        if not y_specs:
-            return "Spectrogram" if self.spectrogram else "Empty plot"
-
-        y_names = ", ".join(s.label for s in y_specs)
         if self.kind is PlotKind.TIME_SCATTER:
-            title = f"{y_names} + spectrogram" if self.spectrogram else y_names
+            specs = self.value_specs()
+            if not specs:
+                return "Spectrogram" if self.spectrogram else "Empty plot"
+            names = ", ".join(s.label for s in specs)
+            # Transposed plots are named "Y vs X" so the layout is obvious.
+            title = f"Time vs {names}" if self.time_on_y else names
+            if self.spectrogram:
+                title += " + spectrogram"
         else:
-            x_names = ", ".join(s.label for s in x_specs)
-            title = f"{y_names} vs {x_names}"
+            y_specs = self.y_specs()
+            if not y_specs:
+                return "Empty plot"
+            title = (f"{', '.join(s.label for s in y_specs)} vs "
+                     f"{', '.join(s.label for s in self.x_specs())}")
 
         z_spec = self.colour_spec()
         return f"{title} / colour: {z_spec.label}" if z_spec else title
 
     def spectrogram_allowed(self) -> bool:
-        """Whether a spectrogram background would line up with this Y axis.
+        """Whether a spectrogram background would line up with the value axis.
 
-        The image is drawn in true Hz, so it is only meaningful when the Y axis
-        is itself in Hz (or when there is no Y series at all).
+        The image is drawn in true Hz, so it is only meaningful when the axis
+        opposite time is itself in Hz (or carries no series at all).
         """
         if self.kind is not PlotKind.TIME_SCATTER:
             return False
-        specs = self.y_specs()
+        specs = self.value_specs()
         return not specs or all(s.unit == "Hz" for s in specs)
 
     def colour_allowed(self) -> bool:
@@ -137,12 +167,17 @@ class PlotConfig:
         x = [k for k in self.x if k in Registry.SERIES]
         y = [k for k in self.y if k in Registry.SERIES]
 
-        if not x:
-            x = [Registry.TIME_KEY]
-
         # An exclusive series (time, frequency, magnitude) cannot share an axis.
         x = _collapse_exclusive(x)
         y = _collapse_exclusive(y)
+
+        # Time belongs to one axis or the other, never both.
+        if x[:1] == [Registry.TIME_KEY] and y[:1] == [Registry.TIME_KEY]:
+            y = []
+
+        time_on_y = y[:1] == [Registry.TIME_KEY]
+        if not x and not time_on_y:
+            x = [Registry.TIME_KEY]
 
         # At most one axis may carry several series.
         if len(x) > 1 and len(y) > 1:
@@ -151,14 +186,18 @@ class PlotConfig:
         kind = PlotConfig(x=x, y=y).kind
         spectrogram = bool(self.spectrogram)
         colour = self.colour
+        default_value = Registry.PRESETS_BY_NAME[Registry.DEFAULT_PRESET].y[0]
 
         if kind is PlotKind.SPECTRUM_SLICE:
             y = [Registry.MAGNITUDE_KEY]
             spectrogram = False
         elif kind is PlotKind.TIME_SCATTER:
-            # An empty Y axis only makes sense as a bare spectrogram.
-            if not y and not spectrogram:
-                y = [Registry.PRESETS_BY_NAME[Registry.DEFAULT_PRESET].y[0]]
+            # An empty value axis only makes sense as a bare spectrogram.
+            if time_on_y:
+                if not x and not spectrogram:
+                    x = [default_value]
+            elif not y and not spectrogram:
+                y = [default_value]
         else:
             spectrogram = False
             if not y:

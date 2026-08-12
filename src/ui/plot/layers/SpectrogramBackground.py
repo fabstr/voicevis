@@ -44,6 +44,7 @@ class SpectrogramBackground:
         self._visible = False
         self._seen_revision = -1
         self._seen_range = None
+        self._seen_transposed = None
         self._last_rebuild = 0.0
 
     # --- Visibility ------------------------------------------------------
@@ -71,15 +72,16 @@ class SpectrogramBackground:
 
     # --- Drawing ---------------------------------------------------------
 
-    def refresh(self, hub, freq_range, throttle=False):
-        """Redraw if the data or the visible frequency range has changed."""
+    def refresh(self, hub, freq_range, transposed=False, throttle=False):
+        """Redraw if the data, the frequency range or the orientation changed."""
         if not self._visible:
             return
 
         if throttle and (time.monotonic() - self._last_rebuild) < RECORDING_THROTTLE:
             return
 
-        if hub.revision == self._seen_revision and freq_range == self._seen_range:
+        if (hub.revision == self._seen_revision and freq_range == self._seen_range
+                and transposed == self._seen_transposed):
             return
 
         spectrogram = hub.spectrogram()
@@ -89,10 +91,11 @@ class SpectrogramBackground:
 
         self._seen_revision = hub.revision
         self._seen_range = freq_range
+        self._seen_transposed = transposed
         self._last_rebuild = time.monotonic()
-        self._draw(spectrogram, freq_range)
+        self._draw(spectrogram, freq_range, transposed)
 
-    def _draw(self, spectrogram, freq_range):
+    def _draw(self, spectrogram, freq_range, transposed=False):
         times = np.asarray(spectrogram.x, dtype=float)
         frequencies = np.asarray(spectrogram.y, dtype=float)
         magnitudes = spectrogram.magnitude_db
@@ -126,23 +129,29 @@ class SpectrogramBackground:
         if ceiling <= floor:
             ceiling = floor + 1.0
 
-        self.image.setImage(cropped.T, autoLevels=False)
+        # The array is uploaded as [x, y]. Normally that is [time, frequency];
+        # on a transposed plot time runs up the Y axis, so it is already in the
+        # right order and must not be transposed again.
+        self.image.setImage(cropped if transposed else cropped.T, autoLevels=False)
         self.image.setLevels((floor, ceiling))
-        self.image.setRect(self._bin_rect(times, kept_frequencies))
+
+        horizontal, vertical = ((kept_frequencies, times) if transposed
+                                else (times, kept_frequencies))
+        self.image.setRect(self._bin_rect(horizontal, vertical))
 
     @staticmethod
-    def _bin_rect(times, frequencies) -> QtCore.QRectF:
+    def _bin_rect(horizontal, vertical) -> QtCore.QRectF:
         """The image's extent, offset by half a bin.
 
         Bin values name the centre of their cell, so the image starts half a
         bin before the first one. The pre-split code anchored the rect at the
         origin instead, shifting everything by half a bin on both axes.
         """
-        dt = float(times[1] - times[0]) if len(times) > 1 else 1.0
-        df = float(frequencies[1] - frequencies[0]) if len(frequencies) > 1 else 1.0
+        dx = float(horizontal[1] - horizontal[0]) if len(horizontal) > 1 else 1.0
+        dy = float(vertical[1] - vertical[0]) if len(vertical) > 1 else 1.0
 
-        left = float(times[0]) - dt / 2.0
-        bottom = float(frequencies[0]) - df / 2.0
-        width = float(times[-1] - times[0]) + dt
-        height = float(frequencies[-1] - frequencies[0]) + df
+        left = float(horizontal[0]) - dx / 2.0
+        bottom = float(vertical[0]) - dy / 2.0
+        width = float(horizontal[-1] - horizontal[0]) + dx
+        height = float(vertical[-1] - vertical[0]) + dy
         return QtCore.QRectF(left, bottom, width, height)

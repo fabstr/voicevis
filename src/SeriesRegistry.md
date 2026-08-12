@@ -58,10 +58,10 @@ classDiagram
 Three entries are not attributes of `AudioFeatures`. They exist so that the axis
 selectors can express every kind of plot through one mechanism:
 
-| Key | Meaning | Selecting it on X gives |
+| Key | Meaning | Selecting it gives |
 |---|---|---|
-| `time` | The shared frame timebase | a time-scatter plot |
-| `frequency` | `SpectrogramData.y` | a spectrum-slice plot |
+| `time` | The shared frame timebase | a time-scatter plot — on X normally, on Y transposed |
+| `frequency` | `SpectrogramData.y` | a spectrum-slice plot (X only) |
 | `magnitude` | A `magnitude_db` column at the playhead | (forced onto Y there) |
 
 All three are `exclusive`; every real signal is not. That single flag is what

@@ -25,8 +25,10 @@ class SpectrumSliceRenderer(PlotRenderer):
 
     measure_formatter = staticmethod(log_x_measure_formatter)
 
-    def bottom_axis(self):
-        return FrequencyAxisItem(x_ticks=FREQUENCY_TICKS, is_log_x=True, orientation='bottom')
+    def axis_items(self):
+        return {'bottom': FrequencyAxisItem(x_ticks=FREQUENCY_TICKS, is_log_x=True,
+                                            orientation='bottom'),
+                'left': pg.AxisItem(orientation='left')}
 
     @staticmethod
     def x_transform(values):

@@ -1,15 +1,19 @@
 """Value-against-time scatter -- the common case.
 
-One item per Y series. ``PlotDataItem`` rather than ``ScatterPlotItem`` because
-clipping and downsampling only apply to the former, and these plots routinely
-hold tens of thousands of frames.
+One item per plotted series. ``PlotDataItem`` rather than ``ScatterPlotItem``
+because clipping and downsampling only apply to the former, and these plots
+routinely hold tens of thousands of frames.
+
+Time may sit on either axis. When it is on Y the plot is transposed: the value
+series run horizontally and time runs up the vertical axis.
 """
 
 import numpy as np
 import pyqtgraph as pg
 
-from ui.plot.DirectionalViewBox import time_measure_formatter
+from ui.plot.DirectionalViewBox import time_measure_formatter, transposed_time_measure_formatter
 from ui.plot.PlotTheme import PlotTheme
+from ui.plot.ScatterItem import ScatterItem
 from ui.plot.TimeAxisItem import TimeAxisItem
 from ui.plot.renderers.PlotRenderer import PlotRenderer
 
@@ -21,58 +25,87 @@ class TimeScatterRenderer(PlotRenderer):
     supports_seek = True
     supports_spectrogram = True
 
-    measure_formatter = staticmethod(time_measure_formatter)
+    @property
+    def time_on_y(self) -> bool:
+        return self.config.time_on_y
 
-    def bottom_axis(self):
-        return TimeAxisItem(orientation='bottom')
+    @property
+    def measure_formatter(self):
+        return transposed_time_measure_formatter if self.time_on_y else time_measure_formatter
+
+    def axis_items(self):
+        time_side = 'left' if self.time_on_y else 'bottom'
+        value_side = 'bottom' if self.time_on_y else 'left'
+        return {time_side: TimeAxisItem(orientation=time_side),
+                value_side: pg.AxisItem(orientation=value_side)}
 
     def _build_items(self):
         edge_pen = PlotTheme.marker_edge_pen()
         size = self.config.point_size
+        coloured = self.config.colour_spec() is not None
 
-        for spec in self.config.y_specs():
-            self._add(pg.PlotDataItem(
+        for spec in self.config.value_specs():
+            if coloured:
+                # A colour dimension needs one brush per point. PlotDataItem
+                # subsets x/y for clipping and downsampling but passes the brush
+                # list through whole, so the scatter underneath then rejects the
+                # mismatched lengths. ScatterPlotItem is never subsetted, so per
+                # point brushes belong on one.
+                item = ScatterItem(size=size, pen=edge_pen,
+                                   brush=pg.mkBrush(spec.colour))
+                item.opts['hoverSize'] = size * 1.5
+                self._add(item)
+                continue
+
+            item = self._add(pg.PlotDataItem(
                 [], [],
                 pen=None,
                 symbol='o',
                 symbolBrush=spec.colour,
                 symbolPen=edge_pen,
                 symbolSize=size,
-                clipToView=True,
-                autoDownsample=True,
-                downsampleMethod='peak',
             ))
+            # PlotItem.addItem overwrites both of these from the plot-wide
+            # settings, so they only stick if applied after the item is added.
+            item.setClipToView(True)
+            item.setDownsampling(ds=1, auto=True, method='peak')
 
     def _refresh(self, current_time: float):
         edge_pen = PlotTheme.marker_edge_pen()
-        colour_series = self.config.colour_spec() is not None
+        has_colour = self.config.colour_spec() is not None
+        transposed = self.time_on_y
 
-        for item, spec in zip(self.items, self.config.y_specs()):
-            x, y = self.hub.get_xy(spec.key)
+        for item, spec in zip(self.items, self.config.value_specs()):
+            times, values = self.hub.get_xy(spec.key)
+            x, y = (values, times) if transposed else (times, values)
 
-            if not colour_series:
+            if not has_colour:
                 item.setData(x=x, y=y)
                 continue
 
-            colours = self._colour_values(x)
+            colours = self._colour_values(times)
             if colours is None:
                 # No colour data yet -- fall back to the series' own colour
                 # rather than leaving the previous frame's points on screen.
-                item.setData(x=x, y=y, symbolBrush=spec.colour, symbolPen=edge_pen)
+                item.setData(x=x, y=y, brush=pg.mkBrush(spec.colour), pen=edge_pen)
             else:
                 item.setData(x=x, y=y,
-                             symbolBrush=[pg.mkBrush(*c) for c in colours],
-                             symbolPen=edge_pen)
+                             brush=[pg.mkBrush(*c) for c in colours],
+                             pen=edge_pen)
 
     def _apply_point_size(self, item, size: int):
-        item.setSymbolSize(size)
+        if isinstance(item, pg.ScatterPlotItem):
+            item.setSize(size)
+            item.opts['hoverSize'] = size * 1.5
+        else:
+            item.setSymbolSize(size)
 
-    def y_range_of_data(self):
-        """The span actually covered by the data, used to crop the spectrogram."""
+    def value_range_of_data(self):
+        """The span the data actually covers, used to crop the spectrogram."""
         lows, highs = [], []
-        for spec in self.config.y_specs():
-            _, y = self.hub.get_xy(spec.key)
-            if len(y):
-                lows.append(float(np.min(y)))
-                highs.append(float(np.max(y)))
+        for spec in self.config.value_specs():
+            _, values = self.hub.get_xy(spec.key)
+            if len(values):
+                lows.append(float(np.min(values)))
+                highs.append(float(np.max(values)))
         return (min(lows), max(highs)) if lows else None

@@ -1,0 +1,72 @@
+{
+    "version": 2,
+    "global_size": 3,
+    "main_splitter_sizes": [
+        1910,
+        1907
+    ],
+    "columns": [
+        {
+            "plots": [
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "size"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 3
+                },
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "pitch"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 3
+                }
+            ],
+            "sizes": [
+                1016,
+                1019
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [],
+                    "colour": null,
+                    "trail_time": 5.0,
+                    "spectrogram": true,
+                    "local_size": 3
+                },
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "loudness"
+                    ],
+                    "colour": null,
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "local_size": 3
+                }
+            ],
+            "sizes": [
+                1016,
+                1019
+            ]
+        }
+    ]
+}

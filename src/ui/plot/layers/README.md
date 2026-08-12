@@ -34,18 +34,25 @@ bins as Y — two arrays of unrelated lengths.
 
 ### Coordinates
 
-The image is drawn in **true Hz** on the Y axis, cropped to the plot's range —
-not stretched to fill whatever range the plot happens to have.
+The image is drawn in **true Hz** on the value axis, cropped to the plot's
+range — not stretched to fill whatever range the plot happens to have.
 
-That is a deliberate trade. On a plot whose Y axis is already in Hz (formants,
-pitch) the image lines up exactly, which is the entire point. On a plot of, say,
-Size (0–30) you would see 0–30 Hz, i.e. nothing useful. Stretching instead would
-look like a background texture everywhere but would make the frequency scale a
-lie.
+That is a deliberate trade. On a plot whose value axis is already in Hz
+(formants, pitch) the image lines up exactly, which is the entire point. On a
+plot of, say, Size (0–30) you would see 0–30 Hz, i.e. nothing useful. Stretching
+instead would look like a background texture everywhere but would make the
+frequency scale a lie.
 
 So the cell **disables the spectrogram checkbox, with a tooltip**, unless every
-Y series is in Hz or there is no Y series at all. The constraint is visible
-rather than mysterious.
+value series is in Hz or there are none at all. The constraint is visible rather
+than mysterious.
+
+**Orientation.** When the plot is transposed — time on Y — the image is too:
+frequency runs across and time runs up. `refresh(..., transposed=True)` skips
+the array transpose (the data is already `[frequency, time]` for a `col-major`
+upload) and swaps the two axes of the rect. The cached `_seen_transposed` is
+part of the redraw guard, so flipping a plot rebuilds the image even though the
+data has not changed.
 
 ### Three traps, all of which the previous implementation hit
 
@@ -107,19 +114,33 @@ therefore gets three separate bands at three different heights; the previous
 implementation keyed them off the plot spec and drew three identical bands
 stacked on top of each other.
 
+The rule is simply: every series with a target gets a band across the axis
+opposite its own.
+
 ```mermaid
 graph LR
-    Y["Y series with a target_key"] --> H["horizontal band<br/><i>a value range</i>"]
-    X["X series, only when<br/>both axes hold one series"] --> V["vertical band<br/><i>a value range</i>"]
-    H --> BOX["on an XY trail plot the two<br/>combine into a target box"]
-    V --> BOX
+    Y["Y series with a target_key"] --> H["horizontal band"]
+    X["X series with a target_key"] --> V["vertical band"]
+
+    H --> N["time plot:<br/>bands across the value axis"]
+    V --> N
+    H --> T["transposed plot:<br/>bands become vertical"]
+    V --> T
+    H --> B["XY trail plot:<br/>one of each, a target box"]
+    V --> B
 
     classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
-    class H,V,BOX l
+    class H,V l
+    classDef c fill:#333,stroke:#777,color:#ddd
+    class N,T,B c
 ```
 
-The vertical band is what turns a Size-vs-Weight plot into a proper target box
-rather than a single horizontal stripe.
+No axis needs special-casing, because the series that *are* axes rather than
+measurements — `time`, `frequency`, `magnitude` — carry no `target_key` and so
+never produce a band. Transposing a plot therefore moves its bands from
+horizontal to vertical with no extra code, and the vertical band is also what
+turns a Size-vs-Weight trail plot into a proper target box rather than a single
+horizontal stripe.
 
 `set_series()` diffs against the bands already present, so reconfiguring a cell
 creates and removes only what actually changed.
