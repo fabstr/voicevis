@@ -25,6 +25,7 @@ from workers.AnalysisWorker import AnalysisWorker
 from workers.PlaybackWorker import PlaybackWorker
 from workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
 from ui.plot import LayoutSerializer
+from ui.plot.FrequencyMarkers import MARKERS
 from ui.plot.LayoutSerializer import Layout, LayoutColumn
 from ui.plot.PlotCell import PlotCell
 from ui.plot.PlotConfig import PlotConfig
@@ -1442,6 +1443,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             settings.setValue("last_target_config", target_json_str)
 
             settings.setValue("series_colours", json.dumps(Registry.colour_overrides()))
+            settings.setValue("frequency_markers", json.dumps(MARKERS.to_list()))
 
         except Exception as e:
             logging.error(f"Failed to auto-save application state: {e}")
@@ -1455,6 +1457,13 @@ class AnalysisWidget(QtWidgets.QWidget):
                 Registry.apply_colour_overrides(json.loads(colours_str))
             except Exception as e:
                 logging.error(f"Failed to restore series colours: {e}")
+
+        markers_str = settings.value("frequency_markers", "")
+        if markers_str:
+            try:
+                MARKERS.restore(json.loads(markers_str))
+            except Exception as e:
+                logging.error(f"Failed to restore frequency markers: {e}")
 
         target_json_str = settings.value("last_target_config", "")
         if target_json_str:

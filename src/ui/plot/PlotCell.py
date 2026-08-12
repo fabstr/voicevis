@@ -10,9 +10,11 @@ import pyqtgraph as pg
 from PyQt6 import QtCore, QtWidgets
 
 from ui.plot.DirectionalViewBox import DirectionalViewBox
+from ui.plot.FrequencyMarkers import MARKERS, MAX_HZ, MIN_HZ
 from ui.plot.PlotConfig import PlotConfig, PlotKind
 from ui.plot.PlotTheme import PlotTheme
 from ui.plot.SeriesSelectorBar import SeriesSelectorBar
+from ui.plot.layers.FrequencyMarkerLayer import FrequencyMarkerLayer, format_hz
 from ui.plot.layers.SpectrogramBackground import SpectrogramBackground
 from ui.plot.layers.TargetBandLayer import TargetBandLayer
 from ui.plot.renderers.SpectrumSliceRenderer import SpectrumSliceRenderer
@@ -27,6 +29,9 @@ RENDERERS = {
 
 #: How close a click must land, in pixels, to count as hitting an annotation.
 ANNOTATION_HIT_RADIUS = 15
+
+#: Decimal places offered when typing an exact marker frequency.
+MARKER_DECIMALS = 1
 
 CONTAINER_NAME = "PlotContainer"
 
@@ -65,6 +70,8 @@ class PlotCell(QtWidgets.QFrame):
 
         self.spectrogram = SpectrogramBackground(self.plot_item)
         self.targets = TargetBandLayer(self.plot_item)
+        self.markers = FrequencyMarkerLayer(self.plot_item)
+        MARKERS.changed.connect(self.markers.refresh)
 
         self.renderer = None
 
@@ -78,6 +85,7 @@ class PlotCell(QtWidgets.QFrame):
         layout.addWidget(self.plot_widget, stretch=1)
 
         self.plot_widget.scene().sigMouseClicked.connect(self._on_scene_clicked)
+        self._build_marker_menu()
 
         self._build_renderer()
         self._apply_axes()
@@ -147,9 +155,22 @@ class PlotCell(QtWidgets.QFrame):
         self.targets.set_series(config.y_specs(), config.x_specs())
         if self._target_config is not None:
             self.targets.update(self._target_config)
+        self._sync_markers()
         self._apply_labels()
         self.renderer.set_point_size(config.point_size)
         self.refresh_spectrogram()
+
+    def _sync_markers(self):
+        """Point the marker layer at whichever axis is in Hz, if either.
+
+        A spectrum slice holds log10(Hz) on its axis, so the layer is given the
+        renderer's transform rather than being left to assume the axis is in Hz.
+        """
+        axis = self.config.frequency_axis()
+        if axis == 'x':
+            self.markers.set_axis('x', self.renderer.x_transform, self.renderer.x_inverse)
+        else:
+            self.markers.set_axis(axis)
 
     def _build_renderer(self):
         if self.renderer is not None:
@@ -231,6 +252,64 @@ class PlotCell(QtWidgets.QFrame):
         if self.renderer is not None:
             self.renderer.apply_theme(theme)
 
+    # --- Frequency markers -----------------------------------------------
+
+    def _build_marker_menu(self):
+        """Add a marker section to the plot's right-click menu.
+
+        Rebuilt each time it opens: the entries depend on where the click
+        landed and on which markers exist at that moment.
+        """
+        self._marker_menu = QtWidgets.QMenu("Frequency markers")
+        self._marker_menu.aboutToShow.connect(self._populate_marker_menu)
+        self.view_box.menu.addSeparator()
+        self.view_box.menu.addMenu(self._marker_menu)
+
+    def _populate_marker_menu(self):
+        menu = self._marker_menu
+        menu.clear()
+
+        if not self.markers.enabled:
+            menu.addAction("This plot has no frequency axis").setEnabled(False)
+            return
+
+        point = self.view_box.last_context_point
+        here = self.markers.frequency_at(point)
+        existing = self.markers.marker_near(point)
+
+        if existing is not None:
+            menu.addAction(f"Move {format_hz(existing)} to...",
+                           lambda: self._prompt_marker(existing))
+            menu.addAction(f"Remove {format_hz(existing)}",
+                           lambda: MARKERS.remove(existing))
+            menu.addSeparator()
+        elif here is not None:
+            menu.addAction(f"Add marker at {format_hz(here)}",
+                           lambda: MARKERS.add(here))
+
+        menu.addAction("Add marker at...", lambda: self._prompt_marker(None))
+
+        if len(MARKERS):
+            menu.addSeparator()
+            menu.addAction("Remove all frequency markers", MARKERS.clear)
+
+    def _prompt_marker(self, existing):
+        """Ask for an exact frequency, either for a new marker or to move one."""
+        title = "Move frequency marker" if existing is not None else "Add frequency marker"
+        start = existing if existing is not None else (
+            self.markers.frequency_at(self.view_box.last_context_point) or 220.0)
+
+        value, accepted = QtWidgets.QInputDialog.getDouble(
+            self, title, "Frequency (Hz):", float(start),
+            MIN_HZ, MAX_HZ, MARKER_DECIMALS)
+        if not accepted:
+            return
+
+        if existing is None:
+            MARKERS.add(value)
+        else:
+            MARKERS.move(existing, value)
+
     # --- Annotations -----------------------------------------------------
 
     def add_annotation_marker(self, marker):
@@ -283,6 +362,11 @@ class PlotCell(QtWidgets.QFrame):
     def dispose(self):
         """Release plot items before the widget is destroyed."""
         self.clear_annotation_markers()
+        try:
+            MARKERS.changed.disconnect(self.markers.refresh)
+        except TypeError:
+            pass
+        self.markers.clear()
         self.spectrogram.detach()
         self.targets.clear()
         if self.renderer is not None:

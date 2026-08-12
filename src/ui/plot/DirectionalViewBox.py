@@ -61,6 +61,14 @@ class DirectionalViewBox(pg.ViewBox):
         self.addItem(self.measure_text, ignoreBounds=True)
         self.measure_text.setVisible(False)
 
+        #: Where the context menu was opened, in view coordinates. Menu actions
+        #: are triggered long after the click, so the position has to be kept.
+        self.last_context_point = None
+
+    def raiseContextMenu(self, ev):
+        self.last_context_point = self.mapSceneToView(ev.scenePos())
+        return super().raiseContextMenu(ev)
+
     # --- Tool mode -------------------------------------------------------
 
     def set_tool_mode(self, mode):

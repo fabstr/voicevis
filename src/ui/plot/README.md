@@ -7,7 +7,7 @@ Related documents:
 
 - [`../../SeriesRegistry.md`](../../SeriesRegistry.md) — what can be plotted
 - [`renderers/README.md`](renderers/README.md) — the drawing strategies
-- [`layers/README.md`](layers/README.md) — the spectrogram and target-band overlays
+- [`layers/README.md`](layers/README.md) — the spectrogram, target-band and frequency-marker overlays
 
 ---
 
@@ -48,7 +48,10 @@ graph TD
     CELLS --> REND["PlotRenderer<br/><i>swappable</i>"]
     CELLS --> SPEC["SpectrogramBackground"]
     CELLS --> TB["TargetBandLayer"]
+    CELLS --> FM["FrequencyMarkerLayer"]
     CELLS --> PH["playhead<br/><i>InfiniteLine</i>"]
+
+    MK["FrequencyMarkers<br/><i>shared markers</i>"] -.changed.-> FM
 
     REND -.reads.-> HUB
     SPEC -.reads.-> HUB
@@ -58,8 +61,8 @@ graph TD
 
     classDef owned fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
     classDef state fill:#3d3050,stroke:#a98ac8,color:#e8eef5
-    class HUB,SYNC state
-    class BAR,PW,REND,SPEC,TB,PH owned
+    class HUB,SYNC,MK state
+    class BAR,PW,REND,SPEC,TB,FM,PH owned
 ```
 
 `PlotDataHub` and `TimeAxisSyncGroup` are shared by every cell. Everything under
@@ -388,6 +391,7 @@ memory, and written back in the current schema.
 | `TimeAxisSyncGroup.py` | The shared X range and the playhead-following behaviour |
 | `DirectionalViewBox.py` | Pan, single-axis zoom, measure |
 | `ScatterItem.py` | A scatter that tolerates `PlotItem`'s curve-wide settings |
+| `FrequencyMarkers.py` | The shared set of marked frequencies |
 | `PlotTheme.py` | Palette-derived colours; public pyqtgraph API only |
 | `ColourMapping.py` | Normalised viridis and the colour bar |
 | `../SeriesColourDialog.py` | Lets the user recolour series (View > Series colours...) |
@@ -395,4 +399,4 @@ memory, and written back in the current schema.
 | `FrequencyAxisItem.py` | A curated log-frequency tick list |
 | `LayoutSerializer.py` | Layout schema and migration |
 | `renderers/` | The three drawing strategies — see [README](renderers/README.md) |
-| `layers/` | Spectrogram and target bands — see [README](layers/README.md) |
+| `layers/` | Spectrogram, target bands and frequency markers — see [README](layers/README.md) |

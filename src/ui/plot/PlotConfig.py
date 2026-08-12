@@ -156,6 +156,24 @@ class PlotConfig:
         specs = self.value_specs()
         return not specs or all(s.unit == "Hz" for s in specs)
 
+    def frequency_axis(self) -> Optional[str]:
+        """Which axis is measured in Hz, if either.
+
+        This is where frequency markers can be drawn: across the X axis of a
+        spectrum slice, or across the value axis of a time plot whose series are
+        all in Hz -- formants, pitch, or a bare spectrogram.
+        """
+        if self.kind is PlotKind.SPECTRUM_SLICE:
+            return 'x'
+        if self.kind is not PlotKind.TIME_SCATTER:
+            return None
+
+        value_axis = 'x' if self.time_on_y else 'y'
+        specs = self.value_specs()
+        if not specs:
+            return value_axis if self.spectrogram else None
+        return value_axis if all(s.unit == "Hz" for s in specs) else None
+
     def colour_allowed(self) -> bool:
         """Colouring by a third dimension needs exactly one series per axis."""
         return len(self.x) == 1 and len(self.y) == 1

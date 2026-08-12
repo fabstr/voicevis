@@ -8,15 +8,16 @@ See [`../README.md`](../README.md) for how this fits into the whole layer.
 ```mermaid
 graph TB
     subgraph plot["One plot, front to back"]
-        D["playhead + annotation markers"]
+        E["playhead + annotation markers"]
+        D["frequency markers<br/><i>FrequencyMarkerLayer</i> &nbsp; z = 5"]
         C["curves and points<br/><i>the renderer</i> &nbsp; z = 0"]
         B["target bands<br/><i>TargetBandLayer</i> &nbsp; z = -20"]
         A["spectrogram image<br/><i>SpectrogramBackground</i> &nbsp; z = -30"]
     end
-    D --- C --- B --- A
+    E --- D --- C --- B --- A
 
     classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
-    class A,B,C,D l
+    class A,B,C,D,E l
 ```
 
 ---
@@ -144,3 +145,56 @@ horizontal stripe.
 
 `set_series()` diffs against the bands already present, so reconfiguring a cell
 creates and removes only what actually changed.
+
+---
+
+## `FrequencyMarkerLayer`
+
+Draggable reference lines at frequencies the user marks — a target pitch, a
+formant to aim for, a harmonic to watch.
+
+Markers are held in one application-wide store
+([`../FrequencyMarkers.py`](../FrequencyMarkers.py)), like the series palette:
+220 Hz is 220 Hz everywhere. Adding one on the spectrogram makes it appear on
+the spectrum slice and in every other open window, because each layer connects
+to the store's `changed` signal directly.
+
+### Orientation follows the plot, not the marker
+
+The store holds bare frequencies. Which way a line is drawn — and where on the
+axis it lands — is a property of the plot, from `PlotConfig.frequency_axis()`.
+
+```mermaid
+flowchart TD
+    S["store: 220 Hz"] --> Q{"PlotConfig.frequency_axis()"}
+    Q -- "'y'<br/>spectrogram, formants, pitch" --> H["horizontal line at y = 220"]
+    Q -- "'x'<br/>spectrum slice, transposed" --> V["vertical line at x = log10(220)"]
+    Q -- "None<br/>axis is not in Hz" --> N["no markers drawn"]
+
+    classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    class H,V l
+    classDef n fill:#333,stroke:#777,color:#ddd
+    class N n
+```
+
+A spectrum slice holds **log10(Hz)** on its axis, so the layer is given the
+renderer's `x_transform`/`x_inverse` rather than assuming axis coordinates are
+frequencies. Both the drawn position and the value read back from a drag go
+through that pair, so dragging a line on the log axis stores real Hz.
+
+### Editing
+
+| Action | How |
+|---|---|
+| Add | Right-click > *Frequency markers* > *Add marker at N Hz*, or *Add marker at...* to type one |
+| Move | Drag the line, or right-click it > *Move N Hz to...* |
+| Remove | Right-click the line > *Remove N Hz*, or *Remove all* |
+
+The menu is rebuilt each time it opens, because its entries depend on where the
+click landed — `DirectionalViewBox.raiseContextMenu` records that point, since
+an action runs long after the click that opened the menu.
+
+`_rebuild` reuses the existing lines and only creates or removes them when the
+count changes. Replacing the line the user just let go of would otherwise
+destroy an item mid-interaction. An `_applying` guard stops `setValue` during a
+rebuild from looping back into the store through the drag signal.
