@@ -40,6 +40,9 @@ class PlotConfig:
     trail_time: float = 3.0
     #: Draw the spectrogram behind the curves. TIME_SCATTER only.
     spectrogram: bool = False
+    #: Give each series on the multi-valued axis its own scale, instead of
+    #: sharing one. Only meaningful when that axis holds more than one series.
+    separate_axes: bool = False
     point_size: int = DEFAULT_POINT_SIZE
     #: Explicit axis ranges; None means "use the series' default range".
     x_range: Optional[Tuple[float, float]] = None
@@ -178,6 +181,22 @@ class PlotConfig:
         """Colouring by a third dimension needs exactly one series per axis."""
         return len(self.x) == 1 and len(self.y) == 1
 
+    def multi_axis(self) -> Optional[str]:
+        """The axis holding several series, if either does.
+
+        Only one axis can, so this also says which axis could be split into one
+        scale per series.
+        """
+        if len(self.x) > 1:
+            return 'x'
+        if len(self.y) > 1:
+            return 'y'
+        return None
+
+    def separate_axes_allowed(self) -> bool:
+        """Separate scales only mean anything with several series to separate."""
+        return self.multi_axis() is not None
+
     # --- Validation ------------------------------------------------------
 
     def normalised(self) -> "PlotConfig":
@@ -232,6 +251,8 @@ class PlotConfig:
         if spectrogram and not probe.spectrogram_allowed():
             spectrogram = False
 
+        separate_axes = bool(self.separate_axes) and probe.separate_axes_allowed()
+
         if colour is not None:
             spec = Registry.get(colour)
             usable = spec is not None and (spec.is_signal or colour in _extra_colour_keys(kind))
@@ -249,6 +270,7 @@ class PlotConfig:
             x=x, y=y, colour=colour,
             trail_time=trail,
             spectrogram=spectrogram,
+            separate_axes=separate_axes,
             point_size=int(self.point_size or DEFAULT_POINT_SIZE),
             x_range=tuple(self.x_range) if self.x_range else None,
             y_range=tuple(self.y_range) if self.y_range else None,
@@ -266,6 +288,7 @@ class PlotConfig:
             "colour": self.colour,
             "trail_time": self.trail_time,
             "spectrogram": self.spectrogram,
+            "separate_axes": self.separate_axes,
             "local_size": int(self.point_size),
         }
         if self.x_range is not None:
@@ -314,6 +337,7 @@ class PlotConfig:
                 colour=entry.get("colour"),
                 trail_time=entry.get("trail_time", 3.0),
                 spectrogram=bool(entry.get("spectrogram", False)),
+                separate_axes=bool(entry.get("separate_axes", False)),
                 point_size=int(size or default_point_size),
                 x_range=_as_range(entry.get("x_range")),
                 y_range=_as_range(entry.get("y_range")),

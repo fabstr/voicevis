@@ -26,19 +26,25 @@ class MultiSeriesSelector(QtWidgets.QToolButton):
 
     selection_changed = QtCore.pyqtSignal(list)
 
-    def __init__(self, specs, allow_multi=True, allow_none=False, prefix="", parent=None):
+    def __init__(self, specs, allow_multi=True, allow_none=False, prefix="",
+                 vertical=False, parent=None):
         super().__init__(parent)
         self._specs = list(specs)
         self._allow_multi = allow_multi
         self._allow_none = allow_none
         self._prefix = prefix
+        self._vertical = vertical
         self._selection = []
         self._emitting = True
 
         self.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
         self.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred,
-                           QtWidgets.QSizePolicy.Policy.Fixed)
+        if vertical:
+            self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed,
+                               QtWidgets.QSizePolicy.Policy.Preferred)
+        else:
+            self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred,
+                               QtWidgets.QSizePolicy.Policy.Fixed)
 
         menu = _CheckableMenu(self) if allow_multi else QtWidgets.QMenu(self)
         self._actions = {}
@@ -100,11 +106,53 @@ class MultiSeriesSelector(QtWidgets.QToolButton):
 
     # --- Presentation ----------------------------------------------------
 
+    def set_display_text(self, text):
+        """Show ``text`` instead of the derived list of series names.
+
+        Used where the selector stands in for an axis label, so it reads
+        "Pitch (Hz)" rather than "Pitch".
+        """
+        self._display_text = text
+        self._update_text()
+
     def _update_text(self):
-        labels = [s.label for s in self._specs if s.key in self._selection]
-        text = ", ".join(labels) if labels else NONE_LABEL
-        self.setText(f"{self._prefix}{text}" if self._prefix else text)
+        if getattr(self, "_display_text", None):
+            self.setText(self._display_text)
+        else:
+            labels = [s.label for s in self._specs if s.key in self._selection]
+            text = ", ".join(labels) if labels else NONE_LABEL
+            self.setText(f"{self._prefix}{text}" if self._prefix else text)
         self.setToolTip(self.text())
+
+    # --- Vertical drawing ------------------------------------------------
+    # Only the painting is rotated; the widget keeps an ordinary rectangle, so
+    # clicks, the menu and layouts all behave normally.
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        return hint.transposed() if self._vertical else hint
+
+    def minimumSizeHint(self):
+        # QToolButton's minimumSizeHint defers to sizeHint, which is already
+        # transposed above -- transposing again would undo it.
+        if self._vertical:
+            return self.sizeHint()
+        return super().minimumSizeHint()
+
+    def paintEvent(self, event):
+        if not self._vertical:
+            super().paintEvent(event)
+            return
+
+        painter = QtWidgets.QStylePainter(self)
+        # Read bottom-to-top, the usual direction for a Y axis label.
+        painter.rotate(-90)
+        painter.translate(-self.height(), 0)
+
+        option = QtWidgets.QStyleOptionToolButton()
+        self.initStyleOption(option)
+        option.rect = option.rect.transposed()
+        painter.drawComplexControl(QtWidgets.QStyle.ComplexControl.CC_ToolButton, option)
 
     def set_available(self, keys):
         """Grey out every series not in ``keys``."""

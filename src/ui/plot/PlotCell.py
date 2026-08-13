@@ -13,8 +13,9 @@ from ui.plot.DirectionalViewBox import DirectionalViewBox
 from ui.plot.FrequencyMarkers import MARKERS, MAX_HZ, MIN_HZ
 from ui.plot.PlotConfig import PlotConfig, PlotKind
 from ui.plot.PlotTheme import PlotTheme
-from ui.plot.SeriesSelectorBar import SeriesSelectorBar
+from ui.plot.PlotControls import PlotControls
 from ui.plot.layers.FrequencyMarkerLayer import FrequencyMarkerLayer, format_hz
+from ui.plot.layers.MultiAxisLayer import MultiAxisLayer
 from ui.plot.layers.SpectrogramBackground import SpectrogramBackground
 from ui.plot.layers.TargetBandLayer import TargetBandLayer
 from ui.plot.renderers.SpectrumSliceRenderer import SpectrumSliceRenderer
@@ -71,20 +72,18 @@ class PlotCell(QtWidgets.QFrame):
         self.spectrogram = SpectrogramBackground(self.plot_item)
         self.targets = TargetBandLayer(self.plot_item)
         self.markers = FrequencyMarkerLayer(self.plot_item)
+        self.axes = MultiAxisLayer(self.plot_item)
         MARKERS.changed.connect(self.markers.refresh)
 
         self.renderer = None
 
-        self.bar = SeriesSelectorBar(self.config)
-        self.bar.config_changed.connect(self._on_bar_changed)
+        self.controls = PlotControls(self.config, parent=self)
+        self.controls.config_changed.connect(self._on_controls_changed)
 
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(2)
-        layout.addWidget(self.bar)
-        layout.addWidget(self.plot_widget, stretch=1)
+        self._build_layout()
 
         self.plot_widget.scene().sigMouseClicked.connect(self._on_scene_clicked)
+
         self._build_marker_menu()
 
         self._build_renderer()
@@ -92,6 +91,32 @@ class PlotCell(QtWidgets.QFrame):
         self._sync_to_config()
         self.reset_zoom()
         self.apply_theme()
+
+    def _build_layout(self):
+        """Put the axis pickers where the axis labels would be.
+
+            [Y label v]  |  plot            [menu v]
+                         |  [X label v]
+
+        pyqtgraph's own axis labels stay empty: the pickers say the same thing
+        and can be clicked.
+        """
+        grid = QtWidgets.QGridLayout(self)
+        grid.setContentsMargins(5, 5, 5, 5)
+        grid.setSpacing(2)
+
+        left = QtCore.Qt.AlignmentFlag.AlignLeft
+        centre_v = QtCore.Qt.AlignmentFlag.AlignVCenter
+        centre_h = QtCore.Qt.AlignmentFlag.AlignHCenter
+
+        grid.addWidget(self.controls.y_selector, 0, 0, alignment=left | centre_v)
+        grid.addWidget(self.plot_widget, 0, 1)
+        grid.addWidget(self.controls.options_button, 0, 2,
+                       alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+        grid.addWidget(self.controls.x_selector, 1, 1, alignment=centre_h)
+
+        grid.setColumnStretch(1, 1)
+        grid.setRowStretch(0, 1)
 
     # --- Convenience -----------------------------------------------------
 
@@ -114,10 +139,10 @@ class PlotCell(QtWidgets.QFrame):
 
     # --- Configuration ---------------------------------------------------
 
-    def _on_bar_changed(self, config: PlotConfig):
-        self.apply_config(config, from_bar=True)
+    def _on_controls_changed(self, config: PlotConfig):
+        self.apply_config(config, from_controls=True)
 
-    def apply_config(self, config: PlotConfig, from_bar=False):
+    def apply_config(self, config: PlotConfig, from_controls=False):
         """Adopt a new configuration in place, keeping the widget alive."""
         config = config.normalised()
         previous = self.config
@@ -127,13 +152,16 @@ class PlotCell(QtWidgets.QFrame):
         transposed = config.time_on_y is not previous.time_on_y
         self.config = config
 
-        if not from_bar:
-            self.bar.set_config(config)
+        if not from_controls:
+            self.controls.set_config(config)
 
         if kind_changed or transposed or self.renderer is None:
             self._build_renderer()
             self._apply_axes()
         else:
+            # set_config recreates the items, so give them back to the
+            # main view box before they are replaced.
+            self.axes.clear()
             self.renderer.set_config(config)
 
         self._sync_to_config()
@@ -156,6 +184,7 @@ class PlotCell(QtWidgets.QFrame):
         if self._target_config is not None:
             self.targets.update(self._target_config)
         self._sync_markers()
+        self._sync_axes()
         self._apply_labels()
         self.renderer.set_point_size(config.point_size)
         self.refresh_spectrogram()
@@ -172,7 +201,15 @@ class PlotCell(QtWidgets.QFrame):
         else:
             self.markers.set_axis(axis)
 
+    def _sync_axes(self):
+        """Split the multi-valued axis into one scale per series, or undo it."""
+        specs = (self.config.x_specs() if self.config.multi_axis() == 'x'
+                 else self.config.y_specs())
+        self.axes.apply(self.renderer.items, specs, self.config.multi_axis(),
+                        self.config.separate_axes, self.hub)
+
     def _build_renderer(self):
+        self.axes.clear()
         if self.renderer is not None:
             self.renderer.detach()
         self.renderer = RENDERERS[self.config.kind](self.plot_item, self.config, self.hub)
@@ -185,8 +222,7 @@ class PlotCell(QtWidgets.QFrame):
         self.apply_theme()
 
     def _apply_labels(self):
-        self.plot_widget.setLabel('bottom', self.config.x_axis_label())
-        self.plot_widget.setLabel('left', self.config.y_axis_label())
+        # The axis pickers carry the labels, so pyqtgraph's own stay empty.
         self.plot_item.setTitle(self.config.title())
 
     # --- Data and time ---------------------------------------------------
@@ -211,13 +247,15 @@ class PlotCell(QtWidgets.QFrame):
     def refresh_colours(self):
         """Redraw after the series palette changed. Leaves the config and zoom alone."""
         if self.renderer is not None:
+            self.axes.clear()
             self.renderer.rebuild()
+            self._sync_axes()
             self.renderer.set_point_size(self.config.point_size)
             self.renderer.on_time_changed(self.hub.current_time)
 
     def set_point_size(self, size: int):
         self.config.point_size = int(size)
-        self.bar.set_point_size(size)
+        self.controls.set_point_size(size)
         self.renderer.set_point_size(int(size))
 
     def set_tool_mode(self, mode):
@@ -228,6 +266,12 @@ class PlotCell(QtWidgets.QFrame):
         self.targets.update(target_config)
 
     def reset_zoom(self):
+        # With separate axes each series owns its own scale, so the layer
+        # restores them all rather than one shared range.
+        if self.axes.active:
+            self.axes.reset_ranges()
+            return
+
         # The sync group owns the time axis and resets every time plot together,
         # so only restore the axis it does not drive.
         time_axis = self.config.time_axis if self.follows_time_axis else None
@@ -247,7 +291,9 @@ class PlotCell(QtWidgets.QFrame):
         theme = PlotTheme.from_palette()
         theme.apply_to_plot(self.plot_widget, self.config.title())
         self.setStyleSheet(theme.container_stylesheet(CONTAINER_NAME))
-        self.bar.setStyleSheet(theme.input_stylesheet())
+        for widget in self.controls.widgets():
+            widget.setStyleSheet(theme.input_stylesheet())
+        self.axes.apply_theme(theme)
         self.playhead.setPen(theme.playhead_pen())
         if self.renderer is not None:
             self.renderer.apply_theme(theme)
@@ -362,6 +408,7 @@ class PlotCell(QtWidgets.QFrame):
     def dispose(self):
         """Release plot items before the widget is destroyed."""
         self.clear_annotation_markers()
+        self.axes.clear()
         try:
             MARKERS.changed.disconnect(self.markers.refresh)
         except TypeError:

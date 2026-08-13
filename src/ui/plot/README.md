@@ -43,12 +43,13 @@ graph TD
     AW --> SYNC["TimeAxisSyncGroup<br/><i>the shared X range</i>"]
     AW --> CELLS["PlotCell &times; N"]
 
-    CELLS --> BAR["SeriesSelectorBar<br/><i>X / Y / Colour / trail / size</i>"]
+    CELLS --> BAR["PlotControls<br/><i>axis pickers + options menu</i>"]
     CELLS --> PW["pg.PlotWidget<br/>+ DirectionalViewBox"]
     CELLS --> REND["PlotRenderer<br/><i>swappable</i>"]
     CELLS --> SPEC["SpectrogramBackground"]
     CELLS --> TB["TargetBandLayer"]
     CELLS --> FM["FrequencyMarkerLayer"]
+    CELLS --> MA["MultiAxisLayer"]
     CELLS --> PH["playhead<br/><i>InfiniteLine</i>"]
 
     MK["FrequencyMarkers<br/><i>shared markers</i>"] -.changed.-> FM
@@ -62,7 +63,7 @@ graph TD
     classDef owned fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
     classDef state fill:#3d3050,stroke:#a98ac8,color:#e8eef5
     class HUB,SYNC,MK state
-    class BAR,PW,REND,SPEC,TB,FM,PH owned
+    class BAR,PW,REND,SPEC,TB,FM,MA,PH owned
 ```
 
 `PlotDataHub` and `TimeAxisSyncGroup` are shared by every cell. Everything under
@@ -134,10 +135,60 @@ renderable. It is applied on construction, on every edit and on every load.
 | An empty value axis is legal only with `spectrogram` | Otherwise the plot would be blank |
 | `trail_time` is clamped to 0–60 s | |
 
-The selector bar enforces the same rules *visibly*: when picking several X
-series forces Y down to one, the Y button updates so the reduction is seen
-rather than silently applied. Controls that cannot apply are disabled with a
-tooltip saying why, instead of being hidden or silently ignored.
+`PlotControls` enforces the same rules *visibly*: when picking several X series
+forces Y down to one, the Y button updates so the reduction is seen rather than
+silently applied. Controls that cannot apply are disabled with a tooltip saying
+why, instead of being hidden or silently ignored.
+
+---
+
+## The controls around a plot
+
+```
+   [Y label v] |  plot                     [=]
+               |  [X label v]
+```
+
+**The axis pickers are the axis labels.** They sit where pyqtgraph would have
+drawn "Pitch (Hz)", carry exactly that text, and open the series list when
+clicked. pyqtgraph's own labels stay empty so the two cannot disagree.
+
+The Y picker is drawn on its side, reading bottom-to-top like a conventional
+axis label. Only the *painting* is rotated -- the widget keeps an ordinary
+rectangle, so clicks, its menu and the layout all behave normally. Its size hint
+is transposed; `minimumSizeHint` must then return that hint rather than
+transposing again, since `QToolButton` derives one from the other.
+
+Everything else lives in one options menu in the corner, keeping the space for
+the plot itself:
+
+| Entry | |
+|---|---|
+| Colour | Submenu of the series that may drive the colour dimension |
+| Spectrogram | Background image; disabled unless the value axis is in Hz |
+| Separate axis per series | See below; disabled with one series |
+| Trail (s) | Only shown on a trail plot |
+| Point size | The per-plot size slider |
+
+`PlotControls` is a controller, not a widget: it owns the controls and the rules
+they obey, and `PlotCell` decides where each one goes.
+
+### Shared or separate axes
+
+Several series on one axis normally share a range wide enough for all of them,
+which squashes the smallest. `separate_axes` gives each its own scale, drawn as
+an extra axis alongside — to the right normally, above on a transposed plot.
+
+Each axis is then scaled to **its own data**, not to the registry range: F1, F2
+and F3 all declare 0–3500, so falling back to those would make the option look
+like it did nothing.
+
+The extra axes are ordinary view boxes stacked over the plot's own and linked on
+the axis that was *not* split, so panning and zooming time still moves
+everything together. Moving an item between view boxes needs care: it is briefly
+parentless, and pyqtgraph reacts by asking it to redraw, which with clipping on
+raises `AttributeError: autoRangeEnabled`. `MultiAxisLayer._move` switches
+clipping and downsampling off across the move.
 
 ---
 
@@ -386,8 +437,9 @@ memory, and written back in the current schema.
 | `PlotConfig.py` | What a plot shows; derives the kind; validates |
 | `PlotCell.py` | The widget: bar + plot + renderer + layers; the only construction path |
 | `PlotDataHub.py` | Owns the data and the clock; the only live-append path |
-| `SeriesSelectorBar.py` | The X / Y / Colour / spectrogram / trail / size controls |
+| `PlotControls.py` | The axis pickers and the options menu |
 | `MultiSeriesSelector.py` | A drop-down that can check several series at once |
+| `layers/MultiAxisLayer.py` | One scale per series instead of a shared axis |
 | `TimeAxisSyncGroup.py` | The shared X range and the playhead-following behaviour |
 | `DirectionalViewBox.py` | Pan, single-axis zoom, measure |
 | `ScatterItem.py` | A scatter that tolerates `PlotItem`'s curve-wide settings |
