@@ -72,6 +72,10 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.layout = None
         self.timer = None
         self.menu_bar = None
+        #: (action, qtawesome name) for every menu entry, so a change of colour
+        #: scheme can redraw the lot.
+        self._icon_actions = []
+        self._icon_colour = self.palette().color(QtGui.QPalette.ColorRole.WindowText)
         self.theme_group = None
         self.action_os_default = None
         self.action_light = None
@@ -307,17 +311,47 @@ class AnalysisWidget(QtWidgets.QWidget):
             action.toggled.connect(on_toggle)
         return action
 
+    def _menu_action(self, menu, text, icon_name, on_trigger=None, shortcut=None,
+                     checkable=False):
+        """A menu entry with an icon that survives a change of colour scheme.
+
+        The icon name is remembered rather than the icon, so ``_make_icons``
+        can redraw every one of them in the new text colour.
+        """
+        action = QtGui.QAction(text, self)
+        if shortcut is not None:
+            action.setShortcut(shortcut)
+        if checkable:
+            action.setCheckable(True)
+        if on_trigger is not None:
+            action.triggered.connect(lambda _checked: on_trigger())
+
+        self._icon_actions.append((action, icon_name))
+        action.setIcon(qta.icon(icon_name, color=self._icon_colour))
+
+        menu.addAction(action)
+        return action
+
+    def _apply_menu_icons(self, colour):
+        for action, icon_name in self._icon_actions:
+            action.setIcon(qta.icon(icon_name, color=colour))
+
     def setupMenu(self):
         self.menu_bar = QtWidgets.QMenuBar(self)
 
         # --- File Menu ---
         file_menu = self.menu_bar.addMenu("&File")
-        file_menu.addAction("&New", "Ctrl+N", self.new_session_signal.emit)
-        file_menu.addAction("&Open", "Ctrl+O", self.browse_file)
-        file_menu.addAction("&Save Annotations", "Ctrl+S", self.save_annotations)
-        file_menu.addAction("Save &Audio As...", "Ctrl+Shift+S", self.save_audio)
+        self._menu_action(file_menu, "&New", 'fa5s.file',
+                          self.new_session_signal.emit, "Ctrl+N")
+        self._menu_action(file_menu, "&Open", 'fa5s.folder-open',
+                          self.browse_file, "Ctrl+O")
+        self._menu_action(file_menu, "&Save Annotations", 'fa5s.save',
+                          self.save_annotations, "Ctrl+S")
+        self._menu_action(file_menu, "Save &Audio As...", 'fa5s.file-audio',
+                          self.save_audio, "Ctrl+Shift+S")
         file_menu.addSeparator()
-        file_menu.addAction("&Close", "Ctrl+W", self.close_session_signal.emit)
+        self._menu_action(file_menu, "&Close", 'fa5s.window-close',
+                          self.close_session_signal.emit, "Ctrl+W")
 
         # --- Edit Menu ---
         edit_menu = self.menu_bar.addMenu("&Edit")
@@ -335,62 +369,66 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         # --- Targets Menu ---
         targets_menu = self.menu_bar.addMenu("&Targets")
-        targets_menu.addAction("Set Targets...", self.open_targets_dialog)
+        self._menu_action(targets_menu, "Set Targets...", 'fa5s.bullseye',
+                          self.open_targets_dialog)
         targets_menu.addSeparator()
-        targets_menu.addAction("Female", lambda: self.load_targets_from_path("targets/target_female.json"))
-        targets_menu.addAction("Male", lambda: self.load_targets_from_path("targets/target_male.json"))
+        self._menu_action(targets_menu, "Female", 'fa5s.venus',
+                          lambda: self.load_targets_from_path("targets/target_female.json"))
+        self._menu_action(targets_menu, "Male", 'fa5s.mars',
+                          lambda: self.load_targets_from_path("targets/target_male.json"))
         targets_menu.addSeparator()
-        targets_menu.addAction("Import targets...", self.import_targets)
-        targets_menu.addAction("Export targets...", self.export_targets)
+        self._menu_action(targets_menu, "Import targets...", 'fa5s.file-import',
+                          self.import_targets)
+        self._menu_action(targets_menu, "Export targets...", 'fa5s.file-export',
+                          self.export_targets)
 
         # --- View Menu ---
         view_menu = self.menu_bar.addMenu("&View")
 
-        reset_plots_action = view_menu.addAction("Reset plot spacing")
-        reset_plots_action.triggered.connect(self.handle_reset_plots)
-
-        view_menu.addAction("Series colours...", self.open_series_colour_dialog)
-
-        view_menu.addSeparator()
-
-        sample_texts_action = view_menu.addAction("Sample Texts")
-        sample_texts_action.triggered.connect(self.show_sample_text_window)
+        self._menu_action(view_menu, "Reset plot spacing", 'fa5s.th-large',
+                          self.handle_reset_plots)
+        self._menu_action(view_menu, "Series colours...", 'fa5s.palette',
+                          self.open_series_colour_dialog)
 
         view_menu.addSeparator()
 
+        self._menu_action(view_menu, "Sample Texts", 'fa5s.font',
+                          self.show_sample_text_window)
 
-        view_menu.addAction("Load simple layout", lambda: self.load_layout_from_file(self.resource_manager.get_absolute_path("layouts/layout_simple.json")))
-        view_menu.addAction("Load medium layout", lambda: self.load_layout_from_file(self.resource_manager.get_absolute_path("layouts/layout_medium.json")))
-        view_menu.addAction("Load advanced layout", lambda: self.load_layout_from_file(self.resource_manager.get_absolute_path("layouts/layout_advanced.json")))
+        view_menu.addSeparator()
 
-        view_menu.addAction("Load Layout...", self.load_layout)
-        view_menu.addAction("Save Layout...", self.save_layout)
+        layouts = self.resource_manager.get_absolute_path
+        self._menu_action(view_menu, "Load simple layout", 'mdi6.view-agenda-outline',
+                          lambda: self.load_layout_from_file(layouts("layouts/layout_simple.json")))
+        self._menu_action(view_menu, "Load medium layout", 'mdi6.view-grid-outline',
+                          lambda: self.load_layout_from_file(layouts("layouts/layout_medium.json")))
+        self._menu_action(view_menu, "Load advanced layout", 'mdi6.view-dashboard-outline',
+                          lambda: self.load_layout_from_file(layouts("layouts/layout_advanced.json")))
+
+        self._menu_action(view_menu, "Load Layout...", 'fa5s.folder-open', self.load_layout)
+        self._menu_action(view_menu, "Save Layout...", 'fa5s.save', self.save_layout)
         view_menu.addSeparator()
 
         self.theme_group = QtGui.QActionGroup(self)
         self.theme_group.setExclusive(True)
 
-        self.action_os_default = QtGui.QAction("Colour scheme: OS Default", self, checkable=True)
-        self.action_light = QtGui.QAction("Colour scheme: Light Mode", self, checkable=True)
-        self.action_dark = QtGui.QAction("Colour scheme: Dark Mode", self, checkable=True)
+        self.action_os_default = self._menu_action(
+            view_menu, "Colour scheme: OS Default", 'fa5s.desktop',
+            self.set_theme_os_default, checkable=True)
+        self.action_light = self._menu_action(
+            view_menu, "Colour scheme: Light Mode", 'fa5s.sun',
+            self.set_theme_light, checkable=True)
+        self.action_dark = self._menu_action(
+            view_menu, "Colour scheme: Dark Mode", 'fa5s.moon',
+            self.set_theme_dark, checkable=True)
 
-        self.theme_group.addAction(self.action_os_default)
-        self.theme_group.addAction(self.action_light)
-        self.theme_group.addAction(self.action_dark)
-
-        self.action_os_default.triggered.connect(self.set_theme_os_default)
-        self.action_light.triggered.connect(self.set_theme_light)
-        self.action_dark.triggered.connect(self.set_theme_dark)
-
-        view_menu.addAction(self.action_os_default)
-        view_menu.addAction(self.action_light)
-        view_menu.addAction(self.action_dark)
+        for action in (self.action_os_default, self.action_light, self.action_dark):
+            self.theme_group.addAction(action)
         self.action_os_default.setChecked(True)
 
         help_menu = self.menu_bar.addMenu("Help")
-        open_help_action = help_menu.addAction("Documentation")
-        open_help_action.setShortcut("F1")
-        open_help_action.triggered.connect(self.show_help_window)
+        self._menu_action(help_menu, "Documentation", 'fa5s.book',
+                          self.show_help_window, "F1")
 
         self.layout.setMenuBar(self.menu_bar)
 
@@ -487,6 +525,9 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.layout.addWidget(self.toolbar)
 
     def _make_icons(self, colour):
+        self._icon_colour = colour
+        self._apply_menu_icons(colour)
+
         self.record_icon = qta.icon('fa5s.microphone', color=colour)
         self.stop_icon = qta.icon('fa5s.stop', color=colour)
         self.play_icon = qta.icon('fa5s.play', color=colour)
