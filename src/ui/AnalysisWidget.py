@@ -19,6 +19,7 @@ from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, Targe
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
 from ui.HelpWindow import HelpWindow
+from ui.ResponsiveToolBar import ResponsiveToolBar, ToolbarGroup
 from ui.SeriesColourDialog import SeriesColourDialog
 from ui.TargetConfigDialog import TargetConfigDialog
 from workers.AnalysisWorker import AnalysisWorker
@@ -301,160 +302,83 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.layout.setMenuBar(self.menu_bar)
 
     def setupControlButtons(self):
-        top_buttons_layout = QtWidgets.QHBoxLayout()
+        """Build the toolbar as groups that fold into dropdowns when narrow."""
+        icon_color = self.palette().color(QtGui.QPalette.ColorRole.WindowText)
+        self._make_icons(icon_color)
 
-        palette = self.palette()
-        icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
+        self.toolbar = ResponsiveToolBar()
 
-        self.record_icon = qta.icon('fa5s.microphone', color=icon_color)
-        self.stop_icon = qta.icon('fa5s.stop', color=icon_color)
-        self.play_icon = qta.icon('fa5s.play', color=icon_color)
-        self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
-        self.save_icon = qta.icon('fa5s.save', color=icon_color)
-        self.clear_icon = qta.icon('fa5s.trash', color=icon_color)
-        self.reset_zoom_icon = qta.icon('fa6s.maximize', color=icon_color)
+        # --- Transport: never folds away, it is what the app is for.
+        self.record_start_stop_btn = self._tool_button(
+            self.record_icon, "Record", self.handle_start_record_stop)
+        self.playback_btn = self._tool_button(
+            self.play_icon, "Play/Pause", self.handle_playback)
+        self.clear_btn = self._tool_button(self.clear_icon, "Clear", self.handle_clear)
 
-        self.zoom_x_icon = qta.icon('fa5s.arrows-alt-h', color=icon_color)
-        self.zoom_y_icon = qta.icon('fa5s.arrows-alt-v', color=icon_color)
-        self.measure_icon = qta.icon('fa5s.ruler-combined', color=icon_color)
+        transport = ToolbarGroup("Transport", collapsible=False)
+        transport.add(self.record_start_stop_btn, self.playback_btn, self.clear_btn)
+        self.toolbar.add_group(transport)
 
-        self.record_start_stop_btn = QtWidgets.QPushButton()
-        self.record_start_stop_btn.setFixedSize(40, 40)
-        self.record_start_stop_btn.setIcon(self.record_icon)
-        self.record_start_stop_btn.setIconSize(QtCore.QSize(20, 20))
-        self.record_start_stop_btn.setToolTip("Record")
-        self.record_start_stop_btn.clicked.connect(self.handle_start_record_stop)
-        top_buttons_layout.addWidget(self.record_start_stop_btn)
+        # --- View tools
+        self.reset_zoom_btn = self._tool_button(
+            self.reset_zoom_icon, "Reset zoom", self.handle_reset_zoom)
+        self.btn_zoom_x = self._tool_button(
+            self.zoom_x_icon, "Zoom X-Axis", checkable=True,
+            on_toggle=lambda c: self.handle_tool_toggle('zoom_x', c))
+        self.btn_zoom_y = self._tool_button(
+            self.zoom_y_icon, "Zoom Y-Axis", checkable=True,
+            on_toggle=lambda c: self.handle_tool_toggle('zoom_y', c))
+        self.btn_measure = self._tool_button(
+            self.measure_icon, "Measure Time/Value", checkable=True,
+            on_toggle=lambda c: self.handle_tool_toggle('measure', c))
 
-        self.playback_btn = QtWidgets.QPushButton()
-        self.playback_btn.setFixedSize(40, 40)
-        self.playback_btn.setIcon(self.play_icon)
-        self.playback_btn.setIconSize(QtCore.QSize(20, 20))
-        self.playback_btn.setToolTip("Play/Pause")
-        self.playback_btn.clicked.connect(self.handle_playback)
-        top_buttons_layout.addWidget(self.playback_btn)
+        tools = ToolbarGroup("View tools", 'fa5s.search-plus')
+        tools.add(self.reset_zoom_btn, self.btn_zoom_x, self.btn_zoom_y, self.btn_measure)
+        self.toolbar.add_group(tools, collapse_priority=5)
 
-        self.clear_btn = QtWidgets.QPushButton()
-        self.clear_btn.setFixedSize(40, 40)
-        self.clear_btn.setIcon(self.clear_icon)
-        self.clear_btn.setIconSize(QtCore.QSize(20, 20))
-        self.clear_btn.setToolTip("Clear")
-        self.clear_btn.clicked.connect(self.handle_clear)
-        top_buttons_layout.addWidget(self.clear_btn)
+        self.toolbar.add_stretch()
 
-        self.reset_zoom_btn = QtWidgets.QPushButton()
-        self.reset_zoom_btn.setFixedSize(40, 40)
-        self.reset_zoom_btn.setIcon(self.reset_zoom_icon)
-        self.reset_zoom_btn.setIconSize(QtCore.QSize(20, 20))
-        self.reset_zoom_btn.setToolTip("Reset zoom")
-        self.reset_zoom_btn.clicked.connect(self.handle_reset_zoom)
-        top_buttons_layout.addWidget(self.reset_zoom_btn)
-
-        top_buttons_layout.addSpacing(10)
-
-        # Tools
-        self.btn_zoom_x = QtWidgets.QPushButton()
-        self.btn_zoom_x.setFixedSize(40, 40)
-        self.btn_zoom_x.setIcon(self.zoom_x_icon)
-        self.btn_zoom_x.setIconSize(QtCore.QSize(20, 20))
-        self.btn_zoom_x.setToolTip("Zoom X-Axis")
-        self.btn_zoom_x.setCheckable(True)
-        self.btn_zoom_x.toggled.connect(lambda c: self.handle_tool_toggle('zoom_x', c))
-        top_buttons_layout.addWidget(self.btn_zoom_x)
-
-        self.btn_zoom_y = QtWidgets.QPushButton()
-        self.btn_zoom_y.setFixedSize(40, 40)
-        self.btn_zoom_y.setIcon(self.zoom_y_icon)
-        self.btn_zoom_y.setIconSize(QtCore.QSize(20, 20))
-        self.btn_zoom_y.setToolTip("Zoom Y-Axis")
-        self.btn_zoom_y.setCheckable(True)
-        self.btn_zoom_y.toggled.connect(lambda c: self.handle_tool_toggle('zoom_y', c))
-        top_buttons_layout.addWidget(self.btn_zoom_y)
-
-        self.btn_measure = QtWidgets.QPushButton()
-        self.btn_measure.setFixedSize(40, 40)
-        self.btn_measure.setIcon(self.measure_icon)
-        self.btn_measure.setIconSize(QtCore.QSize(20, 20))
-        self.btn_measure.setToolTip("Measure Time/Value")
-        self.btn_measure.setCheckable(True)
-        self.btn_measure.toggled.connect(lambda c: self.handle_tool_toggle('measure', c))
-        top_buttons_layout.addWidget(self.btn_measure)
-
-        # --- First Stretch to push the time widget to the center ---
-        top_buttons_layout.addStretch()
-
-        # --- Time Display/Edit ---
+        # --- Time
         self.time_label = QtWidgets.QLabel("Time:")
-
         self.time_edit = QtWidgets.QLineEdit("00:00:00.000")
         self.time_edit.setFixedWidth(110)
         self.time_edit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.time_edit.returnPressed.connect(self.handle_time_edited)
 
-        # Add them directly to the main layout
-        top_buttons_layout.addWidget(self.time_label)
-        top_buttons_layout.addWidget(self.time_edit)
+        time_group = ToolbarGroup("Time", 'fa5s.clock')
+        time_group.add(self.time_label, self.time_edit)
+        self.toolbar.add_group(time_group, collapse_priority=4)
 
-        # --- Target Name Label ---
-        self.target_name_label = QtWidgets.QLabel(f"|  Target: {self.target_config.config_name}")
-        top_buttons_layout.addWidget(self.target_name_label)
+        # --- Target
+        self.target_name_label = QtWidgets.QLabel(
+            f"Target: {self.target_config.config_name}")
+        target = ToolbarGroup("Target", 'fa5s.bullseye')
+        target.add(self.target_name_label)
+        self.toolbar.add_group(target, collapse_priority=3)
 
-        # --- Second Stretch to keep the time widget centered ---
-        top_buttons_layout.addStretch()
+        self.toolbar.add_stretch()
 
-        # Row layout controls
-        # Define the icons for adding/removing
+        # --- Rows and columns
         self.add_icon = qta.icon('fa5s.plus', color=icon_color)
         self.remove_icon = qta.icon('fa5s.minus', color=icon_color)
 
-        # Row layout controls
         self.row_label = QtWidgets.QLabel("Rows:")
-        top_buttons_layout.addWidget(self.row_label)
-
-        self.add_row_btn = QtWidgets.QPushButton()
-        self.add_row_btn.setFixedSize(40, 40)
-        self.add_row_btn.setIcon(self.add_icon)
-        self.add_row_btn.setIconSize(QtCore.QSize(20, 20))
-        self.add_row_btn.setToolTip("Add row")
-        self.add_row_btn.clicked.connect(self.add_plot_row)
-        top_buttons_layout.addWidget(self.add_row_btn)
-
-        self.remove_row_btn = QtWidgets.QPushButton()
-        self.remove_row_btn.setFixedSize(40, 40)
-        self.remove_row_btn.setIcon(self.remove_icon)
-        self.remove_row_btn.setIconSize(QtCore.QSize(20, 20))
-        self.remove_row_btn.setToolTip("Remove row")
-        self.remove_row_btn.clicked.connect(self.remove_plot_row)
-        top_buttons_layout.addWidget(self.remove_row_btn)
-
-        top_buttons_layout.addSpacing(10)
-
-        # Column layout controls
+        self.add_row_btn = self._tool_button(self.add_icon, "Add row", self.add_plot_row)
+        self.remove_row_btn = self._tool_button(
+            self.remove_icon, "Remove row", self.remove_plot_row)
         self.col_label = QtWidgets.QLabel("Columns:")
-        top_buttons_layout.addWidget(self.col_label)
+        self.add_col_btn = self._tool_button(self.add_icon, "Add column", self.add_plot_column)
+        self.remove_col_btn = self._tool_button(
+            self.remove_icon, "Remove column", self.remove_plot_column)
 
-        self.add_col_btn = QtWidgets.QPushButton()
-        self.add_col_btn.setFixedSize(40, 40)
-        self.add_col_btn.setIcon(self.add_icon)
-        self.add_col_btn.setIconSize(QtCore.QSize(20, 20))
-        self.add_col_btn.setToolTip("Add column")
-        self.add_col_btn.clicked.connect(self.add_plot_column)
-        top_buttons_layout.addWidget(self.add_col_btn)
+        grid = ToolbarGroup("Rows and columns", 'fa5s.th-large')
+        grid.add(self.row_label, self.add_row_btn, self.remove_row_btn)
+        grid.add_spacing(10)
+        grid.add(self.col_label, self.add_col_btn, self.remove_col_btn)
+        self.toolbar.add_group(grid, collapse_priority=2)
 
-        self.remove_col_btn = QtWidgets.QPushButton()
-        self.remove_col_btn.setFixedSize(40, 40)
-        self.remove_col_btn.setIcon(self.remove_icon)
-        self.remove_col_btn.setIconSize(QtCore.QSize(20, 20))
-        self.remove_col_btn.setToolTip("Remove column")
-        self.remove_col_btn.clicked.connect(self.remove_plot_column)
-        top_buttons_layout.addWidget(self.remove_col_btn)
-
-        top_buttons_layout.addSpacing(10)
-
-        # Plot item size slider
+        # --- Global point size
         self.size_label = QtWidgets.QLabel("Global point size:")
-        top_buttons_layout.addWidget(self.size_label)
-
         self.size_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.size_slider.setMinimum(1)
         self.size_slider.setMaximum(5)
@@ -463,9 +387,39 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.size_slider.setTickInterval(1)
         self.size_slider.setFixedWidth(120)
         self.size_slider.valueChanged.connect(self.handle_symbol_size_change)
-        top_buttons_layout.addWidget(self.size_slider)
 
-        self.layout.addLayout(top_buttons_layout)
+        size = ToolbarGroup("Point size", 'fa5s.braille')
+        size.add(self.size_label, self.size_slider)
+        self.toolbar.add_group(size, collapse_priority=1)
+
+        self.toolbar.apply_icons(icon_color)
+        self.layout.addWidget(self.toolbar)
+
+    def _make_icons(self, colour):
+        self.record_icon = qta.icon('fa5s.microphone', color=colour)
+        self.stop_icon = qta.icon('fa5s.stop', color=colour)
+        self.play_icon = qta.icon('fa5s.play', color=colour)
+        self.pause_icon = qta.icon('fa5s.pause', color=colour)
+        self.save_icon = qta.icon('fa5s.save', color=colour)
+        self.clear_icon = qta.icon('fa5s.trash', color=colour)
+        self.reset_zoom_icon = qta.icon('fa6s.maximize', color=colour)
+        self.zoom_x_icon = qta.icon('fa5s.arrows-alt-h', color=colour)
+        self.zoom_y_icon = qta.icon('fa5s.arrows-alt-v', color=colour)
+        self.measure_icon = qta.icon('fa5s.ruler-combined', color=colour)
+
+    @staticmethod
+    def _tool_button(icon, tooltip, on_click=None, checkable=False, on_toggle=None):
+        button = QtWidgets.QPushButton()
+        button.setFixedSize(40, 40)
+        button.setIcon(icon)
+        button.setIconSize(QtCore.QSize(20, 20))
+        button.setToolTip(tooltip)
+        button.setCheckable(checkable)
+        if on_click is not None:
+            button.clicked.connect(on_click)
+        if on_toggle is not None:
+            button.toggled.connect(on_toggle)
+        return button
 
     def handle_tool_toggle(self, tool, checked):
         if checked:
@@ -624,17 +578,18 @@ class AnalysisWidget(QtWidgets.QWidget):
             palette = self.palette()
             icon_color = palette.color(QtGui.QPalette.ColorRole.WindowText)
 
-            self.record_icon = qta.icon('fa5s.microphone', color=icon_color)
-            self.stop_icon = qta.icon('fa5s.stop', color=icon_color)
-            self.play_icon = qta.icon('fa5s.play', color=icon_color)
-            self.pause_icon = qta.icon('fa5s.pause', color=icon_color)
-            self.save_icon = qta.icon('fa5s.save', color=icon_color)
-            self.clear_icon = qta.icon('fa5s.trash', color=icon_color)
-            self.reset_zoom_icon = qta.icon('fa6s.maximize', color=icon_color)
+            self._make_icons(icon_color)
+            self.add_icon = qta.icon('fa5s.plus', color=icon_color)
+            self.remove_icon = qta.icon('fa5s.minus', color=icon_color)
 
-            self.zoom_x_icon = qta.icon('fa5s.arrows-alt-h', color=icon_color)
-            self.zoom_y_icon = qta.icon('fa5s.arrows-alt-v', color=icon_color)
-            self.measure_icon = qta.icon('fa5s.ruler-combined', color=icon_color)
+            if hasattr(self, 'toolbar'):
+                self.toolbar.apply_icons(icon_color)
+            for button, icon in ((getattr(self, 'add_row_btn', None), self.add_icon),
+                                 (getattr(self, 'add_col_btn', None), self.add_icon),
+                                 (getattr(self, 'remove_row_btn', None), self.remove_icon),
+                                 (getattr(self, 'remove_col_btn', None), self.remove_icon)):
+                if button is not None:
+                    button.setIcon(icon)
 
             if hasattr(self, 'record_stop_btn'):
                 if "Record" in self.record_start_stop_btn.toolTip():
@@ -1144,7 +1099,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.audioFeatureExtractor.target_config = new_config
 
         if hasattr(self, 'target_name_label'):
-            self.target_name_label.setText(f"|  Target: {new_config.config_name}")
+            self.target_name_label.setText(f"Target: {new_config.config_name}")
 
         for cell in self.plot_cells:
             cell.update_targets(new_config)
