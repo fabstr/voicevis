@@ -15,9 +15,11 @@ import qtawesome as qta
 from ResourceManager import ResourceManager
 import SeriesRegistry as Registry
 from SeriesRegistry import DEFAULT_POINT_SIZE as defaultSize
+from signal_processing import AudioEdit
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from ui.AnnotationMarker import AnnotationMarker
+from ui.AudioHistory import AudioHistory
 from ui.HelpWindow import HelpWindow
 from ui.ResponsiveToolBar import ResponsiveToolBar, ToolbarGroup
 from ui.SeriesColourDialog import SeriesColourDialog
@@ -36,6 +38,17 @@ from ui.plot.TimeAxisSyncGroup import (MODE_IDLE, MODE_PLAYING, MODE_RECORDING,
 
 #: How long to wait for a background thread to finish when closing a session.
 WORKER_SHUTDOWN_MS = 2000
+
+#: Icons for the audio-editing tools. Both are qtawesome names, so swapping in
+#: a different look is a one-line change.
+SELECT_ICON = 'mdi6.selection-drag'
+SILENCE_ICON = 'mdi6.volume-off'
+CUT_ICON = 'fa5s.cut'
+UNDO_ICON = 'mdi6.undo'
+REDO_ICON = 'mdi6.redo'
+
+SELECT_TOOLTIP = ("Select audio: drag on a time plot to select, drag the band "
+                  "to move that audio, drag its edges to adjust")
 
 class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
@@ -73,9 +86,15 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.zoom_x_icon = None
         self.zoom_y_icon = None
         self.measure_icon = None
-        self.record_start_stop_btn = None
+        self.action_record = None
+        self.action_play = None
+        self.action_clear = None
+        self.action_select = None
+        self.action_silence = None
+        self.action_cut = None
+        self.action_undo = None
+        self.action_redo = None
         self.playback_btn = None
-        self.clear_btn = None
         self.reset_zoom_btn = None
         self.btn_zoom_x = None
         self.btn_zoom_y = None
@@ -125,6 +144,9 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         # Owns the analysed data and the display time; every plot reads through it.
         self.hub = PlotDataHub()
+        self.hub.selection.changed.connect(self._on_selection_changed)
+        self.history = AudioHistory(self)
+        self.history.changed.connect(self._on_history_changed)
         self.sync_group = TimeAxisSyncGroup(self)
 
         self.annotations = []
@@ -220,6 +242,9 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.setAcceptDrops(True)
         self.layout = QtWidgets.QVBoxLayout(self)
 
+        # Icons first: both the menu and the toolbar are built from them.
+        self._make_icons(self.palette().color(QtGui.QPalette.ColorRole.WindowText))
+        self.setupEditActions()
         self.setupMenu()
         self.setupControlButtons()
         self.setupPlots()
@@ -227,6 +252,60 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.timer = QtCore.QTimer()
         self.timer.setInterval(33)
         self.timer.timeout.connect(self._on_frame_tick)
+
+    def setupEditActions(self):
+        """The transport and audio-editing commands, as menu actions.
+
+        They live in the Edit menu rather than the toolbar, which leaves the
+        toolbar for the view controls. Record and play swap icon and text as
+        they toggle, so the menu reads as what pressing it will do next.
+        """
+
+
+        self.action_undo = self._action(
+            self.undo_icon, "&Undo", self.handle_undo,
+            shortcut=QtGui.QKeySequence.StandardKey.Undo)
+        self.action_redo = self._action(
+            self.redo_icon, "&Redo", self.handle_redo,
+            shortcut=QtGui.QKeySequence.StandardKey.Redo)
+
+        self.action_record = self._action(
+            self.record_icon, "&Record\tR", self.handle_start_record_stop)
+        self.action_play = self._action(
+            self.play_icon, "&Play\tSpace", self.handle_playback)
+        self.action_play.setToolTip("Play (Space)")
+        self.action_clear = self._action(
+            self.clear_icon, "C&lear\tD", self.handle_clear)
+
+        self.action_select = self._action(
+            self.select_icon, "&Select Audio", checkable=True,
+            on_toggle=lambda c: self.handle_tool_toggle('select', c))
+        self.action_select.setToolTip(SELECT_TOOLTIP)
+        self.action_silence = self._action(
+            self.silence_icon, "Replace with Si&lence", self.handle_silence_selection)
+        self.action_cut = self._action(
+            self.cut_icon, "C&ut Selection", self.handle_cut_selection)
+
+        for action in (self.action_silence, self.action_cut,
+                       self.action_undo, self.action_redo):
+            action.setEnabled(False)
+
+        # Shortcuts on menu actions only fire while the menu bar's window has
+        # focus unless they are also added to the widget itself.
+        self.addActions([self.action_undo, self.action_redo])
+
+    def _action(self, icon, text, on_trigger=None, shortcut=None,
+                checkable=False, on_toggle=None):
+        action = QtGui.QAction(icon, text, self)
+        if shortcut is not None:
+            action.setShortcut(shortcut)
+        if checkable:
+            action.setCheckable(True)
+        if on_trigger is not None:
+            action.triggered.connect(lambda _checked: on_trigger())
+        if on_toggle is not None:
+            action.toggled.connect(on_toggle)
+        return action
 
     def setupMenu(self):
         self.menu_bar = QtWidgets.QMenuBar(self)
@@ -239,6 +318,20 @@ class AnalysisWidget(QtWidgets.QWidget):
         file_menu.addAction("Save &Audio As...", "Ctrl+Shift+S", self.save_audio)
         file_menu.addSeparator()
         file_menu.addAction("&Close", "Ctrl+W", self.close_session_signal.emit)
+
+        # --- Edit Menu ---
+        edit_menu = self.menu_bar.addMenu("&Edit")
+        edit_menu.setToolTipsVisible(True)
+        edit_menu.addAction(self.action_record)
+        edit_menu.addAction(self.action_play)
+        edit_menu.addAction(self.action_clear)
+        edit_menu.addSeparator()
+        edit_menu.addAction(self.action_select)
+        edit_menu.addAction(self.action_silence)
+        edit_menu.addAction(self.action_cut)
+        edit_menu.addSeparator()
+        edit_menu.addAction(self.action_undo)
+        edit_menu.addAction(self.action_redo)
 
         # --- Targets Menu ---
         targets_menu = self.menu_bar.addMenu("&Targets")
@@ -304,20 +397,18 @@ class AnalysisWidget(QtWidgets.QWidget):
     def setupControlButtons(self):
         """Build the toolbar as groups that fold into dropdowns when narrow."""
         icon_color = self.palette().color(QtGui.QPalette.ColorRole.WindowText)
-        self._make_icons(icon_color)
 
         self.toolbar = ResponsiveToolBar()
 
-        # --- Transport: never folds away, it is what the app is for.
-        self.record_start_stop_btn = self._tool_button(
-            self.record_icon, "Record", self.handle_start_record_stop)
-        self.playback_btn = self._tool_button(
-            self.play_icon, "Play/Pause", self.handle_playback)
-        self.clear_btn = self._tool_button(self.clear_icon, "Clear", self.handle_clear)
+        # --- Playback: the rest of the transport lives in the Edit menu, but
+        # play/pause is reached too often to sit behind one. The button drives
+        # the menu's action, so the two never disagree about play versus pause,
+        # and its own group keeps it from folding away when the row is narrow.
+        self.playback_btn = self._action_button(self.action_play)
 
-        transport = ToolbarGroup("Transport", collapsible=False)
-        transport.add(self.record_start_stop_btn, self.playback_btn, self.clear_btn)
-        self.toolbar.add_group(transport)
+        playback = ToolbarGroup("Playback", collapsible=False)
+        playback.add(self.playback_btn)
+        self.toolbar.add_group(playback)
 
         # --- View tools
         self.reset_zoom_btn = self._tool_button(
@@ -406,6 +497,11 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.zoom_x_icon = qta.icon('fa5s.arrows-alt-h', color=colour)
         self.zoom_y_icon = qta.icon('fa5s.arrows-alt-v', color=colour)
         self.measure_icon = qta.icon('fa5s.ruler-combined', color=colour)
+        self.select_icon = qta.icon(SELECT_ICON, color=colour)
+        self.silence_icon = qta.icon(SILENCE_ICON, color=colour)
+        self.cut_icon = qta.icon(CUT_ICON, color=colour)
+        self.undo_icon = qta.icon(UNDO_ICON, color=colour)
+        self.redo_icon = qta.icon(REDO_ICON, color=colour)
 
     @staticmethod
     def _tool_button(icon, tooltip, on_click=None, checkable=False, on_toggle=None):
@@ -421,32 +517,52 @@ class AnalysisWidget(QtWidgets.QWidget):
             button.toggled.connect(on_toggle)
         return button
 
+    def _action_button(self, action):
+        """A toolbar button showing a menu action, and following it as it changes.
+
+        The action stays the single source of truth for the icon and the
+        tooltip, so play and pause cannot get out of step between the two.
+        """
+        button = self._tool_button(action.icon(), action.toolTip(), action.trigger)
+
+        def follow():
+            button.setIcon(action.icon())
+            button.setToolTip(action.toolTip())
+            button.setEnabled(action.isEnabled())
+
+        action.changed.connect(follow)
+        return button
+
+    def _tool_toggles(self):
+        """The mutually exclusive drag tools -- toolbar buttons and menu actions."""
+        return {'zoom_x': self.btn_zoom_x, 'zoom_y': self.btn_zoom_y,
+                'measure': self.btn_measure, 'select': self.action_select}
+
     def handle_tool_toggle(self, tool, checked):
+        """The drag tools are mutually exclusive; only one can own the mouse."""
         if checked:
-            if tool != 'zoom_x':
-                self.btn_zoom_x.blockSignals(True)
-                self.btn_zoom_x.setChecked(False)
-                self.btn_zoom_x.blockSignals(False)
-            if tool != 'zoom_y':
-                self.btn_zoom_y.blockSignals(True)
-                self.btn_zoom_y.setChecked(False)
-                self.btn_zoom_y.blockSignals(False)
-            if tool != 'measure':
-                self.btn_measure.blockSignals(True)
-                self.btn_measure.setChecked(False)
-                self.btn_measure.blockSignals(False)
+            for name, toggle in self._tool_toggles().items():
+                if name != tool:
+                    toggle.blockSignals(True)
+                    toggle.setChecked(False)
+                    toggle.blockSignals(False)
             self.active_tool_mode = tool
         else:
             if self.active_tool_mode == tool:
                 self.active_tool_mode = None
+            # Leaving select mode drops the selection, so an edit can never be
+            # applied to a range the user can no longer see.
+            if tool == 'select':
+                self.hub.selection.clear()
 
         if hasattr(self, 'plot_cells'):
-            for controller in self.plot_cells:
-                controller.set_tool_mode(self.active_tool_mode)
+            for cell in self.plot_cells:
+                cell.set_tool_mode(self.active_tool_mode)
 
     def setupPlots(self):
         self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        self.layout.addWidget(self.plot_splitter)
+        # Spare vertical space belongs to the plots, not the toolbar.
+        self.layout.addWidget(self.plot_splitter, stretch=1)
 
         self.plot_cells = []
         self.columns = []  # Tracks dynamic QSplitter columns
@@ -487,6 +603,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         cell.seek_requested.connect(self._on_seek_requested)
         cell.annotation_requested.connect(self._on_annotation_requested)
         cell.annotation_clicked.connect(self._on_annotation_clicked)
+        cell.audio_move_requested.connect(self.handle_audio_move)
 
         cell.set_tool_mode(self.active_tool_mode)
         cell.update_targets(self.audioFeatureExtractor.target_config)
@@ -591,20 +708,17 @@ class AnalysisWidget(QtWidgets.QWidget):
                 if button is not None:
                     button.setIcon(icon)
 
-            if hasattr(self, 'record_stop_btn'):
-                if "Record" in self.record_start_stop_btn.toolTip():
-                    self.record_start_stop_btn.setIcon(self.record_icon)
-                else:
-                    self.record_start_stop_btn.setIcon(self.stop_icon)
-
-            if hasattr(self, 'playback_btn'):
-                if "Play" in self.playback_btn.toolTip():
-                    self.playback_btn.setIcon(self.play_icon)
-                else:
-                    self.playback_btn.setIcon(self.pause_icon)
-
-            if hasattr(self, 'clear_btn'):
-                self.clear_btn.setIcon(self.clear_icon)
+            if self.action_record is not None:
+                self.action_record.setIcon(
+                    self.stop_icon if self.is_recording else self.record_icon)
+                self.action_play.setIcon(
+                    self.pause_icon if self.is_playing else self.play_icon)
+                self.action_clear.setIcon(self.clear_icon)
+                self.action_select.setIcon(self.select_icon)
+                self.action_silence.setIcon(self.silence_icon)
+                self.action_cut.setIcon(self.cut_icon)
+                self.action_undo.setIcon(self.undo_icon)
+                self.action_redo.setIcon(self.redo_icon)
 
             if hasattr(self, 'save_btn'):
                 self.save_btn.setIcon(self.save_icon)
@@ -668,6 +782,9 @@ class AnalysisWidget(QtWidgets.QWidget):
     def load_audio_to_memory(self, file_path):
         try:
             self.clear_annotations()
+            # A different recording is a different history.
+            self.history.reset()
+            self.hub.selection.clear()
             self.current_audio_file = file_path
 
             # Decode to raw PCM bytes
@@ -803,11 +920,15 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.is_recording = True
 
-        self.record_start_stop_btn.setIcon(self.stop_icon)
-        self.record_start_stop_btn.setToolTip("Stop Recording")
+        self.action_record.setIcon(self.stop_icon)
+        self.action_record.setText("Stop &Recording\tR")
 
         while not self.audio_queue.empty():
             self.audio_queue.get()
+
+        # Snapshot before capture starts: undoing a recording puts the
+        # buffer back the way it was before the microphone opened.
+        self._capture("Recording")
 
         self.recording_start_offset = self.current_playback_time
         self.hub.begin_recording()
@@ -848,8 +969,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         Separate from ``record_stop`` so that closing the window can release the
         microphone without kicking off a batch analysis nobody will see.
         """
-        self.record_start_stop_btn.setIcon(self.record_icon)
-        self.record_start_stop_btn.setToolTip("Record")
+        self.action_record.setIcon(self.record_icon)
+        self.action_record.setText("&Record\tR")
 
         self.poll_timer.stop()
         self.read_audio_chunk()
@@ -888,6 +1009,101 @@ class AnalysisWidget(QtWidgets.QWidget):
         latest_point.time += self.recording_start_offset or 0.0
         self.hub.append_snapshot(latest_point)
 
+    #################### Audio editing ####################
+
+    def _on_selection_changed(self):
+        has_audio = not self.audio_data.isEmpty()
+        editable = self.hub.selection.active and has_audio
+        self.action_silence.setEnabled(editable)
+        self.action_cut.setEnabled(editable)
+
+    def _on_history_changed(self):
+        self.action_undo.setEnabled(self.history.can_undo)
+        self.action_redo.setEnabled(self.history.can_redo)
+        # The label names what will be undone, so the menu says what it will do.
+        self.action_undo.setText(
+            f"&Undo {self.history.undo_label}" if self.history.can_undo else "&Undo")
+        self.action_redo.setText(
+            f"&Redo {self.history.redo_label}" if self.history.can_redo else "&Redo")
+
+    def _capture(self, label):
+        """Remember the current audio so this action can be undone."""
+        self.history.capture(self.audio_data, self.current_audio_file, label)
+
+    def handle_silence_selection(self):
+        """Replace the selected audio with silence, keeping the timeline length."""
+        selection = self.hub.selection
+        if not selection.active:
+            return
+
+        self._capture("Silence")
+        if AudioEdit.silence(self.audio_data, selection.start, selection.end,
+                             self.sampling_rate):
+            self._after_audio_edit()
+
+    def handle_cut_selection(self):
+        """Cut the selected audio out, closing the gap."""
+        selection = self.hub.selection
+        if not selection.active:
+            return
+
+        self._capture("Cut")
+        if AudioEdit.cut(self.audio_data, selection.start, selection.end,
+                         self.sampling_rate):
+            # Everything after the cut has shifted; the old range no longer
+            # describes the same audio, so the selection goes with it.
+            selection.clear()
+            self._after_audio_edit()
+
+    def handle_audio_move(self, delta_seconds: float):
+        """Move the selected audio, overwriting whatever it lands on."""
+        selection = self.hub.selection
+        if not selection.active or not delta_seconds:
+            return
+
+        self._capture("Move")
+        if AudioEdit.move(self.audio_data, selection.start, selection.end,
+                          delta_seconds, self.sampling_rate):
+            selection.shift(delta_seconds)
+            self._after_audio_edit()
+        else:
+            # Nothing moved; put the band back where the audio still is.
+            self.hub.selection.changed.emit()
+
+    def handle_undo(self):
+        self._step_history(self.history.undo)
+
+    def handle_redo(self):
+        self._step_history(self.history.redo)
+
+    def _step_history(self, step):
+        if self.is_recording:
+            self.record_stop()
+
+        entry = step(self.audio_data, self.current_audio_file)
+        if entry is None:
+            return
+
+        self.audio_data.clear()
+        self.audio_data.append(entry.audio)
+        self.current_audio_file = entry.audio_file
+        self.hub.selection.clear()
+        self._after_audio_edit()
+
+    def _after_audio_edit(self):
+        """Re-analyse, the same way finishing a recording does."""
+        if self.is_playing:
+            self.stop_playback()
+        self._on_selection_changed()
+
+        if self.audio_data.isEmpty():
+            self.hub.clear()
+            self.update_plots()
+            self.handle_reset_zoom()
+            return
+
+        self.select_analysis_from_memory()
+
     def handle_playback(self):
         if self.is_recording: return
         if not self.is_playing:
@@ -901,6 +1117,9 @@ class AnalysisWidget(QtWidgets.QWidget):
         if self.is_recording:
             self.record_stop()
 
+        if not self.audio_data.isEmpty():
+            self._capture("Clear")
+
         self.current_audio_file = None
         self.audio_data.clear()
         self.hub.clear()
@@ -908,6 +1127,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         if hasattr(self, 'recording_start_offset'):
             self.recording_start_offset = 0
 
+        self.hub.selection.clear()
         self.clear_annotations()
         self.update_plots()
         self.handle_reset_zoom()
@@ -915,7 +1135,9 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def stop_playback(self):
         self.is_playing = False
-        self.playback_btn.setIcon(self.play_icon)
+        self.action_play.setIcon(self.play_icon)
+        self.action_play.setText("&Play\tSpace")
+        self.action_play.setToolTip("Play (Space)")
 
         if self.play_worker is not None:
             self.play_worker.stop_backend()
@@ -946,7 +1168,9 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.playback_start_time = time.time() - target_time
         self.is_playing = True
-        self.playback_btn.setIcon(self.pause_icon)
+        self.action_play.setIcon(self.pause_icon)
+        self.action_play.setText("&Pause\tSpace")
+        self.action_play.setToolTip("Pause (Space)")
         self.timer.start()
 
     def _transport_mode(self):
@@ -1111,7 +1335,11 @@ class AnalysisWidget(QtWidgets.QWidget):
     def keyPressEvent(self, event):
         key = event.key()
         if key == QtCore.Qt.Key.Key_Space:
-            if self.is_playing:
+            # Space is the stop key while recording as well: whatever is
+            # running, space is what ends it.
+            if self.is_recording:
+                self.record_stop()
+            elif self.is_playing:
                 self.stop_playback()
             elif not self.audio_data.isEmpty():
                 self.seek_and_play()

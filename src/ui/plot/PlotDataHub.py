@@ -16,6 +16,7 @@ import numpy as np
 from PyQt6 import QtCore
 
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot, SignalTimeSeries
+from ui.plot.TimeSelection import TimeSelection
 
 #: Initial capacity of a growable live buffer, and its growth factor.
 _INITIAL_CAPACITY = 1024
@@ -84,6 +85,8 @@ class PlotDataHub(QtCore.QObject):
         self._live = {}
         self._recording = False
         self._current_time = 0.0
+        #: The stretch of audio picked out for editing.
+        self.selection = TimeSelection(self)
 
     # --- Features --------------------------------------------------------
 

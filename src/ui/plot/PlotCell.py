@@ -16,6 +16,7 @@ from ui.plot.PlotTheme import PlotTheme
 from ui.plot.PlotControls import PlotControls
 from ui.plot.layers.FrequencyMarkerLayer import FrequencyMarkerLayer, format_hz
 from ui.plot.layers.MultiAxisLayer import MultiAxisLayer
+from ui.plot.layers.SelectionLayer import SelectionLayer
 from ui.plot.layers.SpectrogramBackground import SpectrogramBackground
 from ui.plot.layers.TargetBandLayer import TargetBandLayer
 from ui.plot.renderers.SpectrumSliceRenderer import SpectrumSliceRenderer
@@ -44,6 +45,8 @@ class PlotCell(QtWidgets.QFrame):
     seek_requested = QtCore.pyqtSignal(float)
     annotation_requested = QtCore.pyqtSignal(object, float, float)   # (cell, x, y)
     annotation_clicked = QtCore.pyqtSignal(object, object)           # (cell, marker)
+    #: The selection band was dragged; move the audio by this many seconds.
+    audio_move_requested = QtCore.pyqtSignal(float)
 
     def __init__(self, config: PlotConfig, hub, parent=None):
         super().__init__(parent)
@@ -73,6 +76,10 @@ class PlotCell(QtWidgets.QFrame):
         self.targets = TargetBandLayer(self.plot_item)
         self.markers = FrequencyMarkerLayer(self.plot_item)
         self.axes = MultiAxisLayer(self.plot_item)
+        self.selection = SelectionLayer(self.plot_item, hub.selection, parent=self)
+        self.selection.move_requested.connect(self.audio_move_requested)
+        self.selection.range_changed.connect(hub.selection.set_range)
+        self.view_box.sigSelectionDragged.connect(self._on_selection_dragged)
         MARKERS.changed.connect(self.markers.refresh)
 
         self.renderer = None
@@ -184,10 +191,20 @@ class PlotCell(QtWidgets.QFrame):
         if self._target_config is not None:
             self.targets.update(self._target_config)
         self._sync_markers()
+        self.selection.set_axis(config.time_axis)
         self._sync_axes()
         self._apply_labels()
         self.renderer.set_point_size(config.point_size)
         self.refresh_spectrogram()
+
+    def _on_selection_dragged(self, rect):
+        """A drag in select mode: take the range off whichever axis is time."""
+        axis = self.config.time_axis
+        if axis is None:
+            return
+        low, high = ((rect.left(), rect.right()) if axis == 'x'
+                     else (rect.top(), rect.bottom()))
+        self.hub.selection.set_range(low, high)
 
     def _sync_markers(self):
         """Point the marker layer at whichever axis is in Hz, if either.
@@ -414,6 +431,7 @@ class PlotCell(QtWidgets.QFrame):
         except TypeError:
             pass
         self.markers.clear()
+        self.selection.clear()
         self.spectrogram.detach()
         self.targets.clear()
         if self.renderer is not None:

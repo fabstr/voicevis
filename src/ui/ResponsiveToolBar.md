@@ -7,7 +7,7 @@ with everything folded.
 
 ```mermaid
 graph LR
-    T["Transport<br/><i>record, play, clear</i>"]
+    T["Playback<br/><i>play/pause</i>"]
     V["View tools<br/><i>reset, zoom X, zoom Y, measure</i>"]
     TI["Time"]
     TG["Target"]
@@ -34,7 +34,12 @@ likely to be reaching for mid-recording:
 | 3 | Target |
 | 4 | Time |
 | 5 | View tools |
-| — | **Transport never folds** — it is what the application is for |
+| — | **Playback never folds** — it is what the application is for |
+
+The rest of the transport — record, clear, and the audio edits — is in the Edit
+menu; see [AudioEditing.md](AudioEditing.md). Play/pause is on the toolbar as
+well because it is reached far too often to sit behind a menu. The button drives
+the menu's `QAction`, so the two cannot disagree about play versus pause.
 
 ## How a group folds
 
@@ -73,6 +78,19 @@ group is folded — so the toolbar can always tell whether a group would fit aga
 `ResponsiveToolBar.sizeHint` deliberately reports the **folded** width. Reporting
 the inline width would make the layout refuse to shrink the window at all, which
 is the thing this exists to fix.
+
+Its vertical size policy is **Fixed**. With the default `Preferred`, the toolbar
+and the plot area both merely *prefer* their heights, so Qt hands each a share of
+any spare vertical space -- maximising the window stretched the toolbar to 511 px
+instead of giving the height to the plots. The plot splitter also carries the
+layout's stretch factor, so spare height has somewhere to go.
+
+A group's horizontal size policy is **Maximum**: it takes the width it asks for
+and no more. An expanding child -- a `QLineEdit`, a slider -- otherwise makes the
+whole group expanding, and the row's spare width is drawn into the group. The
+field cannot use it (its width is fixed), so it lands on the label instead,
+leaving "Time:" stranded a few hundred pixels from the box it names. Slack
+belongs to the stretches between groups.
 
 Text metrics differ between platforms, so tests must derive widths from
 `expanded_width()` rather than hard-coding pixels: the same window is roomy on

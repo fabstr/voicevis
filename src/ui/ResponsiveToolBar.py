@@ -47,6 +47,13 @@ class ToolbarGroup(QtWidgets.QWidget):
         layout.addWidget(self.content)
         layout.addWidget(self.button)
 
+        # A group takes the width it asks for and no more. A child that wants to
+        # expand -- a QLineEdit or a slider -- otherwise drags the row's spare
+        # space into the group, where it lands on the label and leaves it
+        # stranded away from the field it names. Slack belongs to the stretches.
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum,
+                           QtWidgets.QSizePolicy.Policy.Preferred)
+
     # --- Contents --------------------------------------------------------
 
     def add(self, *widgets):
@@ -116,6 +123,13 @@ class ResponsiveToolBar(QtWidgets.QWidget):
         self._groups = []          # in the order they were added
         self._order = []           # collapse order: first to fold, first here
         self._relayouting = False
+
+        # One row, as tall as its contents and no taller. Without this the
+        # toolbar and the plot area both have a Preferred height and Qt hands
+        # them a share each of any spare vertical space, so maximising the
+        # window stretches the toolbar instead of the plots.
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred,
+                           QtWidgets.QSizePolicy.Policy.Fixed)
 
         self._layout = QtWidgets.QHBoxLayout(self)
         self._layout.setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN)

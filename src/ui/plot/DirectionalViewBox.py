@@ -15,6 +15,7 @@ MODE_PAN = None
 MODE_ZOOM_X = "zoom_x"
 MODE_ZOOM_Y = "zoom_y"
 MODE_MEASURE = "measure"
+MODE_SELECT = "select"
 
 
 def format_time_delta(dx: float) -> str:
@@ -42,12 +43,18 @@ def log_x_measure_formatter(x0: float, x1: float, y0: float, y1: float) -> str:
 
 
 class DirectionalViewBox(pg.ViewBox):
-    """Constrains rubber-band zoom to one axis and can measure deltas."""
+    """Constrains rubber-band zoom to one axis, measures deltas, and selects."""
+
+    #: The rectangle dragged out in select mode, in view coordinates. The cell
+    #: takes whichever axis is time.
+    sigSelectionDragged = QtCore.pyqtSignal(object)
 
     def __init__(self, *args, **kwds):
         super().__init__(*args, **kwds)
         self.zoom_axis = None
         self.measure_mode = False
+        self.select_mode = False
+        self.select_start_pos = None
         self.measure_start_pos = None
         #: Callable (x0, x1, y0, y1) -> str used for the measurement readout.
         self.measure_formatter = time_measure_formatter
@@ -72,8 +79,9 @@ class DirectionalViewBox(pg.ViewBox):
     # --- Tool mode -------------------------------------------------------
 
     def set_tool_mode(self, mode):
-        """Switch between pan, single-axis zoom and measure."""
+        """Switch between pan, single-axis zoom, measure and select."""
         self.measure_mode = (mode == MODE_MEASURE)
+        self.select_mode = (mode == MODE_SELECT)
 
         if mode == MODE_ZOOM_X:
             self.zoom_axis = 'x'
@@ -81,7 +89,7 @@ class DirectionalViewBox(pg.ViewBox):
         elif mode == MODE_ZOOM_Y:
             self.zoom_axis = 'y'
             self.setMouseMode(pg.ViewBox.RectMode)
-        elif mode == MODE_MEASURE:
+        elif mode in (MODE_MEASURE, MODE_SELECT):
             self.zoom_axis = None
         else:
             self.zoom_axis = None
@@ -90,9 +98,10 @@ class DirectionalViewBox(pg.ViewBox):
         if not self.measure_mode:
             self.clear_measurement()
 
-        # Measure mode suppresses the default pan/zoom handlers while still
-        # receiving drag events -- this ordering is what makes measuring work.
-        self.setMouseEnabled(x=not self.measure_mode, y=not self.measure_mode)
+        # Measure and select suppress the default pan/zoom handlers while still
+        # receiving drag events -- this ordering is what makes them work.
+        interactive = not (self.measure_mode or self.select_mode)
+        self.setMouseEnabled(x=interactive, y=interactive)
 
     def clear_measurement(self):
         self.measure_start_pos = None
@@ -104,6 +113,10 @@ class DirectionalViewBox(pg.ViewBox):
     def mouseDragEvent(self, ev, axis=None):
         if self.measure_mode:
             self._measure_drag(ev)
+            return
+
+        if self.select_mode:
+            self._select_drag(ev)
             return
 
         if (self.zoom_axis is not None
@@ -138,6 +151,28 @@ class DirectionalViewBox(pg.ViewBox):
             p1 = QtCore.QPointF(bounds.left(), p1.y())
             p2 = QtCore.QPointF(bounds.right(), p2.y())
         super().updateScaleBox(p1, p2)
+
+    def _select_drag(self, ev):
+        """Drag out a time range. The cell decides which axis is time."""
+        ev.accept()
+        if ev.button() != QtCore.Qt.MouseButton.LeftButton:
+            return
+
+        if ev.isStart():
+            self.select_start_pos = self.mapSceneToView(ev.buttonDownScenePos())
+            return
+        if self.select_start_pos is None:
+            return
+
+        current = self.mapSceneToView(ev.scenePos())
+        left, right = sorted((self.select_start_pos.x(), current.x()))
+        bottom, top = sorted((self.select_start_pos.y(), current.y()))
+        # Emitted as it moves as well as at the end, so the highlight follows
+        # the cursor rather than appearing only on release.
+        self.sigSelectionDragged.emit(QtCore.QRectF(left, bottom, right - left, top - bottom))
+
+        if ev.isFinish():
+            self.select_start_pos = None
 
     def _measure_drag(self, ev):
         ev.accept()
