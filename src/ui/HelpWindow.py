@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter, QListWidget, QTextBrowser
 from PyQt6.QtCore import Qt, QTimer, QUrl
@@ -11,6 +12,35 @@ try:
     from _version import __version__
 except ImportError:
     __version__ = "Dev-Snapshot"
+
+_ATX_HEADING_RE = re.compile(r'^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$')
+_SLUG_STRIP_RE = re.compile(r'[^\w\- ]')
+
+
+def _heading_slugs(markdown_text):
+    """GitHub-style anchor slugs for every ATX heading, in document order.
+
+    Table-of-contents links written into the docs (``[Foo](#foo)``) use
+    GitHub's slug rules, since that's what renders them correctly on
+    GitHub itself. Reproducing the same rules here -- lowercase, strip
+    anything that isn't a word character/hyphen/space, spaces to hyphens,
+    and a "-1", "-2", ... suffix for each repeat of an already-seen slug --
+    is what lets the in-app viewer resolve the exact same links.
+    """
+    seen = {}
+    slugs = []
+    for line in markdown_text.splitlines():
+        match = _ATX_HEADING_RE.match(line)
+        if not match:
+            continue
+        slug = _SLUG_STRIP_RE.sub('', match.group(2).lower()).replace(' ', '-')
+        if slug in seen:
+            seen[slug] += 1
+            slug = f"{slug}-{seen[slug]}"
+        else:
+            seen[slug] = 0
+        slugs.append(slug)
+    return slugs
 
 
 class _ScalingTextBrowser(QTextBrowser):
@@ -28,6 +58,7 @@ class _ScalingTextBrowser(QTextBrowser):
     def setMarkdown(self, text):
         super().setMarkdown(text)
         self._rescale_images()
+        self._add_heading_anchors(text)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -130,6 +161,39 @@ class _ScalingTextBrowser(QTextBrowser):
                 if size.isValid():
                     return size
         return None
+
+    def _add_heading_anchors(self, source_text):
+        """Stamp each rendered heading with its GitHub-style slug as a named anchor.
+
+        ``setMarkdown()`` renders '#'-headings as heading blocks but, unlike
+        GitHub, gives them no id of their own -- so a table-of-contents link
+        like ``[Foo](#foo)`` has nothing to jump to, even though the same
+        link works fine on GitHub. Recomputing the slugs from the source
+        markdown (in document order, so repeated headings also get GitHub's
+        "-1", "-2", ... suffixes) and setting each one as a
+        ``QTextCharFormat`` anchor on the matching rendered block is what
+        lets ``scrollToAnchor()`` find it.
+        """
+        slugs = iter(_heading_slugs(source_text))
+        doc = self.document()
+        cursor = QTextCursor(doc)
+
+        block = doc.begin()
+        while block.isValid():
+            if block.blockFormat().headingLevel() > 0:
+                slug = next(slugs, None)
+                if slug is None:
+                    break
+                length = max(block.length() - 1, 0)  # exclude the block separator
+                if length > 0:
+                    cursor.setPosition(block.position())
+                    cursor.setPosition(block.position() + length,
+                                       QTextCursor.MoveMode.KeepAnchor)
+                    char_format = cursor.charFormat()
+                    char_format.setAnchor(True)
+                    char_format.setAnchorNames([slug])
+                    cursor.setCharFormat(char_format)
+            block = block.next()
 
 
 class HelpWindow(QWidget):
@@ -258,7 +322,13 @@ class HelpWindow(QWidget):
             QDesktopServices.openUrl(url)
             return
 
-        # 2. Handle internal Markdown links
+        # 2. Handle a same-document anchor, e.g. a table-of-contents entry
+        # like "#general-workflow" -- no scheme, no path, just a fragment.
+        if url.fragment() and not url.path():
+            self.text_browser.scrollToAnchor(url.fragment())
+            return
+
+        # 3. Handle internal Markdown links
         target_filename = os.path.basename(url.toString())
 
         # Search our help_data for a matching filename
