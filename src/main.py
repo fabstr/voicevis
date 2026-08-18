@@ -14,6 +14,10 @@ from PyQt6.QtWidgets import QMessageBox, QApplication
 from ResourceManager import ResourceManager
 
 
+#: Where this run is logging to, so a crash dialogue can point at it.
+LOG_FILE = None
+
+
 class SyncFileHandler(logging.FileHandler):
     """A FileHandler that forces the OS to immediately write to disk."""
     def emit(self, record):
@@ -94,8 +98,16 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
     # 1. Check if the QApplication instance exists
     app = QApplication.instance()
     if not app:
-        logging.critical("Fatal error occurred before QApplication initialization or after destruction.")
-        sys.exit(1)
+        # A crash during start-up -- a failed import, most likely. A windowed
+        # build has no console to print to, so without a dialogue here the
+        # application simply vanishes with no sign of what went wrong. Start Qt
+        # just far enough to say so.
+        logging.critical("Fatal error before QApplication initialization.")
+        try:
+            app = QApplication(sys.argv)
+        except Exception:
+            logging.critical("Could not start Qt to report the error.", exc_info=True)
+            sys.exit(1)
 
     # 2. Check if we are executing in the main GUI thread
     if QThread.currentThread() != app.thread():
@@ -111,7 +123,10 @@ def global_exception_handler(exc_type, exc_value, exc_traceback):
     error_box.setIcon(QMessageBox.Icon.Critical)
     error_box.setWindowTitle("Fatal Error")
     error_box.setText("An unexpected error occurred.")
-    error_box.setInformativeText(str(exc_value))
+    informative = str(exc_value)
+    if LOG_FILE is not None:
+        informative += f"\n\nThe full log is at:\n{LOG_FILE}"
+    error_box.setInformativeText(informative)
     error_box.setDetailedText(tb_string)
 
     # Process pending events to ensure the UI isn't stuck before showing the dialogue
@@ -154,7 +169,7 @@ def set_application_icon(app: QtWidgets.QApplication):
 
 
 if __name__ == '__main__':
-    setup_logging()
+    LOG_FILE = setup_logging()
     sys.excepthook = global_exception_handler
 
     # use OpenGl

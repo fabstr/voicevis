@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import wave
 
-from line_profiler import profile
 from scipy.signal import stft, spectrogram, lfilter
 from scipy.ndimage import uniform_filter1d
 

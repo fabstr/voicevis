@@ -134,6 +134,16 @@ class DirectionalViewBox(pg.ViewBox):
 
         super().mouseDragEvent(ev, axis)
 
+    def wheelEvent(self, ev, axis=None):
+        """Scroll-wheel zoom obeys the axis lock the same way rubber-band does.
+
+        ``pg.ViewBox`` scales both axes unless it is told which one to use, so
+        the locked axis is passed down as the axis index the base class expects.
+        """
+        if self.zoom_axis is not None and axis is None:
+            axis = 0 if self.zoom_axis == 'x' else 1
+        super().wheelEvent(ev, axis)
+
     def _apply_locked_rect(self, rect):
         """Zoom to ``rect`` along the locked axis only, leaving the other alone."""
         if self.zoom_axis == 'x' and rect.width() > 0:
