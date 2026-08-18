@@ -7,13 +7,11 @@ import numpy as np
 import pandas as pd
 import wave
 
-from scipy.signal import stft, spectrogram, lfilter
-from scipy.ndimage import uniform_filter1d
+from scipy.signal import spectrogram
 
 from ResourceManager import ResourceManager
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
-from signal_processing.genderer import calculate_target_probabilities
 
 from time import perf_counter
 
@@ -202,32 +200,20 @@ class AudioFeatureExtractor:
         if derive:
             apply_derived_features(result)
 
-        # probabilities = calculate_target_probabilities(result.size_5s_mean, result.pitch_5s_mean, result.weight_333ms_max)
-        # print(str(probabilities))
-
         return result
 
 
 def apply_derived_features(features: AudioFeatures) -> AudioFeatures:
-    """Fill in the rolling means, in place, from the series already extracted.
+    """Fill in whatever depends on the whole timeline, in place.
 
     Split out of :meth:`AudioFeatureExtractor.extractFeatures` so that a chunked
-    analysis can run it once over the assembled timeline. The windows are
-    hundreds of frames wide, so computing them per chunk would leave a seam at
-    every boundary.
+    analysis can run it once over the assembled timeline, after the chunks are
+    stitched together, rather than per chunk (which would get any windowed
+    calculation wrong at the edges). Currently nothing needs it -- the rolling
+    means this used to compute (pitch/size 5 s mean, weight 333 ms max) were
+    removed along with the ``weight`` feature -- but the seam stays for the next
+    whole-timeline feature that needs it.
     """
-    timepoints = np.asarray(features.pitch.x, dtype=float)
-    if timepoints.size == 0:
-        return features
-
-    # Pitch is NaN exactly where the extractor rejected the frame, so it doubles
-    # as the validity mask without having to be carried along separately.
-    valid_mask = ~np.isnan(np.asarray(features.pitch.y, dtype=float))
-
-    features.size_5s_mean = rolling_mean(timepoints, features.size, valid_mask)
-    features.pitch_5s_mean = rolling_mean(timepoints, features.pitch, valid_mask)
-    features.weight_333ms_max = rolling_mean(timepoints, features.weight_instantaneous,
-                                             valid_mask)
     return features
 
 
@@ -352,17 +338,6 @@ def remove_local_outliers_robust(data_array, window=50, threshold=3.0):
     cleaned_series = np.where(np.nan_to_num(robust_z_scores, nan=0.0) < threshold, data_array, np.nan)
 
     return cleaned_series
-
-def rolling_mean(t: np.ndarray, series: SignalTimeSeries, valid_mask, window=500):
-    y = pd.Series(series.y).rolling(
-        window=window, # 2 s
-        center=True,
-        min_periods=1
-    ).mean()
-
-    y = np.where(valid_mask, y, np.nan)
-
-    return SignalTimeSeries(x=t, y=y)
 
 def signed_rms(array: np.ndarray) -> np.ndarray:
     # Stack them into a 2D array of shape (n, time_steps)

@@ -53,8 +53,6 @@ class TargetConfigDialog(QtWidgets.QDialog):
             "f2_pitch": ("F2_Pitch", 1.0, 30.0),
             "f3_pitch": ("F3_Pitch", 1.0, 50.0),
             "size": ("Size", -30.0, 30.0),
-            "weight": ("Weight", 0.0, 23.5),
-            "slopes": ("Slopes", 0.0, 4.0e-7),
             "H1_H2": ("H1_H2", -10.0, 20),
             "H1_H3": ("H1_H3", -10.0, 20),
             "H1_H4": ("H1_H4", -10.0, 20),

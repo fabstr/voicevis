@@ -1,50 +1,187 @@
 # Usage of VoiceVis
 
 ## General workflow
-- Record/open -> Playback, analyse
-- Working with annotations
-- Sample texts
-- Save
+
+This walks through a first session end to end, using the sample clip
+`F_swedish10.mp3` as the recording. Everything here works the same way for
+your own recordings -- the audio just has to already exist somewhere on disk,
+or be recorded from the microphone instead of opened from a file.
+
+The screenshots below use the bundled **simple** layout (`View > Load simple
+layout`) rather than the four-plot grid a fresh install starts with, because
+it puts more of what there is to see on screen at once: Size and Pitch,
+each coloured by Loudness, a Spectrogram, and a plain Loudness plot.
+
+### 1. Launch
+
+![The VoiceVis window on first launch: Size and Pitch (coloured by Loudness), a Spectrogram, and Loudness -- all empty, no file loaded yet](img/workflow/01_launch.png)
+
+### 2. Open a recording
+
+`File > Open` accepts `.wav` and `.mp3` files (dragging one onto the window
+works too). Loading a new file clears any existing annotations and undo
+history, since they described a different recording. Opening a file analyses
+it automatically -- there's no separate "Analyse" step.
+
+![The File menu open, showing New, Open, Save Annotations, Save Audio As and Close](img/workflow/02_open_menu.png)
+
+![The same four plots filled in once analysis finishes: coloured scatters, a real spectrogram, and the loudness trace](img/workflow/03_loaded.png)
+
+### 3. Play it back
+
+Space, or the toolbar's play button, plays from the current position. The
+playhead (the vertical line) moves across every time-based plot together,
+since they share one time axis, and the Time field in the toolbar tracks it.
+Clicking anywhere on a time plot seeks to that point instead.
+
+![Mid-playback: a playhead line at 6.5s across all four plots, the toolbar button showing pause](img/workflow/04_playback.png)
+
+### 4. Change what a plot shows
+
+Click a plot's axis label to pick a different series -- it doubles as the
+button that opens the picker. Here the Loudness plot's Y axis is being
+changed to the three formants (F1, F2, F3) at once.
+
+![The Y-axis picker open on the Loudness plot, a checklist of series with Loudness checked](img/workflow/05_axis_picker_menu.png)
+
+![The same plot now showing F1, F2 and F3 instead](img/workflow/06_axis_picker_result.png)
+
+### 5. Apply a target
+
+A target is active from the moment the window opens -- the toolbar already
+reads "Target: Default Target" on launch, and every plotted series with a
+target band shows one even before you pick anything. `Targets > Female` (or
+`Male`, or a target you build yourself -- see **Working with targets** below)
+swaps in a different set of ranges.
+
+![The Targets menu open: Set Targets..., Female, Male, Import targets..., Export targets...](img/workflow/07_targets_menu.png)
+
+![The same grid after loading Female: the target bands have moved, and the toolbar now reads "Target: Default female"](img/workflow/08_targets_result.png)
+
+### 6. Zoom in on a moment
+
+The toolbar's Zoom X / Zoom Y buttons restrict a rubber-band drag to one axis;
+because the time plots share an axis, zooming in on one zooms all of them
+together (including the spectrogram). Reset zoom puts every plot back to its
+default range. The Measure tool, next to the zoom buttons, works the same way
+but reads out a Δtime/Δvalue instead of changing the view.
+
+![All four plots zoomed in to roughly seconds 2-8 of the recording, spectrogram included](img/workflow/09_zoom.png)
+
+### 7. Leave a note
+
+Double-clicking empty space on a time plot opens a small text box for an
+annotation at that point; clicking an existing marker (drawn as a star)
+reopens it for editing or deletion. `File > Save Annotations` writes them out
+as JSON, linked back to the audio file they belong to.
+
+![The annotation dialog open over the Pitch plot, with a note being typed in](img/workflow/10_annotation_dialog.png)
+
+![The saved annotation: a star marker on the Pitch plot at the point it was added](img/workflow/11_annotation_result.png)
+
+### From here
+
+- **Audio editing** below covers reshaping the recording itself -- selecting,
+  moving, cutting or silencing a stretch of it.
+- **Working with targets** covers building a target profile of your own
+  rather than using the Female/Male presets.
+- The **Full feature list** further down is the complete reference: every
+  menu entry, dialog and toolbar control, independent of this walkthrough's
+  particular order.
 
 ## Working with targets
-- Defining targets
-- Modifying default targets
+
+A target is a set of min/max ranges, one per feature, each optionally
+enabled. Whichever target is active is named in the toolbar, and any plotted
+series with an enabled range in it gets a shaded band on its plot -- there is
+always *some* target active, even in a brand new session ("Default Target"),
+not just after you pick one.
+
+### Presets
+
+`Targets > Female` and `Targets > Male` (from `resources/targets/`) are the
+quickest way to switch: one click loads a ready-made set of ranges and
+relabels the toolbar.
+
+![The Targets menu open: Set Targets..., Female, Male, Import targets..., Export targets...](img/workflow/07_targets_menu.png)
+
+The two presets are genuinely different ranges, not just a different name --
+switching between them visibly moves every band. Female puts Pitch at
+134-258 Hz and Size at 4-15; Male puts Pitch lower, at 79-143 Hz, and Size
+higher, at 12-21 -- so the two bands swap which one sits higher on screen.
+The formants shift too, by smaller amounts.
+
+![Target bands after loading Female: Pitch's band sits high (134-258 Hz), Size's sits low (4-15)](img/workflow/08_targets_result.png)
+
+![The same plots after loading Male instead: Pitch's band now sits low (79-143 Hz), Size's now sits high (12-21) -- and the toolbar reads "Target: Default male"](img/workflow/08b_targets_result_male.png)
+
+### Building your own
+
+`Targets > Set Targets...` opens a dialog listing every target-capable field:
+a checkbox to enable it, and a min/max for the range. The **Config Name** at
+the top is what shows up in the toolbar and gets suggested as the default
+name when saving. **Apply & Close** applies the changes immediately, the same
+way loading a preset does; **Cancel** discards them.
+
+![The Set Targets dialog, populated with the Female preset's values -- config name, and an enable checkbox plus min/max per field](img/workflow/12_set_targets_dialog.png)
+
+Two fields in that list -- **Weight** and **Slopes** -- don't currently
+correspond to anything plottable, so enabling them has no visible effect on
+any plot. They're harmless to leave as they are; there's just nothing to
+show a band on yet.
+
+### Sharing a target
+
+`Targets > Export targets...` saves the current target as a `.json` file;
+`Targets > Import targets...` loads one back in, from this app or a `.json`
+file someone else exported. That's how to hand a target profile to someone
+else, or keep more than the two built-in presets around.
 
 ## Audio editing
-- Move
-- Cut 
-- Replace with silence
-- Save
 
-## General
-- Open/import audio
-- recording (& saving)
-- playback
-- annotations
-- preset targets
+Editing works on a selected stretch of the recording, made on any time-based
+plot -- the same selection appears on every one of them at once, since they
+all share one timeline.
 
-## View/hide
-- view/hide plots and data
-- zoom in plots
-- reset zoom
-- reset plots
-- one session per window; File > New opens another window
+### Selecting
 
-## Analysis
-- probably need target defined
-- How to read 
-  - loudness
-  - pitch
-  - size
-  - weight
-  - fullness
-  - formants
-  - formant ratios
-- working with zoom and point size
-- Defining custom targets
+With the Select tool active (`Edit > Select Audio`, or its toolbar/menu
+button), drag on any time plot to mark a range. Drag one of the band's edges
+to resize the selection, or drag the band itself to move that stretch of
+audio to a new position -- overwriting whatever is there, and leaving silence
+behind where it used to be. Turning Select off clears the selection, so an
+edit can never land on a range you can no longer see.
 
+![A selection band (8s-10s) drawn across all four plots, the Select tool active](img/workflow/13_select_band.png)
 
-## Features
+### Editing the selection
+
+Three destructive edits work on whatever is currently selected, all in the
+**Edit** menu:
+
+- **Replace with Silence** zeroes the selected samples out but keeps the
+  recording the same length -- everything after the edit stays exactly where
+  it was.
+- **Cut Selection** removes the selected stretch and closes the gap, so the
+  recording gets shorter and everything after it shifts earlier. The
+  selection is dropped afterwards, since it no longer describes the same
+  audio.
+- Dragging the selection band itself (above) **moves** it, which is the
+  third way to edit -- no separate menu entry needed.
+
+The screenshot below shows the result of Replace with Silence on the
+selection above: a flat gap in every plot, and a clean silent column in the
+spectrogram.
+
+![The same range after Replace with Silence: flat data in every scatter plot and a silent gap in the spectrogram](img/workflow/14_silence_result.png)
+
+### Undo
+
+`Edit > Undo` / `Edit > Redo` (or the standard shortcuts) step back and
+forward through recording, clearing, and every edit above -- the menu entry
+itself names what it would undo or redo next, so it's never a guess.
+
+## Full feature list
 
 ### Sessions & files
 - **File > New** opens another independent session window (own audio, analysis, plots, targets)

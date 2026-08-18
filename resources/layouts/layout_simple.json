@@ -1,13 +1,58 @@
 {
     "version": 2,
-    "global_size": 5,
+    "global_size": 3,
     "main_splitter_sizes": [
-        1909,
-        1908
+        660,
+        658
     ],
     "columns": [
         {
             "plots": [
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "size"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 3
+                },
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "pitch"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 3
+                }
+            ],
+            "sizes": [
+                394,
+                396
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [],
+                    "colour": null,
+                    "trail_time": 5.0,
+                    "spectrogram": true,
+                    "separate_axes": false,
+                    "local_size": 3
+                },
                 {
                     "x": [
                         "time"
@@ -18,56 +63,13 @@
                     "colour": null,
                     "trail_time": 3.0,
                     "spectrogram": false,
-                    "local_size": 5
-                },
-                {
-                    "x": [
-                        "time"
-                    ],
-                    "y": [
-                        "pitch"
-                    ],
-                    "colour": null,
-                    "trail_time": 3.0,
-                    "spectrogram": false,
-                    "local_size": 5
+                    "separate_axes": false,
+                    "local_size": 3
                 }
             ],
             "sizes": [
-                983,
-                980
-            ]
-        },
-        {
-            "plots": [
-                {
-                    "x": [
-                        "time"
-                    ],
-                    "y": [
-                        "size"
-                    ],
-                    "colour": null,
-                    "trail_time": 3.0,
-                    "spectrogram": false,
-                    "local_size": 5
-                },
-                {
-                    "x": [
-                        "time"
-                    ],
-                    "y": [
-                        "weight_instantaneous"
-                    ],
-                    "colour": null,
-                    "trail_time": 3.0,
-                    "spectrogram": false,
-                    "local_size": 5
-                }
-            ],
-            "sizes": [
-                983,
-                980
+                394,
+                396
             ]
         }
     ]

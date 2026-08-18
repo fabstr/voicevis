@@ -2,8 +2,8 @@ import logging
 import os
 import sys
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter, QListWidget, QTextBrowser
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtGui import QDesktopServices, QImageReader, QTextCursor
 from ResourceManager import ResourceManager
 
 # --- Try to safely read the auto-generated version file ---
@@ -11,6 +11,125 @@ try:
     from _version import __version__
 except ImportError:
     __version__ = "Dev-Snapshot"
+
+
+class _ScalingTextBrowser(QTextBrowser):
+    """A QTextBrowser whose embedded images never exceed its own width.
+
+    ``setMarkdown()`` inserts images at their native pixel size, which for a
+    full-window screenshot is a lot wider than a help pane a few hundred
+    pixels across -- Qt's rich-text HTML subset doesn't reliably honour CSS
+    like ``max-width``, so the fix is to give each image an explicit
+    width/height scaled to fit. That has to be redone whenever the pane's
+    width changes -- on a window resize, or the splitter beside it being
+    dragged -- not just once after loading the text.
+    """
+
+    def setMarkdown(self, text):
+        super().setMarkdown(text)
+        self._rescale_images()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Not a direct call: rewriting image formats mid-resize, before Qt's
+        # own layout pass for the *new* size has settled, leaves the
+        # document's internal size bookkeeping stale -- the scrollbar range
+        # ends up computed against neither the old geometry nor the new one.
+        # That doesn't show up as a resize to *this* width, it shows up on
+        # the *next* one: shrink the window, then widen it back, and the
+        # document is laid out shorter than it actually is, so the scrollbar
+        # can no longer reach content that is genuinely still there.
+        # Deferring to the next event-loop turn runs this once Qt's own
+        # resize handling -- and the geometry it produces -- has finished.
+        QTimer.singleShot(0, self._rescale_images)
+
+    def _rescale_images(self):
+        doc = self.document()
+        available = self.viewport().width() - 2 * doc.documentMargin()
+        if available <= 0:
+            return
+
+        # Two passes, deliberately not one: walking QTextBlock/fragment
+        # handles obtained from doc.begin() while *also* editing the
+        # document through a QTextCursor -- as an earlier version of this
+        # method did -- corrupts the walk partway through. It doesn't raise
+        # or stop cleanly; every image still gets *visited* (no exception,
+        # no early return), but blocks after wherever the corruption starts
+        # silently never get laid out, so the document reports a height
+        # far short of its real one and the scrollbar can't reach content
+        # that's genuinely still there. A character position is still valid
+        # after a format-only edit (nothing is inserted or removed), so
+        # collecting every edit as (position, length, format) first and
+        # applying them by position in a second, read-only-safe pass avoids
+        # the problem entirely rather than working around its symptom.
+        edits = []
+        block = doc.begin()
+        while block.isValid():
+            it = block.begin()
+            while not it.atEnd():
+                fragment = it.fragment()
+                it += 1
+                if not fragment.isValid():
+                    continue
+
+                char_format = fragment.charFormat()
+                if not char_format.isImageFormat():
+                    continue
+                image_format = char_format.toImageFormat()
+
+                natural = self._natural_size(image_format.name())
+                if natural is None or natural.width() <= 0:
+                    continue
+
+                # Never upscale past the file's own resolution -- a smaller
+                # image just keeps its size instead of blurring outward.
+                new_width = min(available, natural.width())
+                new_height = new_width * natural.height() / natural.width()
+                if abs(image_format.width() - new_width) < 1:
+                    continue  # already the right size; nothing to edit
+
+                image_format.setWidth(new_width)
+                image_format.setHeight(new_height)
+                edits.append((fragment.position(), fragment.length(), image_format))
+            block = block.next()
+
+        if not edits:
+            return
+
+        cursor = QTextCursor(doc)
+        for position, length, image_format in edits:
+            cursor.setPosition(position)
+            cursor.setPosition(position + length, QTextCursor.MoveMode.KeepAnchor)
+            cursor.setCharFormat(image_format)
+
+        # A belt-and-braces relayout: with a dozen-plus large inline images,
+        # the document's own dirty-tracking after several scattered
+        # setCharFormat() calls has been observed to under-report the total
+        # height (measured directly: the sum of the images' own heights
+        # alone exceeded document().size().height()), so the scrollbar ends
+        # up unable to reach content that is genuinely still there. Marking
+        # the whole document dirty forces Qt to recompute it from scratch
+        # rather than trust whatever partial update the edits above produced.
+        doc.markContentsDirty(0, doc.characterCount())
+
+    def _natural_size(self, name):
+        """The image's true pixel size, read straight from disk.
+
+        Deliberately not ``document().resource(...)``: whether that goes
+        through this browser's own search-path-aware loading, or just the
+        document's own (which knows nothing of ``setSearchPaths()``), is not
+        something to depend on. Reading the file directly, through the same
+        search paths the browser was given, is unambiguous.
+        """
+        candidates = [os.path.join(d, name) for d in self.searchPaths()]
+        candidates.append(name)  # already absolute, or resolvable as-is
+
+        for path in candidates:
+            if os.path.exists(path):
+                size = QImageReader(path).size()
+                if size.isValid():
+                    return size
+        return None
 
 
 class HelpWindow(QWidget):
@@ -34,7 +153,7 @@ class HelpWindow(QWidget):
         splitter.addWidget(self.toc_list)
 
         # --- 2. Markdown Viewer ---
-        self.text_browser = QTextBrowser()
+        self.text_browser = _ScalingTextBrowser()
         self.text_browser.setOpenLinks(False)  # Turn off automatic handling
         self.text_browser.anchorClicked.connect(self.handle_link_click)  # Intercept clicks
         splitter.addWidget(self.text_browser)
@@ -120,6 +239,13 @@ class HelpWindow(QWidget):
 
                 markdown_text = markdown_text.replace("{{VERSION}}", __version__)
 
+                # setMarkdown() has no notion of "where this came from", so
+                # relative image references (![](img/x.png)) would otherwise
+                # fail to resolve. Search from the doc's own directory first,
+                # then the docs root, so images work whether a doc sits at the
+                # top level or in a subfolder.
+                self.text_browser.setSearchPaths(
+                    [os.path.dirname(file_name), self.docs_dir])
                 self.text_browser.setMarkdown(markdown_text)
             except FileNotFoundError:
                 error_msg = f"# Error\nCould not find documentation file:\n`{file_name}`"

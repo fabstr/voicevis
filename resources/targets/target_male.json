@@ -50,24 +50,6 @@
             "enabled": true
         },
         {
-            "name": "size",
-            "min": 12.0,
-            "max": 21.0,
-            "enabled": true
-        },
-        {
-            "name": "weight",
-            "min": 0.673,
-            "max": 0.849,
-            "enabled": true
-        },
-        {
-            "name": "weight2",
-            "min": -20.0,
-            "max": 20.0,
-            "enabled": false
-        },
-        {
             "name": "h1_h2",
             "max": 14.3,
             "min": -1.78,
@@ -86,21 +68,9 @@
             "enabled": true
         },
         {
-            "name": "size2",
-            "min": -500.0,
-            "max": 500.0,
-            "enabled": true
-        },
-        {
             "name": "h1_a3",
             "min": 0.0,
             "max": 30.0,
-            "enabled": true
-        },
-        {
-            "name": "slopes",
-            "min": 0,
-            "max": 168E-9,
             "enabled": true
         }
     ]
