@@ -86,6 +86,20 @@ class AudioFeatureExtractor:
         result = self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
         return result
 
+    def analyzeChunk(self, pcm_data, sampling_rate) -> AudioFeatures:
+        """Analyse one chunk of a longer recording.
+
+        The rolling means are left out: their window spans several seconds, so a
+        chunk on its own would get the frames near its edges wrong. The caller
+        stitches the chunks together and applies :func:`apply_derived_features`
+        to the whole timeline instead. See
+        :class:`signal_processing.ChunkedAnalysis.ChunkedAudioAnalysis`.
+        """
+        df = self.smile.process_signal(pcm_data, sampling_rate)
+        audio_length = len(pcm_data) / float(sampling_rate)
+        return self.extractFeatures(df, sampling_rate, audio_length, pcm_data,
+                                    derive=False)
+
     def analyzeFile(self, path) -> AudioFeatures:
         """
         Analyse a complete audio file, wav and mp3 files are supported.
@@ -113,7 +127,8 @@ class AudioFeatureExtractor:
         df = self.smile.process_signal(samples, sampling_rate)
         return self.extractFeatures(df, sampling_rate, audio_length, samples)
 
-    def extractFeatures(self, df, sampling_rate, audio_length, pcm_data) -> AudioFeatures:
+    def extractFeatures(self, df, sampling_rate, audio_length, pcm_data,
+                        derive=True) -> AudioFeatures:
         # Extract timepoints
         timepoints = df.index.get_level_values('start').total_seconds().to_numpy()
 
@@ -190,14 +205,36 @@ class AudioFeatureExtractor:
             H1_A3=SignalTimeSeries(x=timepoints, y=h1_a3_clean),
         )
 
-        result.size_5s_mean = rolling_mean(timepoints, result.size, valid_mask)
-        result.pitch_5s_mean = rolling_mean(timepoints, result.pitch, valid_mask)
-        result.weight_333ms_max = rolling_mean(timepoints, result.weight_instantaneous, valid_mask)
+        if derive:
+            apply_derived_features(result)
 
         # probabilities = calculate_target_probabilities(result.size_5s_mean, result.pitch_5s_mean, result.weight_333ms_max)
         # print(str(probabilities))
 
         return result
+
+
+def apply_derived_features(features: AudioFeatures) -> AudioFeatures:
+    """Fill in the rolling means, in place, from the series already extracted.
+
+    Split out of :meth:`AudioFeatureExtractor.extractFeatures` so that a chunked
+    analysis can run it once over the assembled timeline. The windows are
+    hundreds of frames wide, so computing them per chunk would leave a seam at
+    every boundary.
+    """
+    timepoints = np.asarray(features.pitch.x, dtype=float)
+    if timepoints.size == 0:
+        return features
+
+    # Pitch is NaN exactly where the extractor rejected the frame, so it doubles
+    # as the validity mask without having to be carried along separately.
+    valid_mask = ~np.isnan(np.asarray(features.pitch.y, dtype=float))
+
+    features.size_5s_mean = rolling_mean(timepoints, features.size, valid_mask)
+    features.pitch_5s_mean = rolling_mean(timepoints, features.pitch, valid_mask)
+    features.weight_333ms_max = rolling_mean(timepoints, features.weight_instantaneous,
+                                             valid_mask)
+    return features
 
 
 def calculate_size(t, F1_Pitch, F2_Pitch, F3_Pitch, target_config) -> SignalTimeSeries:

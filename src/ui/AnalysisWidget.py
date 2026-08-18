@@ -18,6 +18,7 @@ from SeriesRegistry import DEFAULT_POINT_SIZE as defaultSize
 from signal_processing import AudioEdit
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
+from signal_processing.ChunkedAnalysis import ChunkedAudioAnalysis
 from ui.AnnotationMarker import AnnotationMarker
 from ui.AudioHistory import AudioHistory
 from ui.HelpWindow import HelpWindow
@@ -169,6 +170,12 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.audioFeatureExtractor = AudioFeatureExtractor(self.target_config, self.resource_manager)
 
+        # Keeps the analysis of each 10 s of audio, so recording onto the end of
+        # a long take, or editing part of it, only re-analyses what it touched.
+        self.analysis_cache = ChunkedAudioAnalysis()
+        #: An analysis is wanted but the previous one has not stopped yet.
+        self._analysis_pending = False
+
         self.setup_GUI()
         self.setup_audio()
 
@@ -194,6 +201,13 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.timer.stop()
         self.poll_timer.stop()
+
+        # Nobody will see the result, and cancelling lets the wait below return
+        # at the next chunk instead of after the whole recording.
+        self._analysis_pending = False
+        if self.worker is not None:
+            self.worker.cancel()
+            self.worker.finished.disconnect(self._on_analysis_thread_finished)
 
         for worker in (self.play_worker, self.rt_worker, self.worker):
             if worker is not None and worker.isRunning():
@@ -823,8 +837,10 @@ class AnalysisWidget(QtWidgets.QWidget):
     def load_audio_to_memory(self, file_path):
         try:
             self.clear_annotations()
-            # A different recording is a different history.
+            # A different recording is a different history, and none of the
+            # cached chunks describe it.
             self.history.reset()
+            self.analysis_cache.reset()
             self.hub.selection.clear()
             self.current_audio_file = file_path
 
@@ -912,22 +928,58 @@ class AnalysisWidget(QtWidgets.QWidget):
     #################### File analysis ####################
 
     def select_analysis_from_memory(self):
+        """Ask for an analysis of the current buffer.
+
+        Only one runs at a time: the chunk cache is the worker's to write while
+        it runs, and a second worker on the same cache would fight it. A request
+        made while one is in flight cancels that one and takes its place, which
+        also stops a burst of edits queueing up analyses nobody will look at.
+        """
+        self._analysis_pending = True
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.cancel()
+            return
+        self._start_analysis()
+
+    def _start_analysis(self):
+        self._analysis_pending = False
+        self._show_analysis_dialog()
+
+        # Passes memory bytes to worker instead of disk file path
+        self.worker = AnalysisWorker(
+            self.audioFeatureExtractor,
+            audio_bytes=self.audio_data.data(),
+            sample_rate=self.sampling_rate,
+            cache=self.analysis_cache
+        )
+        self.worker.result_ready.connect(self.on_analysis_finished)
+        self.worker.error_occurred.connect(self.on_analysis_error)
+        self.worker.finished.connect(self._on_analysis_thread_finished)
+        self.worker.start()
+
+    def _show_analysis_dialog(self):
+        """Show the wait dialog, unless one is already up from a cancelled run."""
+        if self.loading_dialog is not None and self.loading_dialog.isVisible():
+            return
         self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio...", None, 0, 0, self)
         self.loading_dialog.setWindowTitle("Please Wait")
         self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
         self.loading_dialog.setMinimumDuration(0)
         self.loading_dialog.show()
 
-        # Passes memory bytes to worker instead of disk file path
-        self.worker = AnalysisWorker(
-            self.audioFeatureExtractor,
-            audio_bytes=self.audio_data.data(),
-            sample_rate=self.sampling_rate
-        )
-        self.worker.result_ready.connect(self.on_analysis_finished)
-        self.worker.error_occurred.connect(self.on_analysis_error)
-        self.worker.finished.connect(self.loading_dialog.close)
-        self.worker.start()
+    def _on_analysis_thread_finished(self):
+        """Retire the finished worker and run whatever was waiting for it."""
+        finished, self.worker = self.worker, None
+        if finished is not None:
+            # The thread is still emitting; let the event loop drop it.
+            finished.deleteLater()
+
+        if self._analysis_pending:
+            QtCore.QTimer.singleShot(0, self._start_analysis)
+            return
+
+        if self.loading_dialog is not None:
+            self.loading_dialog.close()
 
     def on_analysis_finished(self, results):
         self.hub.set_features(results)
@@ -1163,6 +1215,7 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.current_audio_file = None
         self.audio_data.clear()
+        self.analysis_cache.reset()
         self.hub.clear()
 
         if hasattr(self, 'recording_start_offset'):
