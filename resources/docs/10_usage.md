@@ -1,5 +1,38 @@
 # Usage of VoiceVis
 
+- [General workflow](#general-workflow)
+  - [1. Launch](#1-launch)
+  - [2. Open a recording](#2-open-a-recording)
+  - [3. Play it back](#3-play-it-back)
+  - [4. Change what a plot shows](#4-change-what-a-plot-shows)
+  - [5. Apply a target](#5-apply-a-target)
+  - [6. Zoom in on a moment](#6-zoom-in-on-a-moment)
+  - [7. Leave a note](#7-leave-a-note)
+  - [From here](#from-here)
+- [Working with targets](#working-with-targets)
+  - [Presets](#presets)
+  - [Building your own](#building-your-own)
+  - [Sharing a target](#sharing-a-target)
+- [Audio editing](#audio-editing)
+  - [Selecting](#selecting)
+  - [Editing the selection](#editing-the-selection)
+  - [Undo](#undo)
+- [Full feature list](#full-feature-list)
+  - [Sessions & files](#sessions--files)
+  - [Recording & playback](#recording--playback)
+  - [Audio editing](#audio-editing-1)
+  - [Analysis](#analysis)
+  - [Plot grid](#plot-grid)
+  - [Per-plot controls](#per-plot-controls)
+  - [Mouse tools (toolbar)](#mouse-tools-toolbar)
+  - [Overlays](#overlays)
+  - [Targets](#targets)
+  - [Series colours](#series-colours)
+  - [Layout management](#layout-management)
+  - [Appearance](#appearance)
+  - [Sample texts](#sample-texts)
+  - [Help](#help)
+
 ## General workflow
 
 This walks through a first session end to end, using the sample clip

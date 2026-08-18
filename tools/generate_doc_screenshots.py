@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Render the screenshots used by resources/docs/10_usage.md.
+"""Render the screenshots used by resources/docs/10_usage.md and
+resources/docs/15_analyzed_features.md.
 
 Drives a real (but off-screen) instance of VoiceVis through the "General
 workflow", "Working with targets" and "Audio editing" walkthroughs and grabs
 a PNG at each step, so the docs stay in sync with the actual UI instead of
 going stale the next time something in the toolbar or a dialog changes shape.
+It also grabs one single-pane screenshot per row of the "Analyzed Features"
+table (README.md / 15_analyzed_features.md), each showing just that
+feature's own series on an otherwise empty grid.
 
 Runs headless (Qt's "offscreen" platform plugin -- no window ever appears),
 against an isolated QSettings location (never touches whichever layout/
@@ -17,7 +21,8 @@ Usage:
     .venv/Scripts/python tools/generate_doc_screenshots.py
 
 Regenerate after any change to the toolbar, the menus, a dialog, the
-"simple" layout preset, or a target file the docs reference.
+"simple" layout preset, a target file the docs reference, or the set of
+analyzed features (SeriesRegistry.py).
 """
 import os
 import shutil
@@ -37,11 +42,34 @@ SRC_DIR = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 OUT_DIR = REPO_ROOT / "resources" / "docs" / "img" / "workflow"
+FEATURES_OUT_DIR = REPO_ROOT / "resources" / "docs" / "img" / "features"
 EXAMPLE_AUDIO = (REPO_ROOT / "examples" / "accent_gmu_edu" / "swedish"
                  / "F_swedish10.mp3")
 
 WINDOW_SIZE = (900, 600)
 ANALYSIS_TIMEOUT_MS = 60_000
+
+#: One single-pane screenshot per feature shown in
+#: resources/docs/15_analyzed_features.md: (output filename stem, series
+#: shown on Y, spectrogram toggle). Rows that group several series in one
+#: README table cell (the formants, the formant/pitch ratios) show them
+#: together on one shared axis, the same way the table groups them -- except
+#: H1-H2/H1-H3/H1-H4, which despite being one table row each get their own
+#: plot, since they're independent measurements best compared one at a time.
+FEATURE_ROWS = [
+    ("pitch", ["pitch"], False),
+    ("loudness", ["loudness"], False),
+    ("formants", ["F1", "F2", "F3"], False),
+    ("jitter", ["jitter"], False),
+    ("shimmer", ["shimmer"], False),
+    ("h1_h2", ["H1_H2"], False),
+    ("h1_h3", ["H1_H3"], False),
+    ("h1_h4", ["H1_H4"], False),
+    ("h1_a3", ["H1_A3"], False),
+    ("formant_pitch_ratios", ["F1_Pitch", "F2_Pitch", "F3_Pitch"], False),
+    ("size", ["size"], False),
+    ("spectrogram", [], True),
+]
 
 
 def main():
@@ -50,6 +78,7 @@ def main():
                  "(it lives outside git -- see examples/accent_gmu_edu/swedish/fetch.sh)")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    FEATURES_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     settings_dir = tempfile.mkdtemp(prefix="voicevis_docshots_settings_")
     try:
@@ -76,6 +105,10 @@ def main():
         shots.launch()
         shots.open_file_menu()
         shots.load_and_analyse()
+        shots.feature_screenshots()
+        # feature_screenshots() swaps in a single-pane layout per feature;
+        # every later step assumes the four-plot "simple" grid is back.
+        session.load_layout_from_file(simple_layout)
         shots.playback()
         shots.axis_picker()
         shots.targets()
@@ -89,6 +122,7 @@ def main():
         shutil.rmtree(settings_dir, ignore_errors=True)
 
     print(f"Wrote {len(list(OUT_DIR.glob('*.png')))} screenshot(s) to {OUT_DIR}")
+    print(f"Wrote {len(list(FEATURES_OUT_DIR.glob('*.png')))} screenshot(s) to {FEATURES_OUT_DIR}")
 
 
 def _isolate_qsettings(settings_dir):
@@ -235,9 +269,9 @@ class _Shots:
         if not ok:
             sys.exit("Analysis timed out")
 
-    def _save(self, name):
+    def _save(self, name, out_dir=OUT_DIR):
         self._pump()
-        path = OUT_DIR / name
+        path = out_dir / name
         ok = self.window.grab().save(str(path))
         if not ok:
             sys.exit(f"Failed to save {path}")
@@ -323,6 +357,39 @@ class _Shots:
         self.session.load_audio_to_memory(str(EXAMPLE_AUDIO))
         self._wait_for_analysis()
         self._save("03_loaded.png")
+
+    def feature_screenshots(self):
+        """One single-pane grid per row of the Analyzed Features table.
+
+        Window size is untouched (still ``WINDOW_SIZE``); only the plot grid
+        is swapped, one column/one row at a time, so each shot shows exactly
+        the series that table row describes and nothing else.
+        """
+        print("feature screenshots")
+        for slug, y_keys, spectrogram in FEATURE_ROWS:
+            layout = {
+                "version": 2,
+                "global_size": 3,
+                "main_splitter_sizes": [],
+                "columns": [
+                    {
+                        "plots": [
+                            {
+                                "x": ["time"],
+                                "y": y_keys,
+                                "colour": None,
+                                "trail_time": 3.0,
+                                "spectrogram": spectrogram,
+                                "separate_axes": False,
+                                "local_size": 3,
+                            }
+                        ],
+                        "sizes": [],
+                    }
+                ],
+            }
+            self.session.apply_layout_data(layout)
+            self._save(f"{slug}.png", out_dir=FEATURES_OUT_DIR)
 
     def playback(self):
         print("playback")
