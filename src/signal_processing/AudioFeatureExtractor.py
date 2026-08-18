@@ -173,10 +173,6 @@ class AudioFeatureExtractor:
         f2_pitch_clean = f2_clean / pitch_clean
         f3_pitch_clean = f3_clean / pitch_clean
 
-        # 2. Compute the perceived heuristic profile using the new isolated method
-        weight3, weight3_average = calculate_weight3(pcm_data, sampling_rate, pitch_clean, timepoints, pitch_clean)
-        weight3_clean = np.where(valid_mask, weight3, np.nan)
-
         # 3. Construct the result dictionary using filtered arrays
         result = AudioFeatures(
             sample_rate=sampling_rate,
@@ -186,10 +182,8 @@ class AudioFeatureExtractor:
             loudness=SignalTimeSeries(x=timepoints, y=loudness_clean),
             jitter=SignalTimeSeries(x=timepoints, y=jitter_clean),
             shimmer=SignalTimeSeries(x=timepoints, y=shimmer_clean),
-            weight_instantaneous=SignalTimeSeries(x=timepoints, y=weight3_clean), #calculate_weight(timepoints, h1_h2_clean, h1_h3_clean, h1_h4_clean),
             size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),
             spectrogram=calculate_spectrogram(pcm_data, sampling_rate),
-            slopes=calculate_slopes(pcm_data, sampling_rate, timepoints),
 
             F1=SignalTimeSeries(x=timepoints, y=f1_clean),
             F2=SignalTimeSeries(x=timepoints, y=f2_clean),
@@ -254,41 +248,6 @@ def calculate_size(t, F1_Pitch, F2_Pitch, F3_Pitch, target_config) -> SignalTime
 
     size_y = signed_rms([F1_Pitch, F2_Pitch, F3_Pitch])
     return SignalTimeSeries(x=t, y=size_y)
-
-def calculate_spectral_slope(audio_data, sample_rate, nperseg=1024, noverlap=512):
-    """
-    Calculates the spectral slope of an audio signal over time.
-    Silence filtering is delegated to the master valid_mask in the extractor
-    to prevent misaligned timeframes.
-    """
-    # 1. Compute the Short-Time Fourier Transform
-    f, t, Zxx = stft(audio_data, fs=sample_rate, nperseg=nperseg, noverlap=noverlap)
-
-    # Use the magnitude spectrum
-    mag_spectrum = np.abs(Zxx)
-
-    # Guard clause: if the entire audio is empty, return empty arrays
-    if mag_spectrum.shape[1] == 0:
-        return np.array([]), np.array([])
-
-    f_mean = np.mean(f)
-    mag_mean = np.mean(mag_spectrum, axis=0)  # Mean across frequencies for each frame
-
-    # Calculate covariance and variance
-    f_diff = f - f_mean  # shape: (F,)
-    mag_diff = mag_spectrum - mag_mean  # shape: (F, T)
-
-    # Numerator: Sum of (x - x_mean) * (y - y_mean)
-    # Denominator: Sum of (x - x_mean)^2
-    numerator = np.sum(f_diff[:, None] * mag_diff, axis=0)
-    denominator = np.sum(f_diff ** 2)
-
-    # Slope (m) = Numerator / Denominator
-    slopes = numerator / denominator
-    slopes = np.negative(slopes)
-
-    return t, slopes
-
 
 def load_pcm_from_wave(file_path):
     with wave.open(file_path, 'rb') as wav_file:
@@ -394,10 +353,6 @@ def remove_local_outliers_robust(data_array, window=50, threshold=3.0):
 
     return cleaned_series
 
-def calculate_weight(t, H1_H2, H1_H3, H1_H4):
-    weight = signed_rms([H1_H2, H1_H3, H1_H4])
-    return SignalTimeSeries(x=t, y=weight)
-
 def rolling_mean(t: np.ndarray, series: SignalTimeSeries, valid_mask, window=500):
     y = pd.Series(series.y).rolling(
         window=window, # 2 s
@@ -419,17 +374,6 @@ def signed_rms(array: np.ndarray) -> np.ndarray:
     net_direction = np.sign(np.sum(stacked_errors, axis=0))
     return net_direction * rms_magnitude
 
-def calculate_slopes(samples, sampling_rate, timepoints) -> SignalTimeSeries:
-    t_slopes, slopes = calculate_spectral_slope(samples, sampling_rate, nperseg=2048, noverlap=1024)
-
-    #  Interpolate slopes to match the filtered timepoints
-    if len(t_slopes) > 0 and len(timepoints) > 0:
-        matched_slopes = np.interp(timepoints, t_slopes, slopes)
-    else:
-        matched_slopes = np.zeros_like(timepoints)
-
-    return SignalTimeSeries(x=timepoints, y=matched_slopes)
-
 def calculate_spectrogram(samples, sampling_rate):
     # 4. Change window to 'blackmanharris' or 'nuttall' for less spectral leakage
     f_spec, t_spec, Sxx = spectrogram(
@@ -445,121 +389,3 @@ def calculate_spectrogram(samples, sampling_rate):
     Sxx_db = 10 * np.log10(np.clip(Sxx, 1e-10, None))
 
     return SpectrogramData(x=t_spec, y=f_spec, magnitude_db=Sxx_db)
-
-
-def calculate_weight3(pcm_data, sampling_rate, pitch_clean, timepoints, f0_timeline) -> tuple[np.ndarray, float]:
-    def compute_native_naq_timeline(pcm_data, sampling_rate, f0_timeline, timepoints) -> np.ndarray:
-        """
-        Natively isolates the glottal flow wave using frame-by-frame LPC
-        inverse filtering and calculates the Normalized Amplitude Quotient.
-        """
-        naq_timeline = np.zeros_like(timepoints)
-        window_duration = 0.050
-        window_samples = int(window_duration * sampling_rate)
-        lpc_order = 2 + int(sampling_rate / 1000)
-
-        for i, tp in enumerate(timepoints):
-            f0_val = f0_timeline[i]
-
-            # ⚠️ Updated: Handle np.nan checks introduced by your valid_mask
-            if np.isnan(f0_val) or f0_val <= 0:
-                continue
-
-            start_idx = max(0, int((tp - window_duration / 2) * sampling_rate))
-            end_idx = min(len(pcm_data), start_idx + window_samples)
-            audio_frame = pcm_data[start_idx:end_idx]
-
-            if len(audio_frame) < lpc_order * 2:
-                continue
-
-            try:
-                a_coefficients = librosa.lpc(audio_frame, order=lpc_order)
-                glottal_derivative = lfilter(a_coefficients, [1.0], audio_frame)
-                glottal_flow = lfilter([1.0], [1.0, -0.98], glottal_derivative)
-
-                av_discrete = np.max(glottal_flow) - np.min(glottal_flow)
-                dmin_discrete = np.abs(np.min(glottal_derivative))
-                t0_samples = sampling_rate / f0_val
-
-                if dmin_discrete > 1e-6:
-                    naq_timeline[i] = av_discrete / (dmin_discrete * t0_samples)
-            except Exception:
-                continue
-
-        return naq_timeline
-
-    # 1. Generate the raw structural NAQ array
-    naq_timeline = compute_native_naq_timeline(pcm_data, sampling_rate, pitch_clean, timepoints)
-
-    eps = 1e-6
-
-    # 1. Invert thickness: small NAQ profiles mean tight, sudden, heavy fold closures
-    glottal_heaviness = 1.0 / (naq_timeline + eps)
-
-    # 2. Min-max scale baseline variations to cleanly clip artifacts between 0.0 and 1.0
-    glottal_heaviness_norm = np.clip((glottal_heaviness - 1.0) / 10.0, 0, 1)
-
-    # 3. ⚠️ Updated: Clean NaNs from f0_timeline to prevent math scaling warnings
-    f0_safe = np.nan_to_num(f0_timeline, nan=0.0)
-
-    # Apply Pitch Interaction: Scales heavier configurations upward if pitch rises
-    f0_factor = f0_safe / 150.0
-    vocal_weight_timeline = glottal_heaviness_norm * f0_factor
-
-    # 4. Suppress metric entirely during silence or unvoiced speech pauses
-    vocal_weight_timeline[f0_safe == 0] = 0.0
-
-    # 5. Extract strict average tracking exclusively from active voiced frames
-    voiced_frames = vocal_weight_timeline[vocal_weight_timeline > 0]
-    average_vocal_weight = float(np.mean(voiced_frames)) if len(voiced_frames) > 0 else 0.0
-
-    return vocal_weight_timeline, average_vocal_weight
-
-def calculate_weight4(path):
-    def zff_gci(x, fs):
-        """Zero-frequency filtering GCI detection (Murty & Yegnanarayana, 2008)."""
-        diff = np.diff(x, prepend=x[0]).astype(float)
-        y = lfilter([1], [1, -2, 1], diff)
-        y = lfilter([1], [1, -2, 1], y)
-        wlen = max(1, int(0.001 * fs))  # ~1 ms averaging window, applied 3x
-        for _ in range(3):
-            y = y - uniform_filter1d(y, size=2 * wlen + 1)
-        gci = np.where((y[:-1] < 0) & (y[1:] >= 0))[0]
-        return gci
-
-    def lpc_inverse_filter(x, fs, order=None):
-        order = order or int(2 + fs / 1000)
-        a = librosa.lpc(x.astype(float), order=order)
-        residual = lfilter(a, [1], x)  # ~ glottal flow derivative
-        flow = lfilter([1], [1, -0.99], residual)  # leaky integration -> flow
-        return flow
-
-    def compute_quotients(flow, gcis):
-        oqs, cqs, sqs = [], [], []
-        for i0, i1 in zip(gcis[:-1], gcis[1:]):
-            cycle = flow[i0:i1]
-            T0 = i1 - i0
-            if T0 < 4:
-                continue
-            goi = np.argmin(cycle)  # most-closed point = opening instant
-            open_seg = cycle[goi:]
-            if len(open_seg) < 2:
-                continue
-            peak = np.argmax(open_seg) + goi  # instant of max glottal opening
-            OQ = (T0 - goi) / T0
-            CQ = 1 - OQ
-            opening_dur = peak - goi
-            closing_dur = T0 - peak
-            if closing_dur <= 0:
-                continue
-            SQ = opening_dur / closing_dur
-            oqs.append(OQ);
-            cqs.append(CQ);
-            sqs.append(SQ)
-        return np.array(oqs), np.array(cqs), np.array(sqs)
-
-    x, fs = librosa.load(path, sr=None, mono=True)
-    flow = lpc_inverse_filter(x, fs)
-    gcis = zff_gci(x, fs)
-    oq, cq, sq = compute_quotients(flow, gcis)
-    return dict(OQ=oq.mean(), CQ=cq.mean(), SQ=sq.mean(), n_cycles=len(oq))

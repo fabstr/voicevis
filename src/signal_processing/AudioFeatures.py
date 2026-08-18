@@ -65,12 +65,8 @@ class SpectrogramData:
 class AudioFeatures:
     # Core Acoustic Features
     pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    pitch_5s_mean: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    slopes: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight_instantaneous: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    weight_333ms_max: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     jitter: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     shimmer: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
@@ -92,7 +88,6 @@ class AudioFeatures:
     F3_Pitch_rel_amplitude: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     size: SignalTimeSeries = field(default_factory=SignalTimeSeries)
-    size_5s_mean: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     spectrogram: SpectrogramData = field(default_factory=SpectrogramData)
 
@@ -106,13 +101,9 @@ class FeatureSnapshot:
     time: float
 
     pitch: float
-    pitch_5s_mean: float
     loudness: float
     jitter: float
     shimmer: float
-    weight_instantaneous: float
-    weight_333ms_max: float
-    slopes: float
     H1_H2: float
     H1_H3: float
     H1_H4: float
@@ -127,5 +118,4 @@ class FeatureSnapshot:
     F3_Pitch: Optional[float] = None
 
     size: Optional[float] = None
-    size_5s_mean: Optional[float] = None
     spectrogram: Optional[SpectrogramData] = None

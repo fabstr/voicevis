@@ -31,7 +31,6 @@ f3 = "#ffd700"
 f1_pitch = "#7588ff"
 f2_pitch = "#ff8c00"
 f3_pitch = "#9966cc"
-weight = "#c71585"
 size = "#32cd32"
 
 h1_h2 = "#EF75F0"
@@ -111,17 +110,10 @@ for _spec in (
                colour=magnitude, kind=SeriesKind.MAGNITUDE),
 
     _signal("pitch", "Pitch", 0, 350, pitch, "pitch", "Hz"),
-    # _signal("pitch_5s_mean", "Pitch (5 s mean)", 0, 300, pitch, "pitch", "Hz"),
 
     _signal("loudness", "Loudness", 0, 10, loudness, "loudness"),
 
-    # _signal("weight_instantaneous", "Weight (softness)", 0, 2.5, weight, "weight"),
-    # _signal("weight_333ms_max", "Weight (333 ms max)", 0, 40, weight, "weight"),
-
     _signal("size", "Size", 0, 30, size, "size"),
-    # _signal("size_5s_mean", "Size (5 s mean)", 0, 30, size, "size"),
-
-    # _signal("slopes", "Spectral slope", -1e-6, 1e-6, "#ff0000", "slopes"),
 
     _signal("F1", "F1", 0, 3500, f1, "f1", "Hz"),
     _signal("F2", "F2", 0, 3500, f2, "f2", "Hz"),
@@ -285,16 +277,8 @@ class PlotPreset:
 PRESETS = (
     PlotPreset("Pitch", ("time",), ("pitch",)),
     PlotPreset("Size", ("time",), ("size",)),
-    # PlotPreset("Weight", ("time",), ("weight_instantaneous",)),
-    # PlotPreset("Size vs Weight", ("weight_instantaneous",), ("size",),
-    #            colour="loudness", trail_time=3.0),
-
-    # PlotPreset("5s average pitch", ("time",), ("pitch_5s_mean",)),
-    # PlotPreset("5s average size", ("time",), ("size_5s_mean",)),
-    # PlotPreset("5s average weight", ("time",), ("weight_333ms_max",)),
 
     PlotPreset("Loudness", ("time",), ("loudness",)),
-    # PlotPreset("Spectral slopes", ("time",), ("slopes",)),
 
     PlotPreset("Formants", ("time",), ("F1", "F2", "F3")),
     PlotPreset("F1", ("time",), ("F1",)),
@@ -304,9 +288,6 @@ PRESETS = (
     PlotPreset("F3/Pitch", ("time",), ("F3_Pitch",)),
     PlotPreset("F2/Pitch", ("time",), ("F2_Pitch",)),
     PlotPreset("F1/Pitch", ("time",), ("F1_Pitch",)),
-
-    # PlotPreset("Fullness", ("time",), ("size",),
-    #            colour="weight_instantaneous", y_range=(-15.0, 25.0)),
 
     PlotPreset("Spectrogram", ("time",), (), spectrogram=True),
     PlotPreset("Frequency Analysis", ("frequency",), ("magnitude",)),

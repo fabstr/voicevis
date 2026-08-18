@@ -93,11 +93,6 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                                 slopes=results.slopes.get_last_y(),
                                 jitter=results.jitter.get_last_y(),
                                 shimmer=results.shimmer.get_last_y(),
-                                weight_instantaneous=results.weight_instantaneous.get_last_y(),
-                                # weight_333ms_max=results.weight_333ms_max.get_last_y(),
-                                weight_333ms_max=0,
-                                pitch_5s_mean=0,
-                                size_5s_mean=0,
 
                                 # Individual Formants
                                 F1=results.F1.get_last_y(),
