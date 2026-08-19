@@ -9,6 +9,10 @@ recorded under [Open points](#open-points) rather than guessed at.
 Throughout, *the system* means the VoiceVis application, and *a session* means
 one window together with its own audio, analysis, plot grid and target.
 
+Every new user-visible behaviour is added here as it is built. How to number it,
+and what else has to be updated alongside it, is in
+[SPEC.md § Definition of done](SPEC.md#7-definition-of-done-for-a-feature).
+
 ## EARS patterns used
 
 | Pattern | Form |

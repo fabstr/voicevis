@@ -24,6 +24,10 @@ Extracted per audio frame (via openSMILE eGeMAPS LLD config, plus custom signal 
 
 ## Developer documentation
 
+Start with the [project specification](SPEC.md) — the code and resource map, the
+invariants, and what has to be true before a change is finished. What the
+application does, precisely, is in [REQUIREMENTS.md](REQUIREMENTS.md).
+
 Architecture notes live next to the code they describe:
 
 - [The main toolbar](src/ui/ResponsiveToolBar.md) — grouped controls that fold into dropdowns when the window is narrow
