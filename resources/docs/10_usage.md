@@ -16,6 +16,7 @@
 - [Audio editing](#audio-editing)
   - [Selecting](#selecting)
   - [Editing the selection](#editing-the-selection)
+  - [Gain](#gain)
   - [Undo](#undo)
 - [Full feature list](#full-feature-list)
   - [Sessions & files](#sessions--files)
@@ -208,6 +209,41 @@ spectrogram.
 
 ![The same range after Replace with Silence: flat data in every scatter plot and a silent gap in the spectrogram](img/workflow/14_silence_result.png)
 
+### Gain
+
+`Edit > Gain...` asks for a level change in dB and applies it to the audio
+**before the session does anything with it** -- analysing, playing and saving
+alike. A positive figure lifts a recording made at too low an input level, a
+negative one attenuates. It applies to the selection if there is one, and to
+the whole recording if there is not.
+
+![The Gain dialog over the four plots, with -6.0 dB entered](img/workflow/15_gain_dialog.png)
+
+A gain is not an edit to the recording: it changes what the session *does*
+with the audio, not the audio it holds. Playback comes out at the new level,
+and so does every number derived from it -- loudness most obviously, but the
+harmonic ratios and the formant estimates shift with the level too. The file
+you opened is never touched. The toolbar names the gain while one is in force,
+so it is not a setting you can forget you left on; hovering it lists the
+ranges.
+
+![The same plots after -6 dB: the Loudness colour scale now tops out at 2.5 instead of 4, the spectrogram is dimmer, and the toolbar reads "Gain: -6.0 dB"](img/workflow/16_gain_result.png)
+
+Setting a range back to **0 dB** removes its gain -- that, rather than Undo,
+is the way back, since a gain is not an edit to undo. Loading a different file
+clears the gains with it.
+
+Two things worth knowing:
+
+- **Saving carries the gain.** `File > Save Audio As...` writes the audio the
+  analysis saw, gain included -- so the wav on disk matches the numbers. The
+  file you originally opened is left as it was; only a save writes a gained
+  one, and only where you tell it to.
+- **A large gain can clip.** Samples pushed past full scale are clamped, which
+  flattens the peaks of the waveform -- both the one you hear and the one the
+  analysis measures. VoiceVis says so when it happens; back the gain off if it
+  does.
+
 ### Undo
 
 `Edit > Undo` / `Edit > Redo` (or the standard shortcuts) step back and
@@ -221,7 +257,7 @@ itself names what it would undo or redo next, so it's never a guess.
 - **File > Open** an audio file (`.wav`, `.mp3`) or an annotations file (`.json`)
 - **Drag-and-drop** a `.wav`/`.mp3`/`.json` file onto the window to load it
 - **File > Save Annotations** to a `.json` file (linked to the source audio path, with a fallback path)
-- **File > Save Audio As...** exports the in-memory recording to a `.wav` file
+- **File > Save Audio As...** exports the in-memory recording to a `.wav` file, with any gain applied
 - **File > Close** closes the current window/session
 - Windows cascade automatically when opened, and the title bar shows the loaded file name
 
@@ -240,6 +276,9 @@ itself names what it would undo or redo next, so it's never a guess.
 - Drag the **band itself** to move that audio to a new position (overwrites destination, leaves silence behind)
 - **Replace with Silence** — zero out the selected range, keeping timeline length
 - **Cut Selection** — remove the selected range and close the gap (shortens recording)
+- **Gain...** — a level change in dB applied to the audio before analysis: the selection if there is one, otherwise the whole recording
+- The gain reaches the analysis, playback and `Save Audio As` alike; the file on disk is the one thing it never reaches, and 0 dB removes it
+- A gain follows the audio it covers through a cut or a move, and is cleared when a different file is loaded
 - **Undo / Redo** for record, clear, silence, cut, and move — menu labels show what will be undone/redone
 - Leaving Select mode clears the current selection
 

@@ -4,6 +4,11 @@ States rather than commands: each entry is a copy of the whole audio buffer as
 it was *before* an action. That costs memory but it is impossible to get wrong,
 and it makes recording and clearing undoable on exactly the same footing as an
 edit, without either of them having to describe how to reverse itself.
+
+An entry carries the gains in force at the same moment. They are not audio, and
+setting one is not an undoable action -- but a cut or a move takes them along
+with the audio they cover, so restoring one state without the other would leave
+a gain describing a stretch that is no longer there.
 """
 
 import logging
@@ -20,12 +25,13 @@ MAX_BYTES = 256 * 1024 * 1024
 
 
 class _Entry:
-    __slots__ = ("audio", "audio_file", "label")
+    __slots__ = ("audio", "audio_file", "label", "gains")
 
-    def __init__(self, audio, audio_file, label):
+    def __init__(self, audio, audio_file, label, gains=None):
         self.audio = QByteArray(audio)      # a copy: the original keeps changing
         self.audio_file = audio_file
         self.label = label
+        self.gains = gains
 
     @property
     def size(self) -> int:
@@ -44,9 +50,9 @@ class AudioHistory(QtCore.QObject):
 
     # --- Recording history -----------------------------------------------
 
-    def capture(self, audio, audio_file=None, label="Edit"):
+    def capture(self, audio, audio_file=None, label="Edit", gains=None):
         """Remember the state before an action. Call this *before* changing it."""
-        self._undo.append(_Entry(audio, audio_file, label))
+        self._undo.append(_Entry(audio, audio_file, label, gains))
         self._redo.clear()
         self._trim()
         self.changed.emit()
@@ -61,21 +67,21 @@ class AudioHistory(QtCore.QObject):
 
     # --- Stepping --------------------------------------------------------
 
-    def undo(self, audio, audio_file=None):
+    def undo(self, audio, audio_file=None, gains=None):
         """Return the previous state, or None. ``audio`` is the current one."""
         if not self._undo:
             return None
         entry = self._undo.pop()
-        self._redo.append(_Entry(audio, audio_file, entry.label))
+        self._redo.append(_Entry(audio, audio_file, entry.label, gains))
         self.changed.emit()
         return entry
 
-    def redo(self, audio, audio_file=None):
+    def redo(self, audio, audio_file=None, gains=None):
         """Return the state undone most recently, or None."""
         if not self._redo:
             return None
         entry = self._redo.pop()
-        self._undo.append(_Entry(audio, audio_file, entry.label))
+        self._undo.append(_Entry(audio, audio_file, entry.label, gains))
         self.changed.emit()
         return entry
 

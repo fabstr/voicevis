@@ -4,6 +4,11 @@ The user can pick out a stretch of the recording on any time plot and either
 silence it or move it. Both act on the in-memory PCM buffer and are followed by
 a re-analysis, exactly as finishing a recording is.
 
+A **gain** is the odd one out: it is reached the same way, from the same menu,
+over the same selection, but it never reaches the buffer -- it is applied to a
+copy, on the way to whatever asked for the audio. See
+[Gain](#gain-the-edit-that-is-not-one) below.
+
 ## The gesture
 
 ```mermaid
@@ -16,13 +21,17 @@ flowchart TD
     B --> M["drag the band itself"] --> MV["move the audio by that far"]
     B --> Z["Edit &gt; Replace with Silence"] --> SI["replace with silence,<br/>same length"]
     B --> C["Edit &gt; Cut Selection"] --> CU["remove it and<br/>close the gap"]
+    B --> G["Edit &gt; Gain..."] --> GA["record dB over<br/>that range"]
 
     MV --> RA["re-analyse"]
     SI --> RA
     CU --> RA
+    GA --> RA
 
     classDef act fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    classDef soft fill:#3d3524,stroke:#c8ab7a,color:#f5efe8
     class R,MV,SI,CU act
+    class GA soft
 ```
 
 Dragging the **band** moves the audio; dragging an **edge** only adjusts the
@@ -37,6 +46,7 @@ range the user can no longer see.
 | | |
 |---|---|
 | `signal_processing/AudioEdit.py` | `silence()`, `cut()` and `move()` on the byte buffer |
+| `signal_processing/GainMap.py` | The gains in force, and applying them to a copy of the buffer |
 | `ui/AudioHistory.py` | The undo and redo stacks |
 | `ui/plot/TimeSelection.py` | The selected range; one per session, on the hub |
 | `ui/plot/layers/SelectionLayer.py` | Draws the band, reports drags |
@@ -72,9 +82,61 @@ cleared, so nudging a selection slightly — an overlapping move — comes out
 right. Dragging past the end grows the buffer rather than truncating the audio;
 dragging entirely off the front is refused.
 
-## Not implemented: undo
+## Gain: the edit that is not one
 
-These edits are destructive and there is no undo. Recovering a mistake means
-re-loading the file, and a mistake on an unsaved recording cannot be recovered
-at all. A single-level undo would be cheap — keep a copy of the buffer before
-each edit — and is the obvious next thing to add.
+`Edit > Gain...` asks for a level change in dB and records it against a range
+of the recording — the selection if there is one, otherwise `0..inf`, which is
+what "the whole recording" means here, so audio recorded onto the end later is
+covered by the same gain. `GainMap` keeps those ranges non-overlapping: setting
+a gain over a range replaces whatever was in force there, and 0 dB removes it.
+
+Nothing in the buffer changes. The gains are applied to a *copy* on every path
+out of it, all three through `AnalysisWidget._gained_audio()`:
+
+```mermaid
+flowchart LR
+    F["the file on disk<br/><i>never written</i>"] -.->|load| BUF["audio_data<br/>(as recorded)"]
+    BUF --> GA["GainMap.apply()"]
+    GA --> AN["AnalysisWorker"]
+    GA --> PB["PlaybackWorker"]
+    GA --> EX["Save Audio As..."]
+
+    classDef plain fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    class GA plain
+```
+
+So the user hears what the analysis measured, and an exported wav matches both.
+Keeping the buffer at the recorded level is what makes the gain adjustable
+rather than accumulating: re-applying is a new multiplication of the original
+samples, not another one on top of the last. The chunk cache needs no special
+handling either -- it keys on the audio it is handed, so a gain over one
+stretch re-analyses that stretch and reuses the rest. The chunk read while
+recording is gained on its way to the live analysis too, at the offset it
+occupies in the recording.
+
+A stream that is already playing was handed the level in force when it started,
+so applying a gain stops playback; the next play picks the new level up.
+
+A gain over a range describes *that audio*, so `cut()` and `move()` on the map
+follow the buffer edit of the same name: a cut drops the gains over what it
+removed and pulls later ones back with the audio, and a move carries them
+along, overwriting whatever was in force where they land.
+
+Applying a gain is not an undoable action — 0 dB is the way back. But an entry
+in the undo history carries a copy of the map anyway, because a cut or a move
+*does* change it, and putting the audio back has to put the gains back with it.
+
+Samples driven past full scale are clamped, and the user is told once, when the
+gain is applied.
+
+## Undo
+
+`AudioHistory` keeps states, not commands: each entry is a copy of the whole
+buffer as it was *before* an action, which makes recording and clearing
+undoable on the same footing as an edit without either having to describe how
+to reverse itself. It keeps 30 steps or 256 MB, whichever runs out first,
+dropping the oldest. Each entry carries the file path and the gains in force at
+that moment as well, so stepping back restores the whole picture.
+
+The Undo and Redo menu entries are labelled with what they would undo or redo —
+`AnalysisWidget._on_history_changed()` renames them whenever the stacks change.

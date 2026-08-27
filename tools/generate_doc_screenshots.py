@@ -115,6 +115,7 @@ def main():
         shots.set_targets_dialog()
         shots.zoom()
         shots.annotation()
+        shots.gain()
         shots.audio_editing()
 
         window.close()
@@ -495,6 +496,39 @@ class _Shots:
         self._save("11_annotation_result.png")
 
     # --- Audio editing -----------------------------------------------------
+
+    def gain(self):
+        """The Gain dialog, and what a gain does to the analysis.
+
+        6 dB *off* rather than on: this clip peaks at -3.7 dBFS, so adding 6 dB
+        would clip it, and a clipping warning is not what this step is showing.
+        The gain is taken back off at the end, so every later step sees the
+        audio as it was loaded.
+        """
+        print("gain: dialog + result")
+        session = self.session
+        # Finishing an analysis rewinds the playhead; the steps after this one
+        # were captured with it where playback left it, so put it back.
+        playhead = session.current_playback_time
+
+        def type_gain(dialog):
+            box = dialog.findChild(QtWidgets.QDoubleSpinBox)
+            if box is not None:
+                box.setValue(-6.0)
+
+        self._save_with_dialog("15_gain_dialog.png", session.handle_set_gain,
+                               before_grab=type_gain)
+
+        # The dialog above was rejected, so apply the same figure directly to
+        # get the result shot -- the whole recording, as no selection is up.
+        session.apply_gain(0.0, float('inf'), -6.0)
+        self._wait_for_analysis()
+        self._save("16_gain_result.png")
+
+        session.apply_gain(0.0, float('inf'), 0.0)
+        self._wait_for_analysis()
+        session.current_playback_time = playhead
+        session.update_playhead()
 
     def audio_editing(self):
         """Last on purpose: silencing destructively edits the audio buffer."""

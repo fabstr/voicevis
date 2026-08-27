@@ -1,0 +1,106 @@
+{
+    "version": 2,
+    "global_size": 5,
+    "main_splitter_sizes": [
+        1909,
+        1908
+    ],
+    "columns": [
+        {
+            "plots": [
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "size"
+                    ],
+                    "colour": "H1_A3",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 5
+                },
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "H1_A3"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 5
+                },
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "pitch"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 5
+                }
+            ],
+            "sizes": [
+                674,
+                1348,
+                0
+            ]
+        },
+        {
+            "plots": [
+                {
+                    "x": [
+                        "H1_A3"
+                    ],
+                    "y": [
+                        "size"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 5
+                },
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "pitch"
+                    ],
+                    "colour": "loudness",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 5
+                },
+                {
+                    "x": [
+                        "time"
+                    ],
+                    "y": [
+                        "pitch"
+                    ],
+                    "colour": "H1_A3",
+                    "trail_time": 3.0,
+                    "spectrogram": false,
+                    "separate_axes": false,
+                    "local_size": 5
+                }
+            ],
+            "sizes": [
+                674,
+                674,
+                674
+            ]
+        }
+    ]
+}

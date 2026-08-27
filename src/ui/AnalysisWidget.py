@@ -19,6 +19,7 @@ from signal_processing import AudioEdit
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from signal_processing.ChunkedAnalysis import ChunkedAudioAnalysis
+from signal_processing.GainMap import GainMap, INFINITY
 from ui.AnnotationMarker import AnnotationMarker
 from ui.AudioHistory import AudioHistory
 from ui.HelpWindow import HelpWindow
@@ -45,11 +46,17 @@ WORKER_SHUTDOWN_MS = 2000
 SELECT_ICON = 'mdi6.selection-drag'
 SILENCE_ICON = 'mdi6.volume-off'
 CUT_ICON = 'fa5s.cut'
+GAIN_ICON = 'fa5s.sliders-h'
 UNDO_ICON = 'mdi6.undo'
 REDO_ICON = 'mdi6.redo'
 
 SELECT_TOOLTIP = ("Select audio: drag on a time plot to select, drag the band "
                   "to move that audio, drag its edges to adjust")
+
+#: How far a gain can be pushed either way, in dB. Wide enough to rescue a
+#: recording made at the wrong input level, narrow enough to stay a gain.
+GAIN_LIMIT_DB = 40.0
+
 
 class AnalysisWidget(QtWidgets.QWidget):
     file_loaded_signal = QtCore.pyqtSignal(str)
@@ -97,6 +104,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.action_select = None
         self.action_silence = None
         self.action_cut = None
+        self.action_gain = None
         self.action_undo = None
         self.action_redo = None
         self.playback_btn = None
@@ -107,6 +115,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.time_label = None
         self.time_edit = None
         self.target_name_label = None
+        self.gain_label = None
+        self.gain_group = None
         self.add_icon = None
         self.remove_icon = None
         self.row_label = None
@@ -169,6 +179,10 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.target_config = TargetConfig()
 
         self.audioFeatureExtractor = AudioFeatureExtractor(self.target_config, self.resource_manager)
+
+        # Level changes the analysis and an export see, but the buffer never
+        # gets: the recording stays at the level it was captured at.
+        self.gain_map = GainMap()
 
         # Keeps the analysis of each 10 s of audio, so recording onto the end of
         # a long take, or editing part of it, only re-analyses what it touched.
@@ -303,6 +317,11 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.silence_icon, "Replace with Si&lence", self.handle_silence_selection)
         self.action_cut = self._action(
             self.cut_icon, "C&ut Selection", self.handle_cut_selection)
+        self.action_gain = self._action(
+            self.gain_icon, "&Gain...", self.handle_set_gain)
+        self.action_gain.setToolTip(
+            "Gain or attenuation, in dB, applied to the audio before it is "
+            "analysed -- the selection if there is one, otherwise all of it")
 
         for action in (self.action_silence, self.action_cut,
                        self.action_undo, self.action_redo):
@@ -377,6 +396,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         edit_menu.addAction(self.action_select)
         edit_menu.addAction(self.action_silence)
         edit_menu.addAction(self.action_cut)
+        edit_menu.addAction(self.action_gain)
         edit_menu.addSeparator()
         edit_menu.addAction(self.action_undo)
         edit_menu.addAction(self.action_redo)
@@ -499,6 +519,18 @@ class AnalysisWidget(QtWidgets.QWidget):
         target.add(self.target_name_label)
         self.toolbar.add_group(target, collapse_priority=3)
 
+        # --- Gain: a level change the plots show but the waveform does not, so
+        # it says so here whenever there is one. The whole group hides when
+        # there is none -- hiding only the label would leave the row's spacing
+        # either side of it and shift everything after it by 10 px. It never
+        # folds into a dropdown, where an empty group would still show its
+        # button.
+        self.gain_label = QtWidgets.QLabel()
+        self.gain_group = ToolbarGroup("Gain", collapsible=False)
+        self.gain_group.add(self.gain_label)
+        self.gain_group.hide()
+        self.toolbar.add_group(self.gain_group)
+
         self.toolbar.add_stretch()
 
         # --- Rows and columns
@@ -555,6 +587,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.select_icon = qta.icon(SELECT_ICON, color=colour)
         self.silence_icon = qta.icon(SILENCE_ICON, color=colour)
         self.cut_icon = qta.icon(CUT_ICON, color=colour)
+        self.gain_icon = qta.icon(GAIN_ICON, color=colour)
         self.undo_icon = qta.icon(UNDO_ICON, color=colour)
         self.redo_icon = qta.icon(REDO_ICON, color=colour)
 
@@ -772,6 +805,7 @@ class AnalysisWidget(QtWidgets.QWidget):
                 self.action_select.setIcon(self.select_icon)
                 self.action_silence.setIcon(self.silence_icon)
                 self.action_cut.setIcon(self.cut_icon)
+                self.action_gain.setIcon(self.gain_icon)
                 self.action_undo.setIcon(self.undo_icon)
                 self.action_redo.setIcon(self.redo_icon)
 
@@ -842,6 +876,9 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.history.reset()
             self.analysis_cache.reset()
             self.hub.selection.clear()
+            # The gains described stretches of the recording being replaced.
+            self.gain_map.clear()
+            self._update_gain_label()
             self.current_audio_file = file_path
 
             # Decode to raw PCM bytes
@@ -912,12 +949,14 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         if save_path:
             try:
-                # Manually write raw PCM data to disk
+                # Manually write raw PCM data to disk, at the level the
+                # analysis saw it: the export is what the numbers were made
+                # from, gains and all.
                 with wave.open(save_path, 'wb') as wf:
                     wf.setnchannels(1)
                     wf.setsampwidth(2)
                     wf.setframerate(self.sampling_rate)
-                    wf.writeframes(self.audio_data.data())
+                    wf.writeframes(self._gained_audio())
 
                 self.current_audio_file = save_path
                 self.file_loaded_signal.emit(save_path)
@@ -945,10 +984,12 @@ class AnalysisWidget(QtWidgets.QWidget):
         self._analysis_pending = False
         self._show_analysis_dialog()
 
-        # Passes memory bytes to worker instead of disk file path
+        # Passes memory bytes to worker instead of disk file path. The gains go
+        # on before it leaves: the chunk cache keys on the audio it is handed,
+        # so a gain over one stretch re-analyses that stretch and no other.
         self.worker = AnalysisWorker(
             self.audioFeatureExtractor,
-            audio_bytes=self.audio_data.data(),
+            audio_bytes=self._gained_audio(),
             sample_rate=self.sampling_rate,
             cache=self.analysis_cache
         )
@@ -1086,10 +1127,18 @@ class AnalysisWidget(QtWidgets.QWidget):
     def read_audio_chunk(self):
         current_pos = self.audio_buffer.pos()
         if current_pos > self.last_read_pos:
-            new_bytes = self.audio_data.mid(self.last_read_pos, current_pos - self.last_read_pos).data()
+            chunk_start = self.last_read_pos
+            new_bytes = self.audio_data.mid(chunk_start, current_pos - chunk_start).data()
             self.last_read_pos = current_pos
 
             if new_bytes:
+                # The live analysis is analysis too, so the chunk is gained on
+                # its way past -- at the position it occupies in the recording,
+                # since a gain may cover only part of it.
+                new_bytes, _ = self.gain_map.apply(
+                    new_bytes, self.sampling_rate,
+                    offset_seconds=chunk_start / float(AudioEdit.BYTES_PER_SAMPLE
+                                                       * self.sampling_rate))
                 self.audio_queue.put(new_bytes)
 
     def append_live_data(self, latest_point: FeatureSnapshot):
@@ -1120,8 +1169,13 @@ class AnalysisWidget(QtWidgets.QWidget):
             f"&Redo {self.history.redo_label}" if self.history.can_redo else "&Redo")
 
     def _capture(self, label):
-        """Remember the current audio so this action can be undone."""
-        self.history.capture(self.audio_data, self.current_audio_file, label)
+        """Remember the current audio so this action can be undone.
+
+        The gains go into the entry with it: a cut or a move takes them along,
+        so putting the audio back has to put them back as they were too.
+        """
+        self.history.capture(self.audio_data, self.current_audio_file, label,
+                             gains=self.gain_map.copy())
 
     def handle_silence_selection(self):
         """Replace the selected audio with silence, keeping the timeline length."""
@@ -1144,7 +1198,9 @@ class AnalysisWidget(QtWidgets.QWidget):
         if AudioEdit.cut(self.audio_data, selection.start, selection.end,
                          self.sampling_rate):
             # Everything after the cut has shifted; the old range no longer
-            # describes the same audio, so the selection goes with it.
+            # describes the same audio, so the selection goes with it. The
+            # gains describe stretches of audio too, and follow the same way.
+            self.gain_map.cut(selection.start, selection.end)
             selection.clear()
             self._after_audio_edit()
 
@@ -1157,11 +1213,113 @@ class AnalysisWidget(QtWidgets.QWidget):
         self._capture("Move")
         if AudioEdit.move(self.audio_data, selection.start, selection.end,
                           delta_seconds, self.sampling_rate):
+            self.gain_map.move(selection.start, selection.end, delta_seconds)
             selection.shift(delta_seconds)
             self._after_audio_edit()
         else:
             # Nothing moved; put the band back where the audio still is.
             self.hub.selection.changed.emit()
+
+    #################### Gain ####################
+
+    def handle_set_gain(self):
+        """Set the gain, in dB, applied to the audio before it is analysed."""
+        if self.audio_data.isEmpty():
+            QtWidgets.QMessageBox.warning(self, "No Audio",
+                                          "There is no audio to apply a gain to.")
+            return
+
+        selection = self.hub.selection
+        if selection.active:
+            start, end = selection.start, selection.end
+            scope = (f"the selection ({self.format_time(start)} to "
+                     f"{self.format_time(end)})")
+        else:
+            # To infinity rather than to the end of the buffer, so that audio
+            # recorded onto the end later is covered by the same gain.
+            start, end = 0.0, INFINITY
+            scope = "the whole recording"
+
+        current = self.gain_map.uniform_gain(start, end)
+        prompt = f"Gain applied to {scope} before analysis (dB):"
+        if current is None:
+            prompt += ("\n\nThis range carries more than one gain; applying "
+                       "replaces all of them.")
+
+        value, accepted = QtWidgets.QInputDialog.getDouble(
+            self, "Gain", prompt, current or 0.0,
+            -GAIN_LIMIT_DB, GAIN_LIMIT_DB, 1)
+
+        if accepted:
+            self.apply_gain(start, end, value)
+
+    def apply_gain(self, start, end, db, warn_on_clipping=True):
+        """Put ``db`` in force over a range, and re-analyse what it changed.
+
+        Separate from the dialog so that asking for a figure and acting on one
+        stay apart -- the screenshot tool and the tests set a gain without a
+        dialog to answer. Returns False when the gain was already in force.
+        """
+        if not self.gain_map.set_gain(start, end, db):
+            return False
+
+        # A stream already playing was handed the old level; the next play
+        # picks the new one up, as it does after any other edit.
+        if self.is_playing:
+            self.stop_playback()
+
+        self._update_gain_label()
+
+        if warn_on_clipping and self.gain_map.clips(self.audio_data.data(),
+                                                    self.sampling_rate):
+            QtWidgets.QMessageBox.information(
+                self, "Clipping",
+                "This gain drives part of the audio past full scale. Those "
+                "samples are clamped, so the analysis sees a flattened "
+                "waveform where it happens.")
+
+        if not self.audio_data.isEmpty():
+            self.select_analysis_from_memory()
+        return True
+
+    def _update_gain_label(self):
+        """Name the gains in force in the toolbar, or take the readout away."""
+        if self.gain_label is None:
+            return
+
+        segments = self.gain_map.segments()
+        if not segments:
+            self.gain_label.setToolTip("")
+            self.gain_group.hide()
+            self.toolbar.refit()
+            return
+
+        if len(segments) == 1 and segments[0].covers_everything:
+            self.gain_label.setText(f"Gain: {segments[0].db:+.1f} dB")
+        else:
+            self.gain_label.setText(f"Gain: {len(segments)} ranges")
+
+        self.gain_label.setToolTip("\n".join(
+            f"{self.format_time(segment.start)} to "
+            f"{'end' if segment.end == INFINITY else self.format_time(segment.end)}"
+            f": {segment.db:+.1f} dB"
+            for segment in segments))
+        self.gain_group.show()
+        # The row has one more thing in it than it had; nothing else would
+        # notice, since the toolbar only re-fits when it is resized.
+        self.toolbar.refit()
+
+    def _gained_audio(self):
+        """The buffer as the analysis, playback and an export get it.
+
+        The gains are applied to a copy each time. The buffer itself keeps the
+        level it was captured at, and so does the file it was loaded from --
+        that file is the only thing a gain never reaches.
+        """
+        gained, _ = self.gain_map.apply(self.audio_data.data(), self.sampling_rate)
+        return gained
+
+    #################### Undo ####################
 
     def handle_undo(self):
         self._step_history(self.history.undo)
@@ -1173,13 +1331,15 @@ class AnalysisWidget(QtWidgets.QWidget):
         if self.is_recording:
             self.record_stop()
 
-        entry = step(self.audio_data, self.current_audio_file)
+        entry = step(self.audio_data, self.current_audio_file, self.gain_map.copy())
         if entry is None:
             return
 
         self.audio_data.clear()
         self.audio_data.append(entry.audio)
         self.current_audio_file = entry.audio_file
+        if entry.gains is not None:
+            self.gain_map = entry.gains
         self.hub.selection.clear()
         self._after_audio_edit()
 
@@ -1188,6 +1348,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         if self.is_playing:
             self.stop_playback()
         self._on_selection_changed()
+        self._update_gain_label()
 
         if self.audio_data.isEmpty():
             self.hub.clear()
@@ -1216,6 +1377,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.current_audio_file = None
         self.audio_data.clear()
         self.analysis_cache.reset()
+        self.gain_map.clear()
+        self._update_gain_label()
         self.hub.clear()
 
         if hasattr(self, 'recording_start_offset'):
@@ -1253,7 +1416,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.play_worker.wait()
 
         self.play_worker = PlaybackWorker(
-            samples=self.audio_data.data(),
+            samples=self._gained_audio(),
             seek_frame=seek_frame,
             sample_rate=current_sr
         )

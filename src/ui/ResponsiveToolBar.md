@@ -11,14 +11,15 @@ graph LR
     V["View tools<br/><i>reset, zoom X, zoom Y, measure</i>"]
     TI["Time"]
     TG["Target"]
+    GN["Gain<br/><i>only while one is in force</i>"]
     G["Rows and columns"]
     P["Point size"]
 
-    T --- V --- TI --- TG --- G --- P
+    T --- V --- TI --- TG --- GN --- G --- P
 
     classDef fixed fill:#3d3050,stroke:#a98ac8,color:#e8eef5
     classDef fold fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
-    class T fixed
+    class T,GN fixed
     class V,TI,TG,G,P fold
 ```
 
@@ -35,6 +36,7 @@ likely to be reaching for mid-recording:
 | 4 | Time |
 | 5 | View tools |
 | — | **Playback never folds** — it is what the application is for |
+| — | **Gain never folds** — it is empty unless a gain is in force, and a dropdown button for nothing would be worse than the label it replaced |
 
 The rest of the transport — record, clear, and the audio edits — is in the Edit
 menu; see [AudioEditing.md](AudioEditing.md). Play/pause is on the toolbar as
@@ -69,6 +71,12 @@ slider inside the dropdown is the very same slider, and still drives every plot.
 
 `_relayout` compares the wanted state against the current one and returns early
 when they match, so the resize it causes cannot feed back into another fold.
+
+A resize is the usual reason to re-fit, but not the only one: the gain readout
+appears and disappears with the gain itself, which changes what has to fit
+without the toolbar being resized at all. `refit()` is how the owner says so —
+without it the row keeps its old plan and squeezes the labels instead of folding
+a group ("Columns:" losing its last letters was how this was found).
 
 ## Measuring
 

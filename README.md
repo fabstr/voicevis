@@ -31,7 +31,7 @@ application does, precisely, is in [REQUIREMENTS.md](REQUIREMENTS.md).
 Architecture notes live next to the code they describe:
 
 - [The main toolbar](src/ui/ResponsiveToolBar.md) — grouped controls that fold into dropdowns when the window is narrow
-- [Editing the audio](src/ui/AudioEditing.md) — selecting a stretch of the recording, silencing it, moving it
+- [Editing the audio](src/ui/AudioEditing.md) — selecting a stretch of the recording, silencing it, moving it, changing its level
 - [Windows and sessions](src/ui/MainWindow.md) — one session per window, and how a window shuts down
 - [The plot layer](src/ui/plot/README.md) — how a plot is configured, drawn, kept in sync and persisted
   - [Renderers](src/ui/plot/renderers/README.md) — the drawing strategies

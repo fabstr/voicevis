@@ -95,10 +95,19 @@ class ToolbarGroup(QtWidgets.QWidget):
     # --- Measurement -----------------------------------------------------
 
     def expanded_width(self) -> int:
-        """What this group needs inline, whether or not it is collapsed now."""
+        """What this group needs inline, whether or not it is collapsed now.
+
+        A hidden group needs nothing: it is out of the row entirely, and its
+        content keeps a size hint that would otherwise reserve room for a group
+        nobody can see.
+        """
+        if self.isHidden():
+            return 0
         return self.content.sizeHint().width()
 
     def collapsed_width(self) -> int:
+        if self.isHidden():
+            return 0
         return self.button.sizeHint().width() if self.collapsible else self.expanded_width()
 
     # --- Appearance ------------------------------------------------------
@@ -154,6 +163,16 @@ class ResponsiveToolBar(QtWidgets.QWidget):
 
     # --- Fitting ---------------------------------------------------------
 
+    def refit(self):
+        """Fit the row again after a group's contents changed width.
+
+        Resizing the window is the usual trigger, but a control that appears or
+        disappears -- the gain readout, which is only there while a gain is in
+        force -- changes what has to fit without the toolbar being resized at
+        all, and nothing else would notice.
+        """
+        self._relayout()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._relayout()
@@ -163,8 +182,9 @@ class ResponsiveToolBar(QtWidgets.QWidget):
             return
 
         available = self.width() - 2 * MARGIN
-        needed = sum(g.expanded_width() for g in self._groups)
-        needed += GROUP_SPACING * (len(self._groups) - 1)
+        shown = [g for g in self._groups if not g.isHidden()]
+        needed = sum(g.expanded_width() for g in shown)
+        needed += GROUP_SPACING * max(0, len(shown) - 1)
 
         # Fold the least important groups away until the row fits.
         collapse = set()
@@ -188,8 +208,9 @@ class ResponsiveToolBar(QtWidgets.QWidget):
     def sizeHint(self):
         hint = super().sizeHint()
         # Never demand the full expanded width: the point is to fit in less.
-        smallest = sum(g.collapsed_width() for g in self._groups)
-        smallest += GROUP_SPACING * max(0, len(self._groups) - 1) + 2 * MARGIN
+        shown = [g for g in self._groups if not g.isHidden()]
+        smallest = sum(g.collapsed_width() for g in shown)
+        smallest += GROUP_SPACING * max(0, len(shown) - 1) + 2 * MARGIN
         return QtCore.QSize(max(smallest, 1), hint.height())
 
     def minimumSizeHint(self):

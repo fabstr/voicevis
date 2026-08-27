@@ -22,7 +22,8 @@ configurable target ranges so that a speaker can work towards them.
 
 It is a practice and teaching tool for voice training. In scope:
 
-- Recording, playing back and destructively editing one recording at a time.
+- Recording, playing back and destructively editing one recording at a time,
+  and a non-destructive gain over any part of it.
 - Batch and near-real-time extraction of pitch, formants, harmonic ratios,
   loudness, jitter, shimmer, derived ratios and a spectrogram.
 - A freely configurable grid of plots over those quantities, with target bands,
@@ -128,6 +129,7 @@ package knows about widgets.
 | [`AudioFeatures.py`](src/signal_processing/AudioFeatures.py) | `SignalTimeSeries`, `SpectrogramData`, `AudioFeatures`, `FeatureSnapshot` — the shapes everything downstream reads |
 | [`ChunkedAnalysis.py`](src/signal_processing/ChunkedAnalysis.py) | The chunk cache: what gets re-analysed after an edit, and how the pieces are stitched back together |
 | [`AudioEdit.py`](src/signal_processing/AudioEdit.py) | `silence`, `cut` and `move` over the raw PCM buffer |
+| [`GainMap.py`](src/signal_processing/GainMap.py) | The gains in force over the recording, applied to a copy on its way to the analysis, to playback and to an export |
 | [`TargetConfig.py`](src/signal_processing/TargetConfig.py) | A target profile: named bounds, enable flags, JSON round-trip |
 | [`genderer.py`](src/signal_processing/genderer.py) | Probability of a frame belonging to a target distribution |
 
@@ -168,6 +170,7 @@ file-by-file map for this package, for
 | Path | |
 |---|---|
 | [`tests/test_chunked_analysis.py`](tests/test_chunked_analysis.py) | What the chunk cache promises: correct stitching, and no wasted work. The extractor is stubbed |
+| [`tests/test_gain_map.py`](tests/test_gain_map.py) | What a gain promises: it lands on the range asked for, and follows the audio through a cut or a move |
 | [`tools/generate_doc_screenshots.py`](tools/generate_doc_screenshots.py) | Drives a headless VoiceVis through the walkthroughs and grabs the screenshots the usage docs embed |
 
 ---
@@ -344,7 +347,7 @@ bundle rather than from the source tree?
 |---|---|---|
 | SF — sessions and files | `MainWindow.py`, `AnalysisWidget.py` | [MainWindow.md](src/ui/MainWindow.md) |
 | RP — recording and playback | `PlaybackWorker.py`, `RealTimeAnalysisWorker.py`, `AnalysisWidget.py` | [plot README, time sync](src/ui/plot/README.md#time-axis-synchronisation) |
-| AE — audio editing | `AudioEdit.py`, `AudioHistory.py`, `TimeSelection.py`, `layers/SelectionLayer.py` | [AudioEditing.md](src/ui/AudioEditing.md) |
+| AE — audio editing | `AudioEdit.py`, `GainMap.py`, `AudioHistory.py`, `TimeSelection.py`, `layers/SelectionLayer.py` | [AudioEditing.md](src/ui/AudioEditing.md) |
 | AN — analysis | `AudioFeatureExtractor.py`, `ChunkedAnalysis.py`, `AnalysisWorker.py` | [15_analyzed_features.md](resources/docs/15_analyzed_features.md), [20_methology.md](resources/docs/20_methology.md) |
 | PG, PP, MT — grid, per-plot controls, tools | `ui/plot/` | [plot README](src/ui/plot/README.md) |
 | OV — overlays | `FrequencyMarkers.py`, `layers/`, `AnnotationMarker.py` | [layers README](src/ui/plot/layers/README.md) |
@@ -365,8 +368,8 @@ Recorded so that they are not mistaken for oversights:
   error handling for unreadable files and malformed JSON, undo depth, the scope
   of annotations and targets, and the quantitative limits behind "near-real
   time".
-- Test coverage is one file. Everything except the chunk cache is untested, and
-  CI does not run pytest at all.
+- Test coverage is two files: the chunk cache and the gain map. Everything else
+  is untested, and CI does not run pytest at all.
 - `Weight` and `Slopes` are target fields with no plottable series, so they take
   no target band (TG-10).
 - `F1_Pitch_rel_amplitude` and its siblings are declared on `AudioFeatures` but

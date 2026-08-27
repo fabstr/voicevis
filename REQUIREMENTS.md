@@ -36,6 +36,7 @@ and what else has to be updated alongside it, is in
 - **SF-8** When the user selects *File > Close*, the system shall close the current window and end its session.
 - **SF-9** When a session window is opened, the system shall place it cascaded relative to the already-open windows.
 - **SF-10** While a file is loaded, the system shall show that file's name in the window title bar.
+- **SF-11** When the user selects *File > Save Audio As...*, the system shall apply the gains in force (AE-19) to the exported audio.
 
 ## 2. Recording and playback (RP)
 
@@ -66,6 +67,22 @@ and what else has to be updated alongside it, is in
 - **AE-10** When the user selects *Edit > Undo*, the system shall revert the most recent record, clear, silence, cut or move operation.
 - **AE-11** When the user selects *Edit > Redo*, the system shall re-apply the most recently undone operation.
 - **AE-12** The system shall label the *Undo* and *Redo* menu entries with the operation that they would respectively undo and redo.
+- **AE-13** When the user selects *Edit > Gain...*, the system shall open a dialog in which a level change, in dB, can be entered, positive for gain and negative for attenuation.
+- **AE-14** When the Gain dialog is opened, the system shall show the gain currently in force over the range that applying it will act on.
+- **AE-15** Where a selection exists, when the user applies a gain, the system shall apply that gain to the selected range only.
+- **AE-16** Where no selection exists, when the user applies a gain, the system shall apply that gain to the whole recording.
+- **AE-17** When a gain is applied over a range that already carries one, the system shall replace the earlier gain wherever the two ranges overlap.
+- **AE-18** When the user applies a gain of 0 dB, the system shall remove any gain in force over that range.
+- **AE-19** The system shall apply every gain in force to the audio that it analyses.
+- **AE-20** When the system plays back the recording (RP-5), it shall play it with the gains in force applied.
+- **AE-21** While a non-zero gain is in force anywhere in the recording, the system shall show the user that this is so, together with the gain's value.
+- **AE-22** When a new audio file is loaded, the system shall discard the gains in force in that session.
+- **AE-23** If a gain would drive samples past full scale, then the system shall clamp them at full scale and shall tell the user that clipping occurred.
+- **AE-24** When the user cuts a selection, the system shall discard the gains in force over the cut range.
+- **AE-25** When the user cuts a selection, the system shall keep the gains in force over the audio that follows the cut aligned with that audio as it shifts earlier.
+- **AE-26** When the user moves a selection, the system shall move the gains in force over the moved range with the audio, leaving the origin range without them.
+- **AE-27** When a moved gain lands on a range that already carries one, the system shall overwrite the gain at the destination, as AE-5 overwrites the audio there.
+- **AE-28** The system shall leave the audio file it loaded from disk unmodified, whatever gains are in force. *(The gains reach the analysis (AE-19), playback (AE-20) and an export (SF-11); the file on disk is the one thing they never reach.)*
 
 ## 4. Analysis (AN)
 
@@ -76,6 +93,7 @@ and what else has to be updated alongside it, is in
 - **AN-5** The system shall compute, for the recording, the quantities Pitch, Loudness, Size, F1, F2, F3, F1/Pitch, F2/Pitch, F3/Pitch, H1-H2, H1-H3, H1-H4, H1-A3, Jitter and Shimmer.
 - **AN-6** The system shall compute raw spectrogram magnitude and frequency data for the recording.
 - **AN-7** The system shall make every quantity in AN-5 and AN-6 available for selection on a plot axis.
+- **AN-8** When the gain in force over any part of the recording changes, the system shall re-analyse the affected audio.
 
 ## 5. Plot grid (PG)
 
@@ -189,3 +207,4 @@ not silently invented above.
 5. Undo depth, and whether the undo history survives anything other than loading a new file (SF-5).
 6. Whether *File > Open* of an annotations file requires matching audio to be loaded already, and what happens when the recorded source path does not resolve (SF-3, SF-6).
 7. Quantitative limits: maximum recording length, supported sample rates, and the latency implied by "near-real time" (AN-4).
+8. Whether the gains in force (AE-13) are saved alongside the annotations (SF-6), survive a restart, or are purely per-session.
