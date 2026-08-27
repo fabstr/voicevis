@@ -53,6 +53,7 @@ class TargetConfigDialog(QtWidgets.QDialog):
             "f2_pitch": ("F2_Pitch", 1.0, 30.0),
             "f3_pitch": ("F3_Pitch", 1.0, 50.0),
             "size": ("Size", -30.0, 30.0),
+            "weight": ("Weight", 20.0, 40.0),
             "H1_H2": ("H1_H2", -10.0, 20),
             "H1_H3": ("H1_H3", -10.0, 20),
             "H1_H4": ("H1_H4", -10.0, 20),
@@ -64,8 +65,8 @@ class TargetConfigDialog(QtWidgets.QDialog):
             cb = QtWidgets.QCheckBox()
             lbl = QtWidgets.QLabel(label_text)
 
-            min_spin = pg.SpinBox(bounds=[-100000, 100000], decimals=4 if field_prefix == "weight" else 2)
-            max_spin = pg.SpinBox(bounds=[-100000, 100000], decimals=4 if field_prefix == "weight" else 2)
+            min_spin = pg.SpinBox(bounds=[-100000, 100000], decimals=2)
+            max_spin = pg.SpinBox(bounds=[-100000, 100000], decimals=2)
 
             form_layout.addWidget(cb, row, 0)
             form_layout.addWidget(lbl, row, 1)

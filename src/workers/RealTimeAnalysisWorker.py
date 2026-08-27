@@ -90,6 +90,7 @@ class RealTimeAnalysisWorker(QtCore.QThread):
                                 time=current_time,
                                 pitch=results.pitch.get_last_y(),
                                 loudness=results.loudness.get_last_y(),
+                                weight=results.weight.get_last_y(),
                                 jitter=results.jitter.get_last_y(),
                                 shimmer=results.shimmer.get_last_y(),
 

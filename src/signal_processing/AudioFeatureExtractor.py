@@ -12,6 +12,7 @@ from scipy.signal import spectrogram
 from ResourceManager import ResourceManager
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, SpectrogramData
 from signal_processing.TargetConfig import TargetConfig
+from signal_processing.Weight import calculate_weight
 
 from time import perf_counter
 
@@ -178,6 +179,7 @@ class AudioFeatureExtractor:
 
             pitch=SignalTimeSeries(x=timepoints, y=pitch_clean),
             loudness=SignalTimeSeries(x=timepoints, y=loudness_clean),
+            weight=calculate_weight(timepoints, h1_a3_clean, loudness_clean),
             jitter=SignalTimeSeries(x=timepoints, y=jitter_clean),
             shimmer=SignalTimeSeries(x=timepoints, y=shimmer_clean),
             size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),

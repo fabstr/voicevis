@@ -35,6 +35,10 @@ import SeriesRegistry as PlotsSpec
 
 SCATTER_POINT_SIZE = 1
 
+# Weight's axis limit, taken from the registry so there is one number to tune
+# rather than one here and another in the application.
+WEIGHT_MAX = PlotsSpec.get("weight").default_max
+
 SCATTER_KW = dict(s=SCATTER_POINT_SIZE, alpha=0.6, edgecolors="none")  # points only, no lines
 
 # Only .wav and .mp3 files are supported.
@@ -94,7 +98,7 @@ def _draw_size_weight_scatter(
     ax.set_ylabel("Size")
     ax.set_title("Size vs Weight (Loudness)")
     ax.grid(True, alpha=0.3, color="white")
-    ax.set_xlim(0, 4)
+    ax.set_xlim(0, WEIGHT_MAX)
     ax.set_ylim(0, 40)
 
 
@@ -166,7 +170,7 @@ def _draw_pitch_weight_scatter(
     ax.set_title("Pitch vs Weight")
     ax.grid(True, alpha=0.3, color="white")
     ax.set_xlim(0, 450)
-    ax.set_ylim(0, 4)
+    ax.set_ylim(0, WEIGHT_MAX)
 
 
 def _draw_weight_size_pitch_3d(
@@ -214,15 +218,15 @@ def plot_combined_figure(features: AudioFeatures, out_path: Path, title: str) ->
     ax_size_weight = fig.add_subplot(gs[3, 0:2])
 
     _draw_timeseries(ax_size_t, features.size, "Size", PlotsSpec.size)
-    _draw_timeseries(ax_weight_t, features.weight_instantaneous, "Weight", PlotsSpec.weight)
+    _draw_timeseries(ax_weight_t, features.weight, "Weight", PlotsSpec.weight)
     _draw_timeseries(ax_pitch_t, features.pitch, "Pitch", PlotsSpec.pitch)
 
     ax_size_t.set_ylim(0, 40)
-    ax_weight_t.set_ylim(0, 4)
+    ax_weight_t.set_ylim(0, WEIGHT_MAX)
     ax_pitch_t.set_ylim(0, 450)
     ax_pitch_t.set_xlabel("Time (s)")
 
-    weight_y = features.weight_instantaneous.get_y_without_NaN()
+    weight_y = features.weight.get_y_without_NaN()
     size_y = features.size.get_y_without_NaN()
     pitch_y = features.pitch.get_y_without_NaN()
     loudness_y = features.loudness.get_y_without_NaN()
@@ -266,15 +270,15 @@ def create_combined_rotating_gif(features: AudioFeatures, out_path: Path, title:
     ax_size_weight = fig.add_subplot(gs[3, 0:2])
 
     _draw_timeseries(ax_size_t, features.size, "Size", PlotsSpec.size)
-    _draw_timeseries(ax_weight_t, features.weight_instantaneous, "Weight", PlotsSpec.weight)
+    _draw_timeseries(ax_weight_t, features.weight, "Weight", PlotsSpec.weight)
     _draw_timeseries(ax_pitch_t, features.pitch, "Pitch", PlotsSpec.pitch)
 
     ax_size_t.set_ylim(0, 40)
-    ax_weight_t.set_ylim(0, 4)
+    ax_weight_t.set_ylim(0, WEIGHT_MAX)
     ax_pitch_t.set_ylim(0, 450)
     ax_pitch_t.set_xlabel("Time (s)")
 
-    weight_y = features.weight_instantaneous.get_y_without_NaN()
+    weight_y = features.weight.get_y_without_NaN()
     size_y = features.size.get_y_without_NaN()
     pitch_y = features.pitch.get_y_without_NaN()
     loudness_y = features.loudness.get_y_without_NaN()
@@ -444,7 +448,7 @@ def main():
             title=path.stem,
         )
 
-        features.weight_instantaneous = features.weight_instantaneous.get_y_without_NaN()
+        features.weight = features.weight.get_y_without_NaN()
         features.size = features.size.get_y_without_NaN()
         features.pitch = features.pitch.get_y_without_NaN()
         features.loudness = features.loudness.get_y_without_NaN()
@@ -464,7 +468,7 @@ def main():
 
         features = analyze_and_plot(path)
 
-        all_weight.append(features.weight_instantaneous)
+        all_weight.append(features.weight)
         all_size.append(features.size)
         all_pitch.append(features.pitch)
         all_loudness.append(features.loudness)
@@ -489,7 +493,7 @@ def main():
     #         status_line = f"[{completed}/{total}]"
     #         print(f"\r{status_line[:80].ljust(80)}", end="", flush=True)
     #
-    #         all_weight.append(features.weight_instantaneous)
+    #         all_weight.append(features.weight)
     #         all_size.append(features.size)
     #         all_pitch.append(features.pitch)
     #         all_loudness.append(features.loudness)

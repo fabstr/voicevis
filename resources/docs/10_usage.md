@@ -159,11 +159,6 @@ way loading a preset does; **Cancel** discards them.
 
 ![The Set Targets dialog, populated with the Female preset's values -- config name, and an enable checkbox plus min/max per field](img/workflow/12_set_targets_dialog.png)
 
-Two fields in that list -- **Weight** and **Slopes** -- don't currently
-correspond to anything plottable, so enabling them has no visible effect on
-any plot. They're harmless to leave as they are; there's just nothing to
-show a band on yet.
-
 ### Sharing a target
 
 `Targets > Export targets...` saves the current target as a `.json` file;
@@ -286,7 +281,7 @@ itself names what it would undo or redo next, so it's never a guess.
 - Automatic re-analysis after recording, playback edits, undo/redo, or loading a file
 - Chunked/cached analysis (only re-analyzes the portions of audio that changed)
 - Live, near-real-time analysis while recording
-- Computed/plottable quantities: **Pitch, Loudness, Size, Formants (F1, F2, F3), Formant/Pitch ratios (F1/Pitch, F2/Pitch, F3/Pitch), Harmonic differences (H1-H2, H1-H3, H1-H4, H1-A3), Jitter, Shimmer**, plus raw spectrogram magnitude/frequency data
+- Computed/plottable quantities: **Pitch, Loudness, Weight, Size, Formants (F1, F2, F3), Formant/Pitch ratios (F1/Pitch, F2/Pitch, F3/Pitch), Harmonic differences (H1-H2, H1-H3, H1-H4, H1-A3), Jitter, Shimmer**, plus raw spectrogram magnitude/frequency data
 
 ### Plot grid
 - Default 2×2 grid of plots; **add/remove rows** and **add/remove columns** independently
@@ -323,7 +318,7 @@ itself names what it would undo or redo next, so it's never a guess.
 - Playhead line shown on every time-based plot
 
 ### Targets
-- **Targets > Set Targets...** dialog: enable/disable and set min/max for Loudness, Pitch, F1, F2, F3, F1/F2/F3-Pitch ratios, Size, Weight, Slopes, H1-H2, H1-H3, H1-H4, H1-A3, plus a custom name for the target profile
+- **Targets > Set Targets...** dialog: enable/disable and set min/max for Loudness, Pitch, F1, F2, F3, F1/F2/F3-Pitch ratios, Size, Weight, H1-H2, H1-H3, H1-H4, H1-A3, plus a custom name for the target profile
 - One-click preset targets: **Female** / **Male** (from `resources/targets/`)
 - **Import targets...** / **Export targets...** as JSON
 - Current target name shown in the toolbar

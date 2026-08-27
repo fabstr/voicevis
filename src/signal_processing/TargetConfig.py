@@ -17,6 +17,7 @@ class TargetConfig:
         {"name": "f2_pitch", "min": 1.0, "max": 30.0, "enabled": True},
         {"name": "f3_pitch", "min": 1.0, "max": 50.0, "enabled": True},
         {"name": "size", "min": -500.0, "max": 1000.0, "enabled": True},
+        {"name": "weight", "min": 20.0, "max": 40.0, "enabled": True},
         {"name": "H1_H2", "min": -10, "max": 20, "enabled": True},
         {"name": "H1_H3", "min": -10, "max": 20, "enabled": True},
         {"name": "H1_H4", "min": -10, "max": 20, "enabled": True},

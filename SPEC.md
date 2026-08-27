@@ -131,6 +131,7 @@ package knows about widgets.
 | [`AudioEdit.py`](src/signal_processing/AudioEdit.py) | `silence`, `cut` and `move` over the raw PCM buffer |
 | [`GainMap.py`](src/signal_processing/GainMap.py) | The gains in force over the recording, applied to a copy on its way to the analysis, to playback and to an export |
 | [`TargetConfig.py`](src/signal_processing/TargetConfig.py) | A target profile: named bounds, enable flags, JSON round-trip |
+| [`Weight.py`](src/signal_processing/Weight.py) | Weight: the length of the vector (50 &minus; H1-A3, Loudness), per frame |
 | [`genderer.py`](src/signal_processing/genderer.py) | Probability of a frame belonging to a target distribution |
 
 ### `src/workers/` — the threads

@@ -59,6 +59,7 @@ ANALYSIS_TIMEOUT_MS = 60_000
 FEATURE_ROWS = [
     ("pitch", ["pitch"], False),
     ("loudness", ["loudness"], False),
+    ("weight", ["weight"], False),
     ("formants", ["F1", "F2", "F3"], False),
     ("jitter", ["jitter"], False),
     ("shimmer", ["shimmer"], False),

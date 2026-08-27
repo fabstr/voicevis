@@ -32,6 +32,7 @@ f1_pitch = "#7588ff"
 f2_pitch = "#ff8c00"
 f3_pitch = "#9966cc"
 size = "#32cd32"
+weight = "#c71585"
 
 h1_h2 = "#EF75F0"
 h1_h3 = "#F07595"
@@ -112,6 +113,8 @@ for _spec in (
     _signal("pitch", "Pitch", 0, 350, pitch, "pitch", "Hz"),
 
     _signal("loudness", "Loudness", 0, 10, loudness, "loudness"),
+
+    _signal("weight", "Weight", 0, 60, weight, "weight"),
 
     _signal("size", "Size", 0, 30, size, "size"),
 
@@ -279,6 +282,7 @@ PRESETS = (
     PlotPreset("Size", ("time",), ("size",)),
 
     PlotPreset("Loudness", ("time",), ("loudness",)),
+    PlotPreset("Weight", ("time",), ("weight",)),
 
     PlotPreset("Formants", ("time",), ("F1", "F2", "F3")),
     PlotPreset("F1", ("time",), ("F1",)),

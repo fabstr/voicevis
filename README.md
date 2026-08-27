@@ -12,6 +12,7 @@ Extracted per audio frame (via openSMILE eGeMAPS LLD config, plus custom signal 
 |---|---|---|
 | **Pitch** (Hz) | F0, converted from openSMILE's semitones-from-27.5 Hz representation | Opensmile |
 | **Loudness** | openSMILE's `Loudness_sma3` | Opensmile |
+| **Weight** | Length of the vector (50 &minus; H1-A3, Loudness) &mdash; a single "vocal weight" score, rising as H1-A3 falls | Calculated |
 | **F1, F2, F3** (Hz) | First three formant frequencies (`F1/F2/F3frequency_sma3nz`) | Opensmile |
 | **Jitter** | `jitterLocal_sma3nz` — cycle-to-cycle pitch-period variation | Opensmile |
 | **Shimmer** (dB) | `shimmerLocaldB_sma3nz` — cycle-to-cycle amplitude variation | Opensmile |

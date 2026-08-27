@@ -67,6 +67,7 @@ class AudioFeatures:
     pitch: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     loudness: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     jitter: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     shimmer: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
@@ -102,6 +103,7 @@ class FeatureSnapshot:
 
     pitch: float
     loudness: float
+    weight: float
     jitter: float
     shimmer: float
     H1_H2: float

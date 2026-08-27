@@ -73,9 +73,9 @@ selector or the config.
 `default_min`/`default_max` were lifted from the corresponding `y_min`/`y_max`
 in the old plot catalogue, so reset-zoom behaves as it did.
 
-`target_key` is mostly the key itself, lowercased by `TargetConfig.get_bounds`,
-but a few series deliberately share a target: `weight_instantaneous` and
-`weight_333ms_max` both map to `weight`, and `pitch_5s_mean` maps to `pitch`.
+`target_key` is mostly the key itself, lowercased by `TargetConfig.get_bounds`.
+Nothing stops two series sharing one target key, and earlier versions did that
+for the rolling-mean series that have since been removed.
 
 `F1_Pitch_rel_amplitude` and its siblings are **not** in the registry. They are
 declared on `AudioFeatures` but never assigned by the extractor and are absent

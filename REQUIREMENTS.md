@@ -90,10 +90,11 @@ and what else has to be updated alongside it, is in
 - **AN-2** When a recording finishes, when an edit is applied to the audio, or when an edit is undone or redone, the system shall re-analyse the recording.
 - **AN-3** When re-analysing, the system shall analyse only those portions of the audio that have changed and shall reuse cached results for the unchanged portions.
 - **AN-4** While recording, the system shall analyse the incoming audio in near-real time.
-- **AN-5** The system shall compute, for the recording, the quantities Pitch, Loudness, Size, F1, F2, F3, F1/Pitch, F2/Pitch, F3/Pitch, H1-H2, H1-H3, H1-H4, H1-A3, Jitter and Shimmer.
+- **AN-5** The system shall compute, for the recording, the quantities Pitch, Loudness, Weight, Size, F1, F2, F3, F1/Pitch, F2/Pitch, F3/Pitch, H1-H2, H1-H3, H1-H4, H1-A3, Jitter and Shimmer.
 - **AN-6** The system shall compute raw spectrogram magnitude and frequency data for the recording.
 - **AN-7** The system shall make every quantity in AN-5 and AN-6 available for selection on a plot axis.
 - **AN-8** When the gain in force over any part of the recording changes, the system shall re-analyse the affected audio.
+- **AN-9** The system shall compute Weight, a single quantity combining the recording's H1-A3 and Loudness, which rises as H1-A3 falls.
 
 ## 5. Plot grid (PG)
 
@@ -151,14 +152,14 @@ and what else has to be updated alongside it, is in
 
 - **TG-1** The system shall have exactly one active target at all times, including in a session in which the user has not chosen one (*Default Target*).
 - **TG-2** The system shall show the name of the active target in the toolbar.
-- **TG-3** When the user selects *Targets > Set Targets...*, the system shall open a dialog listing Loudness, Pitch, F1, F2, F3, F1/Pitch, F2/Pitch, F3/Pitch, Size, Weight, Slopes, H1-H2, H1-H3, H1-H4 and H1-A3, each with an enable checkbox and a minimum and a maximum value, together with a *Config Name* for the target profile.
+- **TG-3** When the user selects *Targets > Set Targets...*, the system shall open a dialog listing Loudness, Pitch, F1, F2, F3, F1/Pitch, F2/Pitch, F3/Pitch, Size, Weight, H1-H2, H1-H3, H1-H4 and H1-A3, each with an enable checkbox and a minimum and a maximum value, together with a *Config Name* for the target profile.
 - **TG-4** When the user chooses *Apply & Close* in the Set Targets dialog, the system shall make the edited target the active target, update the target bands on every plot, and update the target name shown in the toolbar.
 - **TG-5** When the user chooses *Cancel* in the Set Targets dialog, the system shall discard the edits and keep the previously active target.
 - **TG-6** When the user selects *Targets > Female* or *Targets > Male*, the system shall load the corresponding preset from `resources/targets/` and make it the active target.
 - **TG-7** When the user selects *Targets > Export targets...*, the system shall write the active target to a JSON file.
 - **TG-8** When the user selects *Targets > Import targets...*, the system shall load a target from a JSON file, whether that file was exported by this application or supplied by another user, and make it the active target.
 - **TG-9** When the user saves a target, the system shall suggest the target's *Config Name* as the default file name.
-- **TG-10** Where an enabled target field has no corresponding plottable series (*Weight*, *Slopes*), the system shall not draw a target band for it. *(Known limitation, documented as such in the usage doc.)*
+- **TG-10** ~~Where an enabled target field has no corresponding plottable series (*Weight*, *Slopes*), the system shall not draw a target band for it.~~ *(withdrawn — Weight is a plottable series as of AN-9, and Slopes is no longer offered in the dialog, so every field in TG-3 now draws a band.)*
 
 ## 10. Series colours (SC)
 

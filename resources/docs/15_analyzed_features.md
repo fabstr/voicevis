@@ -2,6 +2,7 @@
 
 - [Pitch](#pitch)
 - [Loudness](#loudness)
+- [Weight](#weight)
 - [F1, F2, F3](#f1-f2-f3)
 - [Jitter](#jitter)
 - [Shimmer](#shimmer)
@@ -39,6 +40,21 @@ openSMILE's `Loudness_sma3`, an auditory-model estimate of perceived
 loudness per frame rather than a raw amplitude reading.
 
 ![A Loudness-only plot: a scatter mostly under 2, with spikes up to about 4 on stressed syllables](img/features/loudness.png)
+
+### Weight
+
+A single calculated "vocal weight" score: the length of the vector whose
+components are the frame's distance from a reference H1-A3 of 50 dB and its
+loudness -- `sqrt((50 - H1-A3)^2 + Loudness^2)`. A voice gets heavier as its
+H1-A3 falls away from that reference, and a little heavier again as it gets
+louder. Where Size describes the vocal tract, Weight describes the voice
+source, condensed the same way Size condenses the three formant/pitch ratios.
+
+Both inputs are already cleaned by the validity check (and, for H1-A3, the
+outlier filter), so Weight is missing on exactly the frames the rest of the
+series are missing on.
+
+![A Weight-only plot: a scatter mostly between 20 and 40, sitting inside its target band, with the contour running inverse to H1-A3](img/features/weight.png)
 
 ### F1, F2, F3
 
@@ -104,8 +120,7 @@ directly than the raw formant frequencies do. All three share one Y axis.
 
 A single calculated "vocal tract size" score: the signed RMS of F1/Pitch,
 F2/Pitch and F3/Pitch combined into one number. This is the series the
-**Size vs Weight** preset and the "simple" layout both lead with -- the
-closest thing this app has to a one-number summary of the formant/pitch
+"simple" layout leads with -- the closest thing this app has to a one-number summary of the formant/pitch
 relationship.
 
 ![A Size-only plot: a scatter mostly between 7 and 12, with occasional spikes above 20](img/features/size.png)
