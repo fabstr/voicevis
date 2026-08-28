@@ -169,3 +169,51 @@ def test_a_column_of_the_wrong_height_is_dropped(worker):
     hub.append_snapshots([odd])
 
     assert hub.spectrogram().magnitude_db.shape == before
+
+
+def test_a_bounded_live_buffer_drops_what_falls_behind(worker):
+    """Monitoring never ends, so what it keeps has to stop growing."""
+    history = 5.0
+    hub = PlotDataHub(AudioFeatures())
+    hub.begin_recording(history_seconds=history)
+
+    for snapshot in run_passes(worker, seconds=60.0):
+        hub.append_snapshots([snapshot])
+
+    x, _ = hub.get_xy("pitch")
+    spectrogram = hub.spectrogram()
+
+    # Trimming happens a batch at a time, so the span settles between the
+    # bound and the bound plus one batch rather than exactly on it.
+    assert history <= (x[-1] - x[0]) <= history + 11.0
+    assert spectrogram.magnitude_db.shape[1] == len(spectrogram.x)
+    assert (spectrogram.x[-1] - spectrogram.x[0]) <= history + 11.0
+    assert np.all(np.diff(x) > 0)
+
+
+def test_an_unbounded_live_buffer_keeps_everything(worker):
+    """Recording passes no bound: the take is the thing being kept."""
+    hub = PlotDataHub(AudioFeatures())
+    hub.begin_recording()
+    snapshots = run_passes(worker, seconds=30.0)
+    hub.append_snapshots(snapshots)
+
+    x, _ = hub.get_xy("pitch")
+    assert len(x) == len(snapshots)
+
+
+def test_discarding_the_live_data_leaves_the_analysis_alone(worker):
+    """What monitoring shows is never written into the session's own record."""
+    features = AudioFeatures(length_seconds=12.5)
+    features.pitch = SignalTimeSeries(x=np.arange(5, dtype=float),
+                                      y=np.arange(5, dtype=float) + 100)
+    hub = PlotDataHub(features)
+
+    hub.begin_recording(history_seconds=5.0)
+    hub.append_snapshots(run_passes(worker, seconds=3.0))
+    hub.discard_live()
+
+    assert not hub.is_recording
+    assert hub.features is features
+    assert np.array_equal(features.pitch.y, np.arange(5, dtype=float) + 100)
+    assert hub.spectrogram() is None

@@ -41,6 +41,19 @@ from ui.plot.TimeAxisSyncGroup import (MODE_IDLE, MODE_PLAYING, MODE_RECORDING,
 #: How long to wait for a background thread to finish when closing a session.
 WORKER_SHUTDOWN_MS = 2000
 
+#: The microphone watched but not recorded. Its own icon, so the Edit menu
+#: never shows two entries that both look like Record.
+MONITOR_ICON = 'fa5s.wave-square'
+
+#: Seconds of live analysis kept while monitoring. Nothing is written down, so
+#: this is how far back the user can zoom out before it runs out -- and it is
+#: what stops an open-ended session from filling memory.
+MONITOR_HISTORY_SECONDS = 30.0
+
+MONITOR_TOOLTIP = ("Analyse the microphone live without recording it. Nothing "
+                   "is added to the recording, and the session comes back as "
+                   "it was when this stops (L)")
+
 #: Icons for the audio-editing tools. Both are qtawesome names, so swapping in
 #: a different look is a one-line change.
 SELECT_ICON = 'mdi6.selection-drag'
@@ -99,6 +112,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.zoom_y_icon = None
         self.measure_icon = None
         self.action_record = None
+        self.action_monitor = None
         self.action_play = None
         self.action_clear = None
         self.action_select = None
@@ -133,6 +147,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.plot_cells = None
         self.plot_cells = None
         self.record_icon = None
+        self.monitor_icon = None
         self.stop_icon = None
         self.play_icon = None
         self.pause_icon = None
@@ -168,6 +183,15 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.plots = {}
 
         self.is_recording = False
+        #: Analysing the microphone without keeping any of it.
+        self.is_monitoring = False
+        #: The device Qt hands over in pull mode while monitoring.
+        self.monitor_device = None
+        #: Samples monitored so far, which is monitoring's clock.
+        self.monitor_samples = 0
+        #: The session's own analysis and playhead, put aside while monitoring.
+        self._monitor_saved_features = None
+        self._monitor_saved_time = 0.0
         self.is_playing = False
         self.playback_start_time = 0.0
 
@@ -210,6 +234,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         """
         if self.is_recording:
             self._teardown_recording()
+        if self.is_monitoring:
+            self._teardown_monitoring()
         if self.is_playing:
             self.stop_playback()
 
@@ -234,6 +260,18 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.save_state_on_exit()
 
     #################### Shared state ####################
+
+    @property
+    def is_live(self) -> bool:
+        """Capturing from the microphone, whether or not it is being kept."""
+        return self.is_recording or self.is_monitoring
+
+    def stop_live_capture(self):
+        """End whichever kind of capture is running, if either is."""
+        if self.is_recording:
+            self.record_stop()
+        elif self.is_monitoring:
+            self.monitor_stop()
 
     @property
     def analysedAudioFeatures(self) -> AudioFeatures:
@@ -303,6 +341,9 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.action_record = self._action(
             self.record_icon, "&Record\tR", self.handle_start_record_stop)
+        self.action_monitor = self._action(
+            self.monitor_icon, "&Live Analysis\tL", self.handle_start_monitor_stop)
+        self.action_monitor.setToolTip(MONITOR_TOOLTIP)
         self.action_play = self._action(
             self.play_icon, "&Play\tSpace", self.handle_playback)
         self.action_play.setToolTip("Play (Space)")
@@ -390,6 +431,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         edit_menu = self.menu_bar.addMenu("&Edit")
         edit_menu.setToolTipsVisible(True)
         edit_menu.addAction(self.action_record)
+        edit_menu.addAction(self.action_monitor)
         edit_menu.addAction(self.action_play)
         edit_menu.addAction(self.action_clear)
         edit_menu.addSeparator()
@@ -575,6 +617,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self._apply_menu_icons(colour)
 
         self.record_icon = qta.icon('fa5s.microphone', color=colour)
+        self.monitor_icon = qta.icon(MONITOR_ICON, color=colour)
         self.stop_icon = qta.icon('fa5s.stop', color=colour)
         self.play_icon = qta.icon('fa5s.play', color=colour)
         self.pause_icon = qta.icon('fa5s.pause', color=colour)
@@ -799,6 +842,8 @@ class AnalysisWidget(QtWidgets.QWidget):
             if self.action_record is not None:
                 self.action_record.setIcon(
                     self.stop_icon if self.is_recording else self.record_icon)
+                self.action_monitor.setIcon(
+                    self.stop_icon if self.is_monitoring else self.monitor_icon)
                 self.action_play.setIcon(
                     self.pause_icon if self.is_playing else self.play_icon)
                 self.action_clear.setIcon(self.clear_icon)
@@ -869,6 +914,8 @@ class AnalysisWidget(QtWidgets.QWidget):
                 self.load_audio_to_memory(file_name)
 
     def load_audio_to_memory(self, file_path):
+        # Whatever the microphone is doing, it is not this file.
+        self.stop_live_capture()
         try:
             self.clear_annotations()
             # A different recording is a different history, and none of the
@@ -1036,6 +1083,8 @@ class AnalysisWidget(QtWidgets.QWidget):
     def handle_start_record_stop(self):
         if self.is_playing:
             self.stop_playback()
+        if self.is_monitoring:
+            self.monitor_stop()
 
         if self.is_recording:
             self.record_stop()
@@ -1124,7 +1173,128 @@ class AnalysisWidget(QtWidgets.QWidget):
         # audio buffer.
         self.is_recording = False
 
+    #################### Live analysis without recording ####################
+
+    def handle_start_monitor_stop(self):
+        if self.is_monitoring:
+            self.monitor_stop()
+        else:
+            self.monitor_start()
+
+    def monitor_start(self):
+        """Analyse the microphone without keeping any of it.
+
+        Recording answers "what did I just say?"; this answers "what am I
+        saying?" -- for working on a vowel or a resonance shift, where the
+        feedback is the point and a recording of every attempt is only
+        clutter. Nothing captured here reaches the recording buffer, the undo
+        history or the analysis cache, and the session's own analysis comes
+        back untouched when it stops.
+        """
+        if not QMediaDevices.audioInputs():
+            QtWidgets.QMessageBox.critical(
+                self, "Recording error",
+                "Could not find any microphone or audio input device.")
+            return
+
+        if self.is_playing:
+            self.stop_playback()
+        if self.is_recording:
+            self.record_stop()
+
+        self.is_monitoring = True
+        self.action_monitor.setIcon(self.stop_icon)
+        self.action_monitor.setText("Stop &Live Analysis\tL")
+
+        # A selection describes the recording, which is not what the plots are
+        # about to show. Leaving Select mode clears it (AE-9); clear it anyway,
+        # in case the tool was not armed.
+        self.action_select.setChecked(False)
+        self.hub.selection.clear()
+        self._on_selection_changed()
+
+        while not self.audio_queue.empty():
+            self.audio_queue.get()
+
+        # Put the session aside rather than analysing on top of it: what is
+        # shown here is only what the microphone is doing now.
+        self._monitor_saved_features = self.hub.features
+        self._monitor_saved_time = self.current_playback_time
+
+        self.recording_start_offset = 0.0
+        self.monitor_samples = 0
+        self.hub.set_features(AudioFeatures())
+        self.hub.begin_recording(history_seconds=MONITOR_HISTORY_SECONDS)
+
+        self.rt_worker = RealTimeAnalysisWorker(self.audioFeatureExtractor,
+                                                self.audio_queue, self.sampling_rate)
+        self.rt_worker.new_data_points.connect(self.append_live_data)
+        self.rt_worker.start()
+
+        # Pull mode: Qt hands over a device to read from instead of filling a
+        # buffer of ours, so the samples are analysed and dropped.
+        self.monitor_device = self.audio_source.start()
+
+        self.poll_timer.start()
+        self.timer.start()
+
+    def monitor_stop(self):
+        self._teardown_monitoring()
+
+        # Give the session back exactly what monitoring found.
+        self.hub.set_features(self._monitor_saved_features or AudioFeatures())
+        self._monitor_saved_features = None
+        self.current_playback_time = self._monitor_saved_time
+
+        self._on_selection_changed()
+        self.update_plots()
+        self.sync_group.reset(self.hub.length_seconds)
+        self.update_playhead()
+
+    def _teardown_monitoring(self):
+        """Stop the microphone and the live analysis, keeping nothing.
+
+        Separate from ``monitor_stop`` so that closing the window can release
+        the microphone without restoring plots nobody will see.
+        """
+        self.action_monitor.setIcon(self.monitor_icon)
+        self.action_monitor.setText("&Live Analysis\tL")
+
+        self.poll_timer.stop()
+        self.audio_source.stop()
+        self.monitor_device = None
+        self.timer.stop()
+
+        if self.rt_worker is not None:
+            self.rt_worker.stop()
+            self.rt_worker.wait()
+
+        self.hub.discard_live()
+        self.is_monitoring = False
+
+    def _read_monitor_chunk(self):
+        """Pass the microphone's newest samples to the analysis and drop them.
+
+        No gain is applied: a gain describes a stretch of the recording, and
+        monitoring is not part of one.
+        """
+        if self.monitor_device is None:
+            return
+
+        new_bytes = self.monitor_device.readAll().data()
+        if not new_bytes:
+            return
+
+        self.monitor_samples += len(new_bytes) // AudioEdit.BYTES_PER_SAMPLE
+        self.audio_queue.put(new_bytes)
+
+    #################### Live analysis while recording ####################
+
     def read_audio_chunk(self):
+        if self.is_monitoring:
+            self._read_monitor_chunk()
+            return
+
         current_pos = self.audio_buffer.pos()
         if current_pos > self.last_read_pos:
             chunk_start = self.last_read_pos
@@ -1160,9 +1330,15 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     def _on_selection_changed(self):
         has_audio = not self.audio_data.isEmpty()
-        editable = self.hub.selection.active and has_audio
+        # While monitoring, the plots show the microphone rather than the
+        # recording, so an edit made from them would land somewhere the user
+        # cannot see. The recording is not editable until they are the same
+        # timeline again.
+        editable = self.hub.selection.active and has_audio and not self.is_monitoring
         self.action_silence.setEnabled(editable)
         self.action_cut.setEnabled(editable)
+        self.action_select.setEnabled(not self.is_monitoring)
+        self.action_gain.setEnabled(not self.is_monitoring)
 
     def _on_history_changed(self):
         self.action_undo.setEnabled(self.history.can_undo)
@@ -1333,8 +1509,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self._step_history(self.history.redo)
 
     def _step_history(self, step):
-        if self.is_recording:
-            self.record_stop()
+        self.stop_live_capture()
 
         entry = step(self.audio_data, self.current_audio_file, self.gain_map.copy())
         if entry is None:
@@ -1364,7 +1539,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.select_analysis_from_memory()
 
     def handle_playback(self):
-        if self.is_recording: return
+        if self.is_live: return
         if not self.is_playing:
             self.seek_and_play()
         else:
@@ -1373,8 +1548,7 @@ class AnalysisWidget(QtWidgets.QWidget):
     def handle_clear(self):
         if self.is_playing:
             self.stop_playback()
-        if self.is_recording:
-            self.record_stop()
+        self.stop_live_capture()
 
         if not self.audio_data.isEmpty():
             self._capture("Clear")
@@ -1436,7 +1610,9 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.timer.start()
 
     def _transport_mode(self):
-        if self.is_recording:
+        # Monitoring follows the live edge exactly as recording does; the two
+        # differ in what is kept, not in how the view tracks them.
+        if self.is_live:
             return MODE_RECORDING
         return MODE_PLAYING if self.is_playing else MODE_IDLE
 
@@ -1453,6 +1629,14 @@ class AnalysisWidget(QtWidgets.QWidget):
             total_duration = self.audio_data.size() / (2 * self.sampling_rate)
             features = self.hub.features
             features.length_seconds = max(features.length_seconds, total_duration)
+
+        elif self.is_monitoring:
+            # Nothing is written down, so the samples counted past the
+            # microphone are the clock.
+            self.current_playback_time = self.monitor_samples / float(self.sampling_rate)
+            features = self.hub.features
+            features.length_seconds = max(features.length_seconds,
+                                          self.current_playback_time)
 
     def _on_frame_tick(self):
         """The only per-frame work while playing or recording.
@@ -1597,10 +1781,10 @@ class AnalysisWidget(QtWidgets.QWidget):
     def keyPressEvent(self, event):
         key = event.key()
         if key == QtCore.Qt.Key.Key_Space:
-            # Space is the stop key while recording as well: whatever is
-            # running, space is what ends it.
-            if self.is_recording:
-                self.record_stop()
+            # Space is the stop key while the microphone is open as well:
+            # whatever is running, space is what ends it.
+            if self.is_live:
+                self.stop_live_capture()
             elif self.is_playing:
                 self.stop_playback()
             elif not self.audio_data.isEmpty():
@@ -1608,10 +1792,11 @@ class AnalysisWidget(QtWidgets.QWidget):
             event.accept()
 
         elif key == QtCore.Qt.Key.Key_R:
-            if self.is_recording:
-                self.record_stop()
-            else:
-                self.record_start()
+            self.handle_start_record_stop()
+            event.accept()
+
+        elif key == QtCore.Qt.Key.Key_L:
+            self.handle_start_monitor_stop()
             event.accept()
 
         elif key == QtCore.Qt.Key.Key_D:
@@ -1630,6 +1815,9 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.update_playhead()
 
     def _on_annotation_requested(self, cell, target_time, target_y):
+        if self.is_monitoring:
+            # There is nothing to annotate: what is on screen is not kept.
+            return
         self.add_annotation(cell, target_time, target_y)
 
     def _on_annotation_clicked(self, cell, marker):
@@ -1960,7 +2148,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             return 0.0
 
     def handle_time_edited(self):
-        if self.is_recording:
+        if self.is_live:
             self.time_edit.setText(self.format_time(self.current_playback_time))
             self.time_edit.clearFocus()
             return

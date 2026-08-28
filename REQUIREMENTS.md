@@ -52,6 +52,15 @@ and what else has to be updated alongside it, is in
 - **RP-10** When the user presses `D`, the system shall clear the entire recording and session.
 - **RP-11** While recording, the system shall auto-scroll the time axis so that a 10 s window around the current position stays visible.
 - **RP-12** While playing, when the playhead passes 50 % of the visible time range, the system shall page the view forward.
+- **RP-13** When the user selects *Edit > Live Analysis*, or presses `L`, the system shall start analysing the default microphone without capturing it into the recording.
+- **RP-14** While live analysis is running, the system shall plot the incoming analysis in place of the session's own.
+- **RP-15** While live analysis is running, the system shall auto-scroll the time axis so that a 10 s window around the current position stays visible.
+- **RP-16** While live analysis is running, the system shall retain at most the most recent 30 s of the incoming analysis.
+- **RP-17** While live analysis is running, the system shall disable the audio-editing tools.
+- **RP-18** While live analysis is running, when the user presses `L` or `Space`, or selects *Edit > Stop Live Analysis*, the system shall stop live analysis.
+- **RP-19** While live analysis is running, if the user starts recording or playback, loads a file, or undoes or redoes an edit, then the system shall stop live analysis before carrying that out.
+- **RP-20** When live analysis stops, the system shall restore the analysis, the playhead position and the time axis that the session had before it started.
+- **RP-21** When live analysis stops, the system shall leave the recording, its undo history and its annotations as they were before it started.
 
 ## 3. Audio editing (AE)
 

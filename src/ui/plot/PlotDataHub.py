@@ -23,6 +23,11 @@ from ui.plot.TimeSelection import TimeSelection
 _INITIAL_CAPACITY = 1024
 _GROWTH = 2
 
+#: How far past its bound a bounded live buffer is allowed to run before it is
+#: trimmed back. Trimming a batch at a time keeps the cost amortised: each pass
+#: would otherwise shift the whole buffer along by a few frames.
+_TRIM_SLACK_SECONDS = 10.0
+
 
 class _GrowableSeries:
     """An append-friendly view of a SignalTimeSeries.
@@ -62,6 +67,16 @@ class _GrowableSeries:
     @property
     def last_time(self):
         return self._x[self._n - 1] if self._n else None
+
+    def trim_before(self, time_value: float):
+        """Drop the samples older than ``time_value``."""
+        keep_from = int(np.searchsorted(self._x[:self._n], time_value, side="left"))
+        if keep_from <= 0:
+            return
+        remaining = self._n - keep_from
+        self._x[:remaining] = self._x[keep_from:self._n]
+        self._y[:remaining] = self._y[keep_from:self._n]
+        self._n = remaining
 
     def views(self):
         return self._x[:self._n], self._y[:self._n]
@@ -132,6 +147,16 @@ class _GrowableSpectrogram:
         magnitude[:self._n] = self._magnitude[:self._n]
         self._x, self._magnitude = x, magnitude
 
+    def trim_before(self, time_value: float):
+        """Drop the columns older than ``time_value``."""
+        keep_from = int(np.searchsorted(self._x[:self._n], time_value, side="left"))
+        if keep_from <= 0:
+            return
+        remaining = self._n - keep_from
+        self._x[:remaining] = self._x[keep_from:self._n]
+        self._magnitude[:remaining] = self._magnitude[keep_from:self._n]
+        self._n = remaining
+
     def view(self) -> SpectrogramData:
         """The columns so far, as views rather than copies."""
         return SpectrogramData(x=self._x[:self._n], y=self._y,
@@ -158,6 +183,8 @@ class PlotDataHub(QtCore.QObject):
         self._live = {}
         self._live_spectrogram = None
         self._recording = False
+        self._history_seconds = None
+        self._next_trim_time = None
         self._current_time = 0.0
         #: The stretch of audio picked out for editing.
         self.selection = TimeSelection(self)
@@ -171,9 +198,7 @@ class PlotDataHub(QtCore.QObject):
     def set_features(self, features: AudioFeatures):
         """Install a fresh analysis result, discarding any live buffers."""
         self._features = features or AudioFeatures()
-        self._live.clear()
-        self._live_spectrogram = None
-        self._recording = False
+        self._reset_live()
         self._bump()
         self.features_replaced.emit()
 
@@ -275,14 +300,22 @@ class PlotDataHub(QtCore.QObject):
     def is_recording(self) -> bool:
         return self._recording
 
-    def begin_recording(self):
-        """Switch every signal series over to an append-friendly buffer."""
+    def begin_recording(self, history_seconds: float = None):
+        """Switch every signal series over to an append-friendly buffer.
+
+        :param history_seconds: Keep only this much of the live data, dropping
+            what falls behind it. Monitoring the microphone has no end and
+            nothing to write the result to, so it bounds what it keeps;
+            recording passes nothing and keeps the lot.
+        """
         self._live = {
             field: _GrowableSeries(getattr(self._features, field))
             for field in _signal_fields(self._features)
         }
         self._live_spectrogram = _GrowableSpectrogram(
             getattr(self._features, "spectrogram", None))
+        self._history_seconds = float(history_seconds) if history_seconds else None
+        self._next_trim_time = None
         self._recording = True
         self._bump()
 
@@ -292,10 +325,24 @@ class PlotDataHub(QtCore.QObject):
             setattr(self._features, key, buffer.to_series())
         if self._live_spectrogram is not None:
             self._features.spectrogram = self._live_spectrogram.to_data()
+        self._reset_live()
+        self._bump()
+
+    def discard_live(self):
+        """Throw the live buffers away, leaving the feature record untouched.
+
+        What monitoring the microphone produces is never kept: the session's
+        own analysis has to come back exactly as monitoring found it.
+        """
+        self._reset_live()
+        self._bump()
+
+    def _reset_live(self):
         self._live.clear()
         self._live_spectrogram = None
+        self._history_seconds = None
+        self._next_trim_time = None
         self._recording = False
-        self._bump()
 
     def append_snapshot(self, snapshot: FeatureSnapshot):
         """Record one live analysis frame."""
@@ -315,7 +362,7 @@ class PlotDataHub(QtCore.QObject):
             # Recording was never announced; fall back rather than lose data.
             self.begin_recording()
 
-        appended = False
+        newest = None
         for snapshot in snapshots:
             time = getattr(snapshot, "time", None)
             if time is None:
@@ -336,12 +383,29 @@ class PlotDataHub(QtCore.QObject):
                 buffer.append(time, value)
 
             self._append_spectrogram_column(snapshot, time)
-            appended = True
+            newest = time
 
-        if appended:
+        if newest is not None:
+            if self._history_seconds is not None:
+                self._trim_live(float(newest))
             self._cache.clear()
             self._dirty = True
             self._revision += 1
+
+    def _trim_live(self, newest_time: float):
+        """Drop live data that has fallen out of the history bound."""
+        if self._next_trim_time is None:
+            self._next_trim_time = newest_time + _TRIM_SLACK_SECONDS
+            return
+        if newest_time < self._next_trim_time:
+            return
+
+        limit = newest_time - self._history_seconds
+        for buffer in self._live.values():
+            buffer.trim_before(limit)
+        if self._live_spectrogram is not None:
+            self._live_spectrogram.trim_before(limit)
+        self._next_trim_time = newest_time + _TRIM_SLACK_SECONDS
 
     def _append_spectrogram_column(self, snapshot: FeatureSnapshot, time: float):
         incoming = getattr(snapshot, "spectrogram", None)

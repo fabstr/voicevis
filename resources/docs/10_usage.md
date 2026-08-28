@@ -18,6 +18,7 @@
   - [Editing the selection](#editing-the-selection)
   - [Gain](#gain)
   - [Undo](#undo)
+- [Live analysis without recording](#live-analysis-without-recording)
 - [Full feature list](#full-feature-list)
   - [Sessions & files](#sessions--files)
   - [Recording & playback](#recording--playback)
@@ -117,6 +118,8 @@ as JSON, linked back to the audio file they belong to.
 
 - **Audio editing** below covers reshaping the recording itself -- selecting,
   moving, cutting or silencing a stretch of it.
+- **Live analysis without recording** covers watching the plots while you
+  speak, without producing a recording at all.
 - **Working with targets** covers building a target profile of your own
   rather than using the Female/Male presets.
 - The **Full feature list** further down is the complete reference: every
@@ -245,6 +248,39 @@ Two things worth knowing:
 forward through recording, clearing, and every edit above -- the menu entry
 itself names what it would undo or redo next, so it's never a guess.
 
+## Live analysis without recording
+
+`Edit > Live Analysis` (or the `L` key) opens the microphone and plots what it
+hears, at the same rate and in the same detail as a finished recording -- but
+keeps none of it. Press `L` again (or `Space`, or `Edit > Stop Live Analysis`)
+to stop.
+
+Use it when the feedback is the point rather than the take: working a vowel,
+feeling for a resonance shift, warming up. Recording answers *what did I just
+say?*; this answers *what am I saying?*, without leaving a pile of attempts
+behind.
+
+While it runs:
+
+- The plots show the microphone instead of the session's own analysis, and the
+  time axis scrolls with a 10 s window, exactly as it does while recording.
+- The last **30 seconds** are kept, so you can zoom out and look back over the
+  last few attempts. Anything older is dropped -- nothing is being written
+  down, and an open-ended session cannot be allowed to fill memory.
+- The audio-editing tools are switched off. What is on screen is not the
+  recording, so an edit made from it would land somewhere you cannot see.
+- Annotations are not taken, for the same reason.
+
+When it stops, the session comes back exactly as it was: the same analysis,
+the same playhead position, the same time axis, and the recording, its undo
+history and its annotations all untouched. Starting a recording, pressing play,
+loading a file or undoing an edit stops live analysis first and then does what
+was asked.
+
+The microphone signal is analysed as it arrives, so a gain set with
+`Edit > Gain...` does not apply -- a gain describes a stretch of the recording,
+and this is not part of one.
+
 ## Full feature list
 
 ### Sessions & files
@@ -261,6 +297,8 @@ itself names what it would undo or redo next, so it's never a guess.
 - **Stop recording** (`R` again, or Space)
 - **Play / Pause** the loaded or recorded audio (Space, or the toolbar play button)
 - **Seek**: type a time into the "Time:" box, or click on any time-based plot to jump the playhead there
+- **Live Analysis** — analyse the microphone without recording it (`L` key or Edit menu); the last 30 s are kept and the session is restored untouched when it stops
+- **Stop live analysis** (`L` again, or Space)
 - **Clear** the entire recording/session (`D` key)
 - Recording extends/overwrites a specific position (so you can punch in over prior audio)
 - Playhead auto-scrolls: 10 s window while recording, page-forward once past 50% of the view while playing
@@ -280,7 +318,7 @@ itself names what it would undo or redo next, so it's never a guess.
 ### Analysis
 - Automatic re-analysis after recording, playback edits, undo/redo, or loading a file
 - Chunked/cached analysis (only re-analyzes the portions of audio that changed)
-- Live, near-real-time analysis while recording
+- Live, near-real-time analysis while recording, and while running Live Analysis without recording
 - Computed/plottable quantities: **Pitch, Loudness, Weight, Size, Formants (F1, F2, F3), Formant/Pitch ratios (F1/Pitch, F2/Pitch, F3/Pitch), Harmonic differences (H1-H2, H1-H3, H1-H4, H1-A3), Jitter, Shimmer**, plus raw spectrogram magnitude/frequency data
 
 ### Plot grid

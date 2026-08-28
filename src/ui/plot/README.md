@@ -207,7 +207,7 @@ flowchart LR
     end
 
     AWK -->|"result_ready"| SF["hub.set_features()"]
-    RTW -->|"new_data_point"| AS["hub.append_snapshot()"]
+    RTW -->|"new_data_points<br/><i>one pass, every frame</i>"| AS["hub.append_snapshots()"]
 
     SF --> HUB[("PlotDataHub<br/>revision++<br/>dirty = true")]
     AS --> HUB
@@ -242,6 +242,26 @@ calls `setData` at all.
 
 Renderers additionally remember the revision they last drew, so a redundant
 `on_data_changed()` is free.
+
+### Live buffers
+
+While the microphone is open the hub swaps every series for a `_GrowableSeries`
+and the spectrogram for a `_GrowableSpectrogram`: capacity buffers that double
+rather than reallocating per sample. A pass arrives as a whole list of frames,
+so the revision is bumped once per pass rather than once per frame.
+
+`begin_recording()` takes an optional `history_seconds`. There are two callers
+and they want opposite things:
+
+| | `history_seconds` | On stop |
+|---|---|---|
+| Recording | none — the take is what is being kept | `end_recording()` writes the buffers into the feature record |
+| Live analysis (no recording) | 30 s | `discard_live()` throws them away; the session's own record was never touched |
+
+The bound matters because live analysis has no end. At 4097 bins and ~43
+columns a second the spectrogram alone is 85 MB a minute, so a bounded run
+trims back to the limit a batch at a time — amortised, rather than shifting the
+whole buffer along on every pass.
 
 ### Colours
 
