@@ -95,7 +95,7 @@ flowchart LR
     O -- yes --> U["the user's choice"]
     O -- no --> D["DEFAULT_COLOURS<br/><i>SeriesSpec.colour</i>"]
 
-    Z["series used as a plot's<br/>colour dimension"] --> V["viridis<br/><i>never the palette</i>"]
+    Z["series used as a plot's<br/>colour dimension"] --> V["the plot's colour map<br/><i>never the palette</i>"]
 
     classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
     classDef v fill:#3d3050,stroke:#a98ac8,color:#e8eef5
@@ -116,9 +116,12 @@ Setting a series back to its default *removes* the override rather than storing
 it, so only real changes are saved and a future change to a shipped colour still
 reaches users who never touched it.
 
-**A series used as a plot's colour dimension is always mapped through viridis.**
-The palette says what a series looks like as *itself*; on the Z axis the colour
-encodes a value, not an identity, so a perceptually uniform ramp is the point.
+**A series used as a plot's colour dimension is mapped through that plot's
+colour map** -- viridis, plasma or turbo -- never through the palette. The
+palette says what a series looks like as *itself*; on the Z axis the colour
+encodes a value, not an identity, so a continuous ramp is the point. Which ramp
+is a per-plot setting (`PlotConfig.colour_map`); the choice of *ramps offered*
+is not, and lives in `ui/plot/ColourMapping.py`.
 
 Overrides are application-wide — a series looks the same in every plot and every
 window — which is why they live in this module rather than on a cell. Changing

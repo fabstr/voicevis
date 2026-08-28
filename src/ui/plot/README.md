@@ -165,6 +165,7 @@ the plot itself:
 | Entry | |
 |---|---|
 | Colour | Submenu of the series that may drive the colour dimension |
+| Colour map | Which gradient that dimension runs through; disabled until one is chosen |
 | Spectrogram | Background image; disabled unless the value axis is in Hz |
 | Separate axis per series | See below; disabled with one series |
 | Trail (s) | Only shown on a trail plot |
@@ -252,8 +253,16 @@ the renderer's items and leaves the configuration and the zoom alone. The
 palette is application-wide, so `MainWindow` fans the change out to every open
 window.
 
-A series used as a plot's *colour dimension* is unaffected: that always maps
-through viridis.
+A series used as a plot's *colour dimension* is unaffected by the palette: it
+maps through the plot's colour map instead -- viridis, plasma or turbo, chosen
+per plot and stored with the layout. `ColourMapping` owns both the set of maps
+offered and the cache of resolved `pg.ColorMap` objects; every consumer passes
+the name from `PlotConfig.colour_map`. Changing it *is* a config change, so it
+goes through `apply_config` like any other, which rebuilds the renderer's items
+and repaints the colour bar without disturbing the zoom.
+
+The spectrogram background is deliberately not part of this: it is an image, not
+a colour dimension, and stays viridis whatever the plot is set to.
 
 ### Live recording
 
@@ -421,7 +430,14 @@ flowchart TD
 
 Anything unreadable falls back to the default plot **and logs a warning** —
 silent substitution is how a user ends up reporting that their layout changed by
-itself.
+itself. The same applies inside an entry: an unknown `colour` or `colour_map`
+is replaced by `normalised()` rather than failing the load.
+
+`LAYOUT_VERSION` stays **2** for a purely additive optional key such as
+`colour_map`. `load()` is shape-driven and never branches on `version`, and
+every field is read with a default, so a v2 file written before the key existed
+loads as viridis and an older build reading a newer file ignores the key.
+Bumping the number would imply a migration branch that does not exist.
 
 The `QSettings` key is deliberately unchanged (`AudioAnalyzer` /
 `LiveMultiPlotWidget` / `last_active_layout`). Renaming it would have silently
@@ -445,7 +461,7 @@ memory, and written back in the current schema.
 | `ScatterItem.py` | A scatter that tolerates `PlotItem`'s curve-wide settings |
 | `FrequencyMarkers.py` | The shared set of marked frequencies |
 | `PlotTheme.py` | Palette-derived colours; public pyqtgraph API only |
-| `ColourMapping.py` | Normalised viridis and the colour bar |
+| `ColourMapping.py` | The selectable colour maps, normalisation and the colour bar |
 | `../SeriesColourDialog.py` | Lets the user recolour series (View > Series colours...) |
 | `TimeAxisItem.py` | mm:ss ticks, with precision following the zoom |
 | `FrequencyAxisItem.py` | A curated log-frequency tick list |

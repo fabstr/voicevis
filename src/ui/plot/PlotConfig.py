@@ -13,6 +13,7 @@ from typing import List, Optional, Tuple
 
 import SeriesRegistry as Registry
 from SeriesRegistry import DEFAULT_POINT_SIZE, SeriesSpec
+from ui.plot.ColourMapping import COLOUR_MAP_KEYS, DEFAULT_COLOUR_MAP
 
 MIN_TRAIL_TIME = 0.0
 MAX_TRAIL_TIME = 60.0
@@ -33,9 +34,11 @@ class PlotKind(Enum):
 class PlotConfig:
     x: List[str] = field(default_factory=lambda: [Registry.TIME_KEY])
     y: List[str] = field(default_factory=lambda: ["pitch"])
-    #: Third dimension mapped to viridis. Only honoured when both axes hold
+    #: Third dimension mapped to colour. Only honoured when both axes hold
     #: exactly one series.
     colour: Optional[str] = None
+    #: Which colour map that third dimension runs through.
+    colour_map: str = DEFAULT_COLOUR_MAP
     #: Seconds of history shown by a TRAIL plot.
     trail_time: float = 3.0
     #: Draw the spectrogram behind the curves. TIME_SCATTER only.
@@ -259,6 +262,10 @@ class PlotConfig:
             if not usable or len(x) != 1 or len(y) != 1:
                 colour = None
 
+        # Kept even while colour is None, so turning the colour dimension off
+        # and on again comes back in the map the user chose.
+        colour_map = self.colour_map if self.colour_map in COLOUR_MAP_KEYS else DEFAULT_COLOUR_MAP
+
         trail = self.trail_time
         try:
             trail = min(MAX_TRAIL_TIME, max(MIN_TRAIL_TIME, float(trail)))
@@ -267,7 +274,7 @@ class PlotConfig:
 
         return replace(
             self,
-            x=x, y=y, colour=colour,
+            x=x, y=y, colour=colour, colour_map=colour_map,
             trail_time=trail,
             spectrogram=spectrogram,
             separate_axes=separate_axes,
@@ -286,6 +293,7 @@ class PlotConfig:
             "x": list(self.x),
             "y": list(self.y),
             "colour": self.colour,
+            "colour_map": self.colour_map,
             "trail_time": self.trail_time,
             "spectrogram": self.spectrogram,
             "separate_axes": self.separate_axes,
@@ -335,6 +343,7 @@ class PlotConfig:
                 x=list(entry.get("x") or []),
                 y=list(entry.get("y") or []),
                 colour=entry.get("colour"),
+                colour_map=entry.get("colour_map") or DEFAULT_COLOUR_MAP,
                 trail_time=entry.get("trail_time", 3.0),
                 spectrogram=bool(entry.get("spectrogram", False)),
                 separate_axes=bool(entry.get("separate_axes", False)),

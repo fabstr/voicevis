@@ -45,9 +45,9 @@ loudness per frame rather than a raw amplitude reading.
 
 A single calculated "vocal weight" score: the length of the vector whose
 components are the frame's distance from a reference H1-A3 of 50 dB and its
-loudness -- `sqrt((50 - H1-A3)^2 + Loudness^2)`. A voice gets heavier as its
-H1-A3 falls away from that reference, and a little heavier again as it gets
-louder. Where Size describes the vocal tract, Weight describes the voice
+loudness, the latter counted four times over --
+`sqrt((50 - H1-A3)^2 + (4 x Loudness)^2)`. A voice gets heavier as its H1-A3
+falls away from that reference, and heavier again as it gets louder. Where Size describes the vocal tract, Weight describes the voice
 source, condensed the same way Size condenses the three formant/pitch ratios.
 
 Both inputs are already cleaned by the validity check (and, for H1-A3, the

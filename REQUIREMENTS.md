@@ -112,8 +112,8 @@ and what else has to be updated alongside it, is in
 - **PP-2** The series picker shall allow either a single series or several series to be selected for the axis.
 - **PP-3** Where Time is selected on a plot's Y axis, the system shall transpose that plot so that time runs vertically.
 - **PP-4** Where Frequency is selected on a plot's X axis, the system shall render that plot as a spectrum-slice plot and shall offer Magnitude as a Y-axis choice.
-- **PP-5** The system shall provide, for each plot, an options menu offering *Colour by*, the *Spectrogram* background toggle, *Separate axis per series*, *Trail (seconds)* and a plot-scoped point size slider.
-- **PP-6** Where a series is chosen under *Colour by*, the system shall colour that plot's points by the value of that series, mapped through a viridis gradient.
+- **PP-5** The system shall provide, for each plot, an options menu offering *Colour by*, *Colour map*, the *Spectrogram* background toggle, *Separate axis per series*, *Trail (seconds)* and a plot-scoped point size slider.
+- **PP-6** Where a series is chosen under *Colour by*, the system shall colour that plot's points by the value of that series, mapped through that plot's chosen colour map.
 - **PP-7** Where *Colour by* is set to none, the system shall draw that plot's points without value-based colouring.
 - **PP-8** Where a plot's value axis is expressed in Hz or is empty, the system shall offer the spectrogram background toggle for that plot.
 - **PP-9** If a plot's value axis is neither expressed in Hz nor empty, then the system shall not offer the spectrogram background toggle for that plot.
@@ -121,6 +121,11 @@ and what else has to be updated alongside it, is in
 - **PP-11** Where a plot is an XY (non-time) plot and a trail length in seconds is set, the system shall draw a fading trail of the points from the preceding that many seconds instead of a static scatter.
 - **PP-12** When the user changes a plot's own point size slider, the system shall apply the new size to that plot only.
 - **PP-13** The system shall classify each plot as a time-scatter, XY-trail or spectrum-slice plot according to the series chosen for its axes.
+- **PP-14** The system shall offer, for each plot, a *Colour map* choice of Viridis, Plasma or Turbo.
+- **PP-15** Where no colour map has been chosen for a plot, the system shall use Viridis for that plot.
+- **PP-16** When the user changes a plot's colour map, the system shall redraw that plot's coloured points and its colour bar through the newly chosen map.
+- **PP-17** If a plot has no series chosen under *Colour by*, then the system shall not offer the *Colour map* choice for that plot.
+- **PP-18** The system shall draw the spectrogram background through Viridis regardless of the plot's chosen colour map.
 
 ## 7. Mouse tools (MT)
 
@@ -178,6 +183,9 @@ and what else has to be updated alongside it, is in
 - **LM-3** When the user selects *Load Layout...*, the system shall load a plot layout from a JSON file.
 - **LM-4** When the application exits, the system shall save the plot grid state, including each plot's series choices, the splitter sizes and the point size.
 - **LM-5** When the application is next launched, the system shall restore the plot grid state saved under LM-4.
+- **LM-6** When the system saves a plot layout, the system shall record each plot's chosen colour map.
+- **LM-7** When the system loads a plot layout, the system shall restore each plot's recorded colour map.
+- **LM-8** Where a loaded layout records no colour map for a plot, the system shall use Viridis for that plot.
 
 ## 12. Appearance (AP)
 

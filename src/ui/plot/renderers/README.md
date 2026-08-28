@@ -44,7 +44,7 @@ classDiagram
 ```
 
 Subclasses implement `_build_items` and `_refresh`. The base class handles the
-lifecycle, the revision guard, the colour bar and the viridis sampling.
+lifecycle, the revision guard, the colour bar and the colour-map sampling.
 
 ---
 
@@ -143,7 +143,7 @@ came from, so returning only the side that changed would leave a stale
 `TimeAxisItem` behind.
 
 When a colour series is set (only possible at one series per axis), point
-brushes come from the normalised viridis mapping. If the colour series has no
+brushes come from the normalised colour-map mapping. If the colour series has no
 data yet the renderer falls back to the series' own colour and **still calls
 `setData`** — the old code returned early and left the previous frame's points
 on screen.
@@ -203,8 +203,8 @@ drives it:
 | Colour source | Result |
 |---|---|
 | *(none)* | The `magnitude` series colour, fill at `FILL_ALPHA` |
-| `frequency` — the X axis | Viridis **gradient along the curve** |
-| An ordinary series | One viridis tint for the whole curve, changing as the playhead moves |
+| `frequency` — the X axis | The colour map as a **gradient along the curve** |
+| An ordinary series | One tint off the colour map for the whole curve, changing as the playhead moves |
 
 `frequency` is offered as a colour source only for this kind (see
 `PlotConfig.colour_candidates`). It is the axis that actually varies along the

@@ -294,7 +294,8 @@ itself names what it would undo or redo next, so it's never a guess.
 - Putting **Time on the Y axis** transposes that plot (time runs vertically)
 - **Frequency** as X gives a spectrum-slice plot; **Magnitude** is offered on Y for that
 - Per-plot **options menu**:
-  - **Colour by** a chosen series (mapped through a viridis gradient) or none
+  - **Colour by** a chosen series (its value mapped onto a colour gradient) or none
+  - **Colour map** — which gradient *Colour by* uses: **Viridis** (the default), **Plasma** or **Turbo**. Saved with the layout, and offered only once a series is chosen under *Colour by*
   - **Spectrogram** background image toggle (only when the value axis is in Hz or empty)
   - **Separate axis per series** — give each series its own Y scale instead of sharing one
   - **Trail (seconds)** — for XY (non-time) plots, show a fading trail of recent points instead of a static scatter

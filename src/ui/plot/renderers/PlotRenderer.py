@@ -11,7 +11,8 @@ import abc
 import numpy as np
 import pyqtgraph as pg
 
-from ui.plot.ColourMapping import make_colour_bar, normalise, rgba, set_colour_bar_label
+from ui.plot.ColourMapping import (make_colour_bar, normalise, rgba,
+                                   set_colour_bar_label, set_colour_bar_map)
 from ui.plot.DirectionalViewBox import plain_measure_formatter
 
 
@@ -135,9 +136,13 @@ class PlotRenderer(abc.ABC):
             self._remove_colour_bar()
             return
         if self.colour_bar is None:
-            self.colour_bar = make_colour_bar(self.plot_item, spec.label)
+            self.colour_bar = make_colour_bar(self.plot_item, spec.label,
+                                              self.config.colour_map)
         else:
             set_colour_bar_label(self.colour_bar, spec.label)
+            # The bar outlives a change of map, so repaint it rather than
+            # leaving the legend's gradient disagreeing with the points.
+            set_colour_bar_map(self.colour_bar, self.config.colour_map)
 
     def _remove_colour_bar(self):
         if self.colour_bar is None:
@@ -149,10 +154,11 @@ class PlotRenderer(abc.ABC):
         self.colour_bar = None
 
     def _colour_values(self, times: np.ndarray):
-        """Viridis colours for ``times``, sampled from the colour series.
+        """Colours for ``times``, sampled from the colour series.
 
         Returns None when this plot has no colour dimension. Normalisation uses
-        the whole colour series so colours do not shift as a window slides.
+        the whole colour series so colours do not shift as a window slides, and
+        the result runs through whichever map the config names.
         """
         spec = self.config.colour_spec()
         if spec is None or len(times) == 0:
@@ -166,4 +172,4 @@ class PlotRenderer(abc.ABC):
         normalised, low, high = normalise(sampled, z_y)
         if self.colour_bar is not None:
             self.colour_bar.setLevels((low, high))
-        return rgba(normalised)
+        return rgba(normalised, self.config.colour_map)

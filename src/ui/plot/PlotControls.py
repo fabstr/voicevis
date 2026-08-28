@@ -14,6 +14,7 @@ import logging
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 import SeriesRegistry as Registry
+from ui.plot.ColourMapping import COLOUR_MAPS
 from ui.plot.MultiSeriesSelector import MultiSeriesSelector, NONE_LABEL
 from ui.plot.PlotConfig import (MAX_TRAIL_TIME, MIN_TRAIL_TIME, PlotConfig, PlotKind,
                                 colour_candidates)
@@ -24,6 +25,7 @@ MAX_POINT_SIZE = 5
 OPTIONS_GLYPH = "≡"          # a hamburger, for the options button
 
 COLOUR_DISABLED_HINT = "Colouring needs exactly one series on each axis"
+COLOUR_MAP_DISABLED_HINT = "Choose a series under Colour first"
 Y_LOCKED_HINT = ("A spectrum slice only has magnitude to plot. "
                  "Change X away from Frequency to plot something else.")
 SPECTROGRAM_DISABLED_HINT = ("The spectrogram is drawn in Hz, so it only lines up "
@@ -93,6 +95,20 @@ class PlotControls(QtCore.QObject):
             action.triggered.connect(lambda _, key=spec.key: self._apply(colour=key))
             self.colour_group.addAction(action)
             self._colour_actions[spec.key] = action
+
+        # The map the colour dimension runs through: another exclusive choice,
+        # so the same submenu of radio items, kept next to what it applies to.
+        self.colour_map_menu = self.options_menu.addMenu("Colour map")
+        self.colour_map_group = QtGui.QActionGroup(self)
+        self.colour_map_group.setExclusive(True)
+        self._colour_map_actions = {}
+
+        for key, label in COLOUR_MAPS:
+            action = self.colour_map_menu.addAction(label)
+            action.setCheckable(True)
+            action.triggered.connect(lambda _, name=key: self._apply(colour_map=name))
+            self.colour_map_group.addAction(action)
+            self._colour_map_actions[key] = action
 
         self.options_menu.addSeparator()
 
@@ -272,3 +288,10 @@ class PlotControls(QtCore.QObject):
             action.setChecked(key == config.colour)
             if key is not None:
                 action.setVisible(key in candidates)
+
+        # The map only shows itself once something is being coloured by value.
+        maps_usable = allowed and config.colour is not None
+        self.colour_map_menu.setEnabled(maps_usable)
+        self.colour_map_menu.setToolTip("" if maps_usable else COLOUR_MAP_DISABLED_HINT)
+        for key, action in self._colour_map_actions.items():
+            action.setChecked(key == config.colour_map)

@@ -25,7 +25,8 @@ graph TB
 ## `SpectrogramBackground`
 
 A viridis `pg.ImageItem` drawn behind the curves, so scatter points can be read
-against the harmonics behind them.
+against the harmonics behind them. Viridis unconditionally: the image is not a
+colour dimension, so it does not follow the plot's `colour_map` choice.
 
 This capability was **lost** when the original monolithic controller was split
 into three classes: the plot catalogue still advertised an `is_spectrogram`

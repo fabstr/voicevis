@@ -241,6 +241,18 @@ class _Shots:
         return next(c for c in self.session.plot_cells
                    if c.config.y == list(y_keys))
 
+    def _spare_time_cell(self, reserved=("pitch",)):
+        """A single-series time plot the axis-picker step can take over.
+
+        Asked for by shape rather than by series name: which series the "simple"
+        layout puts where has changed before, and hard-coding one means this
+        tool stops running the next time it does. ``reserved`` keeps the cells
+        later steps look up by name off the table.
+        """
+        return next(c for c in self.session.plot_cells
+                    if c.config.is_time_domain and not c.config.time_on_y
+                    and len(c.config.y) == 1 and c.config.y[0] not in reserved)
+
     def _pump(self, ms=50):
         deadline = QtCore.QElapsedTimer()
         deadline.start()
@@ -423,10 +435,11 @@ class _Shots:
 
     def axis_picker(self):
         print("axis picker: menu + result")
-        # "simple" has no formants plot; turning the Loudness cell into one
+        # "simple" has no formants plot; turning one of its cells into one
         # both demonstrates the picker and leaves something with a target on
-        # screen for the targets step right after this.
-        cell = self._cell_showing(["loudness"])
+        # screen for the targets step right after this. The pitch cells are
+        # spoken for -- zoom() and annotation() look them up by name.
+        cell = self._spare_time_cell()
         selector = cell.controls.y_selector
         pos = selector.mapToGlobal(QtCore.QPoint(0, selector.height()))
         self._save_with_popup("05_axis_picker_menu.png", selector.menu(), pos)

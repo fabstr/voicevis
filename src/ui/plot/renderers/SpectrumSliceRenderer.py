@@ -13,7 +13,7 @@ import pyqtgraph as pg
 from PyQt6 import QtGui
 
 import SeriesRegistry as Registry
-from ui.plot.ColourMapping import viridis
+from ui.plot.ColourMapping import colour_map
 from ui.plot.DirectionalViewBox import log_x_measure_formatter
 from ui.plot.FrequencyAxisItem import FrequencyAxisItem
 from ui.plot.renderers.PlotRenderer import PlotRenderer
@@ -22,7 +22,7 @@ FREQUENCY_TICKS = [10, 110, 220, 1000, 5000, 10000]
 LINE_WIDTH = 1.5
 #: How translucent the area under the curve is, relative to its outline.
 FILL_ALPHA = 150
-#: Colour stops used to approximate viridis along the frequency axis.
+#: Colour stops used to approximate the colour map along the frequency axis.
 GRADIENT_STOPS = 32
 
 
@@ -92,8 +92,8 @@ class SpectrumSliceRenderer(PlotRenderer):
     def _recolour(self, current_time: float, x_values=None):
         """Apply the colour dimension, if this plot has one.
 
-        Colouring by ``frequency`` -- the X axis -- runs viridis along the
-        curve, so the shape is read against the spectrum it sits on. Colouring
+        Colouring by ``frequency`` -- the X axis -- runs the colour map along
+        the curve, so the shape is read against the spectrum it sits on. Colouring
         by an ordinary series instead tints the whole curve, because a slice is
         a single instant and a time series has just one value there; that tint
         then changes as playback moves.
@@ -115,7 +115,7 @@ class SpectrumSliceRenderer(PlotRenderer):
         self._apply_colour(pg.mkColor(red, green, blue))
 
     def _apply_frequency_gradient(self, x_values):
-        """Viridis across the frequency axis, painted into the fill.
+        """The colour map across the frequency axis, painted into the fill.
 
         The outline is dropped rather than given the same gradient: a pen whose
         brush is a gradient corrupts the curve's bounding rect, which rescales
@@ -131,9 +131,9 @@ class SpectrumSliceRenderer(PlotRenderer):
         fill = QtGui.QLinearGradient(low, 0.0, high, 0.0)
         fill.setCoordinateMode(QtGui.QGradient.CoordinateMode.LogicalMode)
 
-        colour_map = viridis()
+        gradient_map = colour_map(self.config.colour_map)
         for stop in np.linspace(0.0, 1.0, GRADIENT_STOPS):
-            red, green, blue = (int(v) for v in colour_map.map(float(stop), mode='byte')[:3])
+            red, green, blue = (int(v) for v in gradient_map.map(float(stop), mode='byte')[:3])
             fill.setColorAt(float(stop), QtGui.QColor(red, green, blue, FILL_ALPHA))
 
         self.items[0].setPen(None)

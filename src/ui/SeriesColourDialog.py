@@ -1,8 +1,8 @@
 """Picking the colour each data series is drawn in.
 
 Only affects the colour a series is drawn in as *itself*. When a series is used
-as a plot's colour dimension it still maps through viridis, because there the
-colour carries a value rather than an identity.
+as a plot's colour dimension it still maps through that plot's colour map,
+because there the colour carries a value rather than an identity.
 """
 
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -12,7 +12,7 @@ import SeriesRegistry as Registry
 SWATCH_SIZE = QtCore.QSize(64, 22)
 
 NOTE = ("These are the colours series are drawn in. A series used as a plot's "
-        "colour dimension is always mapped through viridis instead.")
+        "colour dimension is mapped through that plot's colour map instead.")
 
 
 class _SwatchButton(QtWidgets.QPushButton):
