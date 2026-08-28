@@ -15,7 +15,8 @@ import logging
 import numpy as np
 from PyQt6 import QtCore
 
-from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot, SignalTimeSeries
+from signal_processing.AudioFeatures import (AudioFeatures, FeatureSnapshot,
+                                             SignalTimeSeries, SpectrogramData)
 from ui.plot.TimeSelection import TimeSelection
 
 #: Initial capacity of a growable live buffer, and its growth factor.
@@ -70,6 +71,78 @@ class _GrowableSeries:
         return SignalTimeSeries(x=x.copy(), y=y.copy())
 
 
+class _GrowableSpectrogram:
+    """An append-friendly view of a SpectrogramData.
+
+    Columns arrive one at a time while recording. ``np.hstack`` copies the
+    whole matrix on every one, and at 4097 bins by ~43 columns a second that
+    turns a couple of minutes of audio into hundreds of megabytes of copying
+    per column. A doubling capacity buffer keeps it linear.
+
+    Columns are stored as rows -- one row per time bin -- so appending writes
+    into a contiguous slice, and ``magnitude_db`` is that block transposed.
+    """
+
+    __slots__ = ("_y", "_x", "_magnitude", "_n")
+
+    def __init__(self, spectrogram: SpectrogramData = None):
+        x = np.asarray(spectrogram.x, dtype=float) if spectrogram is not None else np.empty(0)
+        magnitude = (np.asarray(spectrogram.magnitude_db, dtype=float)
+                     if spectrogram is not None else np.empty((0, 0)))
+        self._y = (np.asarray(spectrogram.y, dtype=float)
+                   if spectrogram is not None else np.empty(0))
+
+        rows = magnitude.shape[0] if magnitude.ndim == 2 and magnitude.shape[1] else 0
+        self._n = min(len(x), magnitude.shape[1]) if rows else 0
+
+        capacity = max(_INITIAL_CAPACITY, self._n * _GROWTH)
+        self._x = np.empty(capacity, dtype=float)
+        self._magnitude = np.empty((capacity, rows), dtype=float)
+        self._x[:self._n] = x[:self._n]
+        self._magnitude[:self._n] = magnitude[:, :self._n].T
+
+    @property
+    def bins(self) -> int:
+        return self._magnitude.shape[1]
+
+    def append(self, time: float, column: np.ndarray, frequencies=None) -> bool:
+        """Add one column, or return False when it does not fit the bins."""
+        column = np.asarray(column, dtype=float).reshape(-1)
+
+        if self._n == 0:
+            # Nothing to line up with yet, so this column sets the bins.
+            self._magnitude = np.empty((len(self._x), len(column)), dtype=float)
+            if frequencies is not None:
+                self._y = np.asarray(frequencies, dtype=float)
+        elif len(column) != self.bins:
+            return False
+
+        if self._n == len(self._x):
+            self._grow()
+        self._x[self._n] = time
+        self._magnitude[self._n] = column
+        self._n += 1
+        return True
+
+    def _grow(self):
+        capacity = max(_INITIAL_CAPACITY, len(self._x) * _GROWTH)
+        x = np.empty(capacity, dtype=float)
+        magnitude = np.empty((capacity, self.bins), dtype=float)
+        x[:self._n] = self._x[:self._n]
+        magnitude[:self._n] = self._magnitude[:self._n]
+        self._x, self._magnitude = x, magnitude
+
+    def view(self) -> SpectrogramData:
+        """The columns so far, as views rather than copies."""
+        return SpectrogramData(x=self._x[:self._n], y=self._y,
+                               magnitude_db=self._magnitude[:self._n].T)
+
+    def to_data(self) -> SpectrogramData:
+        view = self.view()
+        return SpectrogramData(x=view.x.copy(), y=self._y,
+                               magnitude_db=np.ascontiguousarray(view.magnitude_db))
+
+
 class PlotDataHub(QtCore.QObject):
     """Owns the analysed features, the live buffers and the display time."""
 
@@ -83,6 +156,7 @@ class PlotDataHub(QtCore.QObject):
         self._dirty = False
         self._cache = {}
         self._live = {}
+        self._live_spectrogram = None
         self._recording = False
         self._current_time = 0.0
         #: The stretch of audio picked out for editing.
@@ -98,6 +172,7 @@ class PlotDataHub(QtCore.QObject):
         """Install a fresh analysis result, discarding any live buffers."""
         self._features = features or AudioFeatures()
         self._live.clear()
+        self._live_spectrogram = None
         self._recording = False
         self._bump()
         self.features_replaced.emit()
@@ -171,7 +246,10 @@ class PlotDataHub(QtCore.QObject):
 
     def spectrogram(self):
         """The spectrogram, or None when there is nothing to draw."""
-        spec = getattr(self._features, "spectrogram", None)
+        if self._live_spectrogram is not None:
+            spec = self._live_spectrogram.view()
+        else:
+            spec = getattr(self._features, "spectrogram", None)
         if spec is None or getattr(spec, "magnitude_db", None) is None:
             return None
         return spec if np.size(spec.magnitude_db) else None
@@ -203,6 +281,8 @@ class PlotDataHub(QtCore.QObject):
             field: _GrowableSeries(getattr(self._features, field))
             for field in _signal_fields(self._features)
         }
+        self._live_spectrogram = _GrowableSpectrogram(
+            getattr(self._features, "spectrogram", None))
         self._recording = True
         self._bump()
 
@@ -210,37 +290,58 @@ class PlotDataHub(QtCore.QObject):
         """Materialise the live buffers back into the feature record."""
         for key, buffer in self._live.items():
             setattr(self._features, key, buffer.to_series())
+        if self._live_spectrogram is not None:
+            self._features.spectrogram = self._live_spectrogram.to_data()
         self._live.clear()
+        self._live_spectrogram = None
         self._recording = False
         self._bump()
 
     def append_snapshot(self, snapshot: FeatureSnapshot):
-        """Record one live analysis frame. The only append path in the app."""
-        time = getattr(snapshot, "time", None)
-        if time is None:
+        """Record one live analysis frame."""
+        self.append_snapshots((snapshot,))
+
+    def append_snapshots(self, snapshots):
+        """Record a pass' worth of live analysis frames, oldest first.
+
+        The only append path in the app. Taking the whole pass at once keeps
+        the bookkeeping -- cache, revision, dirty flag -- to one round per
+        pass rather than one per frame, which matters now that a pass carries
+        every frame it analysed rather than only its newest.
+        """
+        if not snapshots:
             return
         if not self._recording:
             # Recording was never announced; fall back rather than lose data.
             self.begin_recording()
 
-        for key, buffer in self._live.items():
-            value = getattr(snapshot, key, None)
-            if value is None:
+        appended = False
+        for snapshot in snapshots:
+            time = getattr(snapshot, "time", None)
+            if time is None:
                 continue
-            try:
-                value = float(value)
-            except (TypeError, ValueError):
-                continue
-            if np.isnan(value):
-                continue
-            if buffer.last_time == time:
-                continue
-            buffer.append(time, value)
 
-        self._append_spectrogram_column(snapshot, time)
-        self._cache.clear()
-        self._dirty = True
-        self._revision += 1
+            for key, buffer in self._live.items():
+                value = getattr(snapshot, key, None)
+                if value is None:
+                    continue
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if np.isnan(value):
+                    continue
+                if buffer.last_time == time:
+                    continue
+                buffer.append(time, value)
+
+            self._append_spectrogram_column(snapshot, time)
+            appended = True
+
+        if appended:
+            self._cache.clear()
+            self._dirty = True
+            self._revision += 1
 
     def _append_spectrogram_column(self, snapshot: FeatureSnapshot, time: float):
         incoming = getattr(snapshot, "spectrogram", None)
@@ -248,26 +349,16 @@ class PlotDataHub(QtCore.QObject):
             return
         if np.size(incoming.magnitude_db) == 0:
             return
-
-        target = getattr(self._features, "spectrogram", None)
-        if target is None:
+        if self._live_spectrogram is None:
             return
 
-        column = np.asarray(incoming.magnitude_db).reshape(-1, 1)
-
-        if np.size(target.magnitude_db) == 0 or len(target.x) == 0:
-            target.x = np.array([time], dtype=float)
-            target.y = np.asarray(incoming.y, dtype=float)
-            target.magnitude_db = column
-            return
-
-        if column.shape[0] != target.magnitude_db.shape[0]:
+        # A column sits on the spectrogram's own hop, not on the frame grid, so
+        # it is filed at the time it came with rather than at the frame's.
+        column_time = float(incoming.x[0]) if np.size(incoming.x) else time
+        column = np.asarray(incoming.magnitude_db).reshape(-1)
+        if not self._live_spectrogram.append(column_time, column, frequencies=incoming.y):
             logging.debug("Dropping live spectrogram column: %d rows, expected %d",
-                          column.shape[0], target.magnitude_db.shape[0])
-            return
-
-        target.x = np.append(target.x, time)
-        target.magnitude_db = np.hstack((target.magnitude_db, column))
+                          len(column), self._live_spectrogram.bins)
 
 
 def _signal_fields(features: AudioFeatures):

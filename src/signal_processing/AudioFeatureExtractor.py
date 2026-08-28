@@ -72,17 +72,21 @@ class AudioFeatureExtractor:
         except Exception:
             pass
 
-    def analyzePCM(self, pcm_data, sampling_rate) -> AudioFeatures:
+    def analyzePCM(self, pcm_data, sampling_rate, with_spectrogram=True) -> AudioFeatures:
         """
         Perform analysis on samples.
 
         :param pcm_data:
         :param sampling_rate:
+        :param with_spectrogram: Compute the spectrogram too. The live analysis
+            turns it off: it takes the STFT itself, off a slice aligned to the
+            spectrogram's own hop rather than to openSMILE's frame step.
         :return:
         """
         df = self.smile.process_signal(pcm_data, sampling_rate)
         audio_length = len(pcm_data) / float(sampling_rate)
-        result = self.extractFeatures(df, sampling_rate, audio_length, pcm_data)
+        result = self.extractFeatures(df, sampling_rate, audio_length, pcm_data,
+                                      with_spectrogram=with_spectrogram)
         return result
 
     def analyzeChunk(self, pcm_data, sampling_rate) -> AudioFeatures:
@@ -127,7 +131,7 @@ class AudioFeatureExtractor:
         return self.extractFeatures(df, sampling_rate, audio_length, samples)
 
     def extractFeatures(self, df, sampling_rate, audio_length, pcm_data,
-                        derive=True) -> AudioFeatures:
+                        derive=True, with_spectrogram=True) -> AudioFeatures:
         # Extract timepoints
         timepoints = df.index.get_level_values('start').total_seconds().to_numpy()
 
@@ -183,7 +187,8 @@ class AudioFeatureExtractor:
             jitter=SignalTimeSeries(x=timepoints, y=jitter_clean),
             shimmer=SignalTimeSeries(x=timepoints, y=shimmer_clean),
             size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),
-            spectrogram=calculate_spectrogram(pcm_data, sampling_rate),
+            spectrogram=(calculate_spectrogram(pcm_data, sampling_rate)
+                         if with_spectrogram else SpectrogramData()),
 
             F1=SignalTimeSeries(x=timepoints, y=f1_clean),
             F2=SignalTimeSeries(x=timepoints, y=f2_clean),

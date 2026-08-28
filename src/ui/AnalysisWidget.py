@@ -1068,7 +1068,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.hub.begin_recording()
 
         self.rt_worker = RealTimeAnalysisWorker(self.audioFeatureExtractor, self.audio_queue, self.sampling_rate)
-        self.rt_worker.new_data_point.connect(self.append_live_data)
+        self.rt_worker.new_data_points.connect(self.append_live_data)
         self.rt_worker.start()
 
         target_byte_pos = int(self.current_playback_time * self.sampling_rate) * 2
@@ -1141,15 +1141,20 @@ class AnalysisWidget(QtWidgets.QWidget):
                                                        * self.sampling_rate))
                 self.audio_queue.put(new_bytes)
 
-    def append_live_data(self, latest_point: FeatureSnapshot):
-        """Hand one live analysis frame to the hub.
+    def append_live_data(self, latest_points: list):
+        """Hand one analysis pass' worth of live frames to the hub.
+
+        A pass carries every frame it analysed, not just its newest, so the
+        live timeline is as dense as the batch analysis' one.
 
         Plots are not touched here: the frame timer picks the new data up. The
         old code appended the same snapshot once per visible curve, so a feature
         shown in two plots was recorded twice.
         """
-        latest_point.time += self.recording_start_offset or 0.0
-        self.hub.append_snapshot(latest_point)
+        offset = self.recording_start_offset or 0.0
+        for point in latest_points:
+            point.time += offset
+        self.hub.append_snapshots(latest_points)
 
     #################### Audio editing ####################
 
