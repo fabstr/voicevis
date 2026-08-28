@@ -17,7 +17,7 @@ from ui.plot.ScatterItem import ScatterItem
 from ui.plot.renderers.PlotRenderer import PlotRenderer
 
 #: Markers here are sparser than on a time plot, so they can afford to be bigger.
-SIZE_MULTIPLIER = 3
+SIZE_MULTIPLIER = 1
 
 
 class TrailRenderer(PlotRenderer):
