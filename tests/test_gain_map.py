@@ -8,7 +8,9 @@ to one stretch and not to its neighbour.
 import numpy as np
 import pytest
 
-from signal_processing.GainMap import GainMap, INFINITY, to_factor
+from signal_processing.GainMap import (FULL_SCALE, GainMap, INFINITY,
+                                       NORMALISE_CEILING_DB, normalising_gain,
+                                       peak_level, to_factor)
 
 SAMPLE_RATE = 1000
 LEVEL = 1000
@@ -207,3 +209,57 @@ def test_a_copy_does_not_follow_the_original(gains):
 
     assert snapshot.uniform_gain(0.0, 1.0) == 6.0
     assert gains.uniform_gain(0.0, 1.0) == -6.0
+
+
+# --- Normalising ---------------------------------------------------------
+
+def loudest_after(audio_bytes, db):
+    """The loudest sample once ``db`` is applied over the whole of it."""
+    gains = GainMap()
+    gains.set_gain(0.0, INFINITY, db)
+    gained, _ = gains.apply(audio_bytes, SAMPLE_RATE)
+    return int(np.abs(levels(gained).astype(np.int32)).max())
+
+
+def test_the_peak_is_read_over_the_range_asked_for():
+    quiet, loud = audio(1.0, 100), audio(1.0, 8000)
+
+    assert peak_level(quiet + loud, SAMPLE_RATE, 1.0, 2.0) == 8000
+    assert peak_level(quiet + loud, SAMPLE_RATE, 0.0, 1.0) == 100
+    assert peak_level(quiet + loud, SAMPLE_RATE) == 8000
+
+
+def test_normalising_lifts_the_loudest_sample_to_just_below_full_scale():
+    quiet = audio(1.0, 1000)
+
+    db = normalising_gain(quiet, SAMPLE_RATE)
+
+    assert db > 0
+    assert loudest_after(quiet, db) == pytest.approx(
+        FULL_SCALE * to_factor(NORMALISE_CEILING_DB), rel=1e-3)
+
+
+def test_normalising_never_clips():
+    hot = audio(1.0, FULL_SCALE)
+
+    db = normalising_gain(hot, SAMPLE_RATE)
+
+    assert db < 0
+    gains = GainMap()
+    gains.set_gain(0.0, INFINITY, db)
+    assert not gains.clips(hot, SAMPLE_RATE)
+
+
+def test_normalising_reads_the_range_asked_for_only():
+    quiet, loud = audio(1.0, 100), audio(1.0, 8000)
+
+    over_the_quiet_part = normalising_gain(quiet + loud, SAMPLE_RATE, 0.0, 1.0)
+
+    assert over_the_quiet_part == pytest.approx(
+        normalising_gain(quiet, SAMPLE_RATE))
+
+
+def test_silence_has_no_normalising_gain():
+    assert normalising_gain(audio(1.0, 0), SAMPLE_RATE) is None
+    assert normalising_gain(b'', SAMPLE_RATE) is None
+    assert normalising_gain(audio(1.0), SAMPLE_RATE, 5.0, 6.0) is None

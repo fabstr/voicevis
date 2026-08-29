@@ -19,7 +19,7 @@ from signal_processing import AudioEdit
 from signal_processing.AudioFeatureExtractor import AudioFeatureExtractor, TargetConfig
 from signal_processing.AudioFeatures import AudioFeatures, FeatureSnapshot
 from signal_processing.ChunkedAnalysis import ChunkedAudioAnalysis
-from signal_processing.GainMap import GainMap, INFINITY
+from signal_processing.GainMap import GainMap, INFINITY, normalising_gain
 from ui.AnnotationMarker import AnnotationMarker
 from ui.AudioHistory import AudioHistory
 from ui.HelpWindow import HelpWindow
@@ -65,6 +65,7 @@ SELECT_ICON = 'mdi6.selection-drag'
 SILENCE_ICON = 'mdi6.volume-off'
 CUT_ICON = 'fa5s.cut'
 GAIN_ICON = 'fa5s.sliders-h'
+NORMALISE_ICON = 'mdi6.volume-high'
 UNDO_ICON = 'mdi6.undo'
 REDO_ICON = 'mdi6.redo'
 
@@ -124,6 +125,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.action_silence = None
         self.action_cut = None
         self.action_gain = None
+        self.action_normalise = None
         self.action_undo = None
         self.action_redo = None
         self.playback_btn = None
@@ -368,6 +370,11 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.action_gain.setToolTip(
             "Gain or attenuation, in dB, applied to the audio before it is "
             "analysed -- the selection if there is one, otherwise all of it")
+        self.action_normalise = self._action(
+            self.normalise_icon, "&Normalise Volume", self.handle_normalise_volume)
+        self.action_normalise.setToolTip(
+            "Set the gain that makes the audio as loud as it goes without "
+            "clipping -- the selection if there is one, otherwise all of it")
 
         for action in (self.action_silence, self.action_cut,
                        self.action_undo, self.action_redo):
@@ -444,6 +451,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         edit_menu.addAction(self.action_silence)
         edit_menu.addAction(self.action_cut)
         edit_menu.addAction(self.action_gain)
+        edit_menu.addAction(self.action_normalise)
         edit_menu.addSeparator()
         edit_menu.addAction(self.action_undo)
         edit_menu.addAction(self.action_redo)
@@ -636,6 +644,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.silence_icon = qta.icon(SILENCE_ICON, color=colour)
         self.cut_icon = qta.icon(CUT_ICON, color=colour)
         self.gain_icon = qta.icon(GAIN_ICON, color=colour)
+        self.normalise_icon = qta.icon(NORMALISE_ICON, color=colour)
         self.undo_icon = qta.icon(UNDO_ICON, color=colour)
         self.redo_icon = qta.icon(REDO_ICON, color=colour)
 
@@ -875,6 +884,7 @@ class AnalysisWidget(QtWidgets.QWidget):
                 self.action_silence.setIcon(self.silence_icon)
                 self.action_cut.setIcon(self.cut_icon)
                 self.action_gain.setIcon(self.gain_icon)
+                self.action_normalise.setIcon(self.normalise_icon)
                 self.action_undo.setIcon(self.undo_icon)
                 self.action_redo.setIcon(self.redo_icon)
 
@@ -1363,6 +1373,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.action_cut.setEnabled(editable)
         self.action_select.setEnabled(not self.is_monitoring)
         self.action_gain.setEnabled(not self.is_monitoring)
+        self.action_normalise.setEnabled(not self.is_monitoring)
 
     def _on_history_changed(self):
         self.action_undo.setEnabled(self.history.can_undo)
@@ -1427,6 +1438,22 @@ class AnalysisWidget(QtWidgets.QWidget):
 
     #################### Gain ####################
 
+    def _gain_scope(self):
+        """The range a gain applied now would land on, and how to name it.
+
+        Both gain commands act on the same range, so they ask the same question
+        of the selection.
+        """
+        selection = self.hub.selection
+        if selection.active:
+            start, end = selection.start, selection.end
+            return start, end, (f"the selection ({self.format_time(start)} to "
+                                f"{self.format_time(end)})")
+
+        # To infinity rather than to the end of the buffer, so that audio
+        # recorded onto the end later is covered by the same gain.
+        return 0.0, INFINITY, "the whole recording"
+
     def handle_set_gain(self):
         """Set the gain, in dB, applied to the audio before it is analysed."""
         if self.audio_data.isEmpty():
@@ -1434,17 +1461,7 @@ class AnalysisWidget(QtWidgets.QWidget):
                                           "There is no audio to apply a gain to.")
             return
 
-        selection = self.hub.selection
-        if selection.active:
-            start, end = selection.start, selection.end
-            scope = (f"the selection ({self.format_time(start)} to "
-                     f"{self.format_time(end)})")
-        else:
-            # To infinity rather than to the end of the buffer, so that audio
-            # recorded onto the end later is covered by the same gain.
-            start, end = 0.0, INFINITY
-            scope = "the whole recording"
-
+        start, end, scope = self._gain_scope()
         current = self.gain_map.uniform_gain(start, end)
         prompt = f"Gain applied to {scope} before analysis (dB):"
         if current is None:
@@ -1457,6 +1474,44 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         if accepted:
             self.apply_gain(start, end, value)
+
+    def handle_normalise_volume(self):
+        """Set the gain that makes the audio as loud as it goes without clipping.
+
+        The figure is worked out from the recorded samples rather than from the
+        level in force, because that is what a gain multiplies: whatever was set
+        before, normalising replaces it with the one that puts the loudest
+        sample in range just below full scale. A quiet recording is raised, a
+        hot one is brought back down.
+        """
+        if self.audio_data.isEmpty():
+            QtWidgets.QMessageBox.warning(self, "No Audio",
+                                          "There is no audio to normalise.")
+            return
+
+        start, end, scope = self._gain_scope()
+        db = normalising_gain(self.audio_data.data(), self.sampling_rate,
+                              start, end)
+        if db is None:
+            QtWidgets.QMessageBox.information(
+                self, "Normalise Volume",
+                f"There is no sound in {scope} to normalise.")
+            return
+
+        if abs(db) > GAIN_LIMIT_DB:
+            # Further than a gain goes. Going as far as it does is still worth
+            # doing, but the result will not reach the ceiling, so say so.
+            reached = GAIN_LIMIT_DB if db > 0 else -GAIN_LIMIT_DB
+            QtWidgets.QMessageBox.information(
+                self, "Normalise Volume",
+                f"Normalising {scope} would take {db:+.1f} dB, more than the "
+                f"{GAIN_LIMIT_DB:.0f} dB a gain allows. It has been set to "
+                f"{reached:+.1f} dB instead.")
+            db = reached
+
+        # No clipping warning: this is the gain that stops short of clipping,
+        # so there is nothing to warn about.
+        self.apply_gain(start, end, db, warn_on_clipping=False)
 
     def apply_gain(self, start, end, db, warn_on_clipping=True):
         """Put ``db`` in force over a range, and re-analyse what it changed.

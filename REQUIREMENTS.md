@@ -92,6 +92,9 @@ and what else has to be updated alongside it, is in
 - **AE-26** When the user moves a selection, the system shall move the gains in force over the moved range with the audio, leaving the origin range without them.
 - **AE-27** When a moved gain lands on a range that already carries one, the system shall overwrite the gain at the destination, as AE-5 overwrites the audio there.
 - **AE-28** The system shall leave the audio file it loaded from disk unmodified, whatever gains are in force. *(The gains reach the analysis (AE-19), playback (AE-20) and an export (SF-11); the file on disk is the one thing they never reach.)*
+- **AE-29** When the user selects *Edit > Normalise Volume*, the system shall set the gain that puts the loudest sample of the range it acts on (AE-15, AE-16) just below full scale, without clipping it.
+- **AE-30** When the user normalises the volume, the system shall work the gain out from the recorded samples, so that normalising replaces whatever gain was in force over that range rather than adding to it.
+- **AE-31** If the range to be normalised is silent, then the system shall leave the gains in force unchanged and shall tell the user that there is nothing to normalise.
 
 ## 4. Analysis (AN)
 

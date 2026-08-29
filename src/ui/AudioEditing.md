@@ -22,6 +22,7 @@ flowchart TD
     B --> Z["Edit &gt; Replace with Silence"] --> SI["replace with silence,<br/>same length"]
     B --> C["Edit &gt; Cut Selection"] --> CU["remove it and<br/>close the gap"]
     B --> G["Edit &gt; Gain..."] --> GA["record dB over<br/>that range"]
+    B --> N["Edit &gt; Normalise Volume"] --> GA
 
     MV --> RA["re-analyse"]
     SI --> RA
@@ -128,6 +129,22 @@ in the undo history carries a copy of the map anyway, because a cut or a move
 
 Samples driven past full scale are clamped, and the user is told once, when the
 gain is applied.
+
+### Normalise Volume
+
+`Edit > Normalise Volume` sets that same gain without asking for a figure: the
+one that puts the loudest sample over the range just below full scale.
+`GainMap.normalising_gain()` reads the peak of the *recorded* samples over the
+range -- which is what a gain multiplies -- so normalising replaces whatever
+was in force there rather than compounding it, and a recording already too hot
+is brought down as readily as a quiet one is lifted.
+
+The ceiling is `NORMALISE_CEILING_DB`, a decibel below full scale: a waveform
+that touches the rail reads as clipped, and the rounding back to 16-bit needs
+somewhere to go. So no clipping warning follows -- this is the gain that stops
+short of clipping. A silent range has no peak to work from and is left alone,
+and a range that would need more than `GAIN_LIMIT_DB` is taken as far as a gain
+goes, with the user told it fell short.
 
 ## Undo
 

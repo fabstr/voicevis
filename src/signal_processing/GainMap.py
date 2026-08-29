@@ -19,6 +19,7 @@ describing the same audio after an edit as it did before.
 
 import logging
 from dataclasses import dataclass
+from math import log10
 
 import numpy as np
 
@@ -30,6 +31,11 @@ FULL_SCALE = 32767
 #: measurable, and keeping it would leave a segment that does nothing.
 NEGLIGIBLE_DB = 0.05
 
+#: Where normalising puts the loudest sample. Full scale itself leaves nothing
+#: for the rounding back to 16-bit, and a waveform that touches the rail reads
+#: as clipped to anything downstream; a decibel below it is the usual margin.
+NORMALISE_CEILING_DB = -1.0
+
 #: Segment edges are only ever compared, never accumulated, so this is small
 #: enough to sit well inside one sample at any sample rate.
 _EPSILON = 1e-9
@@ -40,6 +46,42 @@ INFINITY = float('inf')
 def to_factor(db: float) -> float:
     """The amplitude factor a decibel figure asks for."""
     return float(10.0 ** (db / 20.0))
+
+
+def peak_level(audio_bytes, sample_rate: int,
+               start: float = 0.0, end: float = INFINITY) -> float:
+    """The loudest sample over ``start``..``end``, at the level it was recorded.
+
+    Whatever gains are in force are beside the point: every application
+    multiplies the recorded samples, never the last result, so this is what a
+    gain over that range will act on.
+    """
+    if not audio_bytes:
+        return 0.0
+
+    samples = np.frombuffer(audio_bytes, dtype=DTYPE)
+    low = _sample_index(start, sample_rate, len(samples))
+    high = _sample_index(end, sample_rate, len(samples))
+    span = samples[low:high]
+    if not span.size:
+        return 0.0
+
+    return float(np.abs(span.astype(np.float32)).max())
+
+
+def normalising_gain(audio_bytes, sample_rate: int,
+                     start: float = 0.0, end: float = INFINITY,
+                     ceiling_db: float = NORMALISE_CEILING_DB):
+    """The gain that lifts ``start``..``end`` as far as it goes without clipping.
+
+    That is the one that puts the loudest sample in the range at ``ceiling_db``
+    below full scale -- negative where the range is already louder than that.
+    None when there is nothing to lift: no audio over the range, or silence.
+    """
+    loudest = peak_level(audio_bytes, sample_rate, start, end)
+    if loudest <= 0.0:
+        return None
+    return float(ceiling_db - 20.0 * log10(loudest / FULL_SCALE))
 
 
 @dataclass(frozen=True)
