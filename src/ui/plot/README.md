@@ -145,7 +145,8 @@ renderable. It is applied on construction, on every edit and on every load.
 | An `exclusive` series (`time`, `frequency`, `magnitude`, `radar`) is alone on its axis | Time cannot share an axis with pitch |
 | Time sits on at most one axis | Selecting it on both drops the Y one |
 | At most one axis may hold several series | `y=[F1,F2,F3]` against `x=time` is meaningful; many-against-many is not |
-| `colour` is kept only when both axes hold exactly one series | With several series each already uses its own registry colour |
+| A colour source must be a real signal (plus `frequency`, on a spectrum slice) | The others are axes, not measurements — a slice is one instant, so a time series has a single value there |
+| A `colour_sources` / `colour_maps` entry for a series the plot does not currently draw is kept | Taking a series off an axis and putting it back restores its colouring, for the same reason the map outlives the source being turned off |
 | `spectrogram` only on `TIME_SCATTER`, and only when the value axis is empty or entirely in Hz | The image is drawn in true Hz; see [layers](layers/README.md) |
 | `SPECTRUM_SLICE` forces `y = ["magnitude"]` | There is nothing else to put on that axis |
 | `RADAR` keeps only real signals on Y, and falls back to one if that empties it | A spoke needs something measured to run along; a radar with no spokes is not a radar |
@@ -183,12 +184,19 @@ the plot itself:
 
 | Entry | |
 |---|---|
-| Colour | Submenu of the series that may drive the colour dimension |
-| Colour map | Which gradient that dimension runs through; disabled until one is chosen |
+| *\<series\>* colour source | One pair per drawn series. Submenu of the series that may colour it, or none |
+| *\<series\>* colour map | Which gradient that series' source runs through; disabled until it has one |
+| Show colour scales | The colour bars, for when the cell's width is worth more than the legend |
 | Spectrogram | Background image; disabled unless the value axis is in Hz |
 | Separate axis per series | See below; disabled with one series |
 | Trail (s) | Only shown on a trail or radar plot — the two kinds that draw a window of history |
 | Point size | The per-plot size slider |
+
+The colour entries name the series they apply to, so they depend on what the
+plot is drawing at that moment. They are **rebuilt each time the menu opens**
+rather than created once — the same approach the frequency-marker menu takes.
+Rebuilding them in response to a selection change instead would mean deleting
+the very menu whose action was still being dispatched.
 
 `PlotControls` is a controller, not a widget: it owns the controls and the rules
 they obey, and `PlotCell` decides where each one goes.
@@ -292,13 +300,70 @@ the renderer's items and leaves the configuration and the zoom alone. The
 palette is application-wide, so `MainWindow` fans the change out to every open
 window.
 
-A series used as a plot's *colour dimension* is unaffected by the palette: it
-maps through the plot's colour map instead -- viridis, plasma or turbo, chosen
-per plot and stored with the layout. `ColourMapping` owns both the set of maps
-offered and the cache of resolved `pg.ColorMap` objects; every consumer passes
-the name from `PlotConfig.colour_map`. Changing it *is* a config change, so it
-goes through `apply_config` like any other, which rebuilds the renderer's items
-and repaints the colour bar without disturbing the zoom.
+A series used as a *colour dimension* is unaffected by the palette: it maps
+through a colour map instead -- viridis, plasma or turbo. `ColourMapping` owns
+both the set of maps offered and the cache of resolved `pg.ColorMap` objects.
+Changing either *is* a config change, so it goes through `apply_config` like any
+other, which rebuilds the renderer's items and its colour bars without
+disturbing the zoom.
+
+### Colouring is per drawn series
+
+Both the source and the map are chosen **per series the plot draws**, not per
+plot:
+
+```
+PlotConfig(x=["time"], y=["F1", "F2"],
+           colour_sources={"F1": "loudness", "F2": "pitch"},
+           colour_maps={"F1": "viridis", "F2": "turbo"})
+```
+
+`PlotConfig.drawn_keys()` is the list those dictionaries are keyed by — one
+entry per thing the plot draws, whatever its kind: the quantities on a time
+plot, the pairs on a trail, the spokes on a radar, `magnitude` on a slice. Every
+renderer already iterates exactly that list, so `_colour_values(times, key)`
+answers per item and nothing needs a special case.
+
+There used to be a stricter rule: one series per axis, or no colour at all. A
+single plot-wide colour dimension would otherwise have painted every series the
+same and made them indistinguishable. With one per series that reason is gone,
+and several coloured series is the case worth supporting.
+
+**The plot-wide `colour` / `colour_map` survive as the fallback.** They are what
+a layout written before this existed carries, and `colour_source(key)` returns
+them for any series with no entry of its own — which, for the single-series
+plots that rule allowed, is exactly the old behaviour. Choosing *(none)* for a
+series writes an explicit `None`, which overrides the fallback rather than
+falling back to it.
+
+### The scale a colour means
+
+Values are normalised over the colour source's **registry range** --
+`default_min`..`default_max` -- and not over the span its data happens to
+cover. The same argument as the radar's spokes: a colour then means the same
+thing in every plot and in every recording, instead of the palette silently
+rescaling itself when a different take is analysed.
+
+It also decouples the scale from the data entirely, which is why a colour bar
+can be labelled the moment it is created and never touched again. It used to be
+handed levels from inside `_colour_values`, so a plot with nothing analysed yet
+showed a bar reading 0.0 to 1.0.
+
+The one exception is a spectrum slice coloured by `frequency`, which sets its
+own levels: its gradient runs along a log-scaled axis, so the bar is labelled in
+the same log space at the axis's own tick frequencies.
+
+**One colour bar per coloured series**, in item order, each labelled
+`"<drawn>: <source>"` when the plot draws more than one thing. They sit from
+`ColourMapping.COLOUR_BAR_COLUMN` outwards, well clear of the extra axes
+`MultiAxisLayer` stacks from column 3: the two could not previously collide,
+because a colour dimension needed one series and separate axes needed several,
+and now one plot can want both at once.
+
+Three bars and their axes cost about a quarter of a cell's width, and on a radar
+that is doubly expensive -- the aspect lock means width taken from the plot
+shrinks the circle both ways. **Show colour scales** turns them off per plot and
+is stored with the layout; the colouring itself is unaffected.
 
 The spectrogram background is deliberately not part of this: it is an image, not
 a colour dimension, and stays viridis whatever the plot is set to.
@@ -473,10 +538,17 @@ itself. The same applies inside an entry: an unknown `colour` or `colour_map`
 is replaced by `normalised()` rather than failing the load.
 
 `LAYOUT_VERSION` stays **2** for a purely additive optional key such as
-`colour_map`. `load()` is shape-driven and never branches on `version`, and
-every field is read with a default, so a v2 file written before the key existed
-loads as viridis and an older build reading a newer file ignores the key.
-Bumping the number would imply a migration branch that does not exist.
+`colour_map`, or the later `colour_sources` and `colour_maps`. `load()` is
+shape-driven and never branches on `version`, and every field is read with a
+default, so a v2 file written before a key existed loads as viridis and an older
+build reading a newer file ignores it. Bumping the number would imply a
+migration branch that does not exist.
+
+The per-series keys are additive in both directions precisely because the
+plot-wide `colour`/`colour_map` are still written and still honoured as the
+fallback. An older build reading a new file sees the plot-wide pair it always
+did; a new build reading an old file finds no per-series entries and falls back
+to the same pair.
 
 The `QSettings` key is deliberately unchanged (`AudioAnalyzer` /
 `LiveMultiPlotWidget` / `last_active_layout`). Renaming it would have silently

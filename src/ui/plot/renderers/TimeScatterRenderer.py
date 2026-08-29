@@ -44,10 +44,9 @@ class TimeScatterRenderer(PlotRenderer):
     def _build_items(self):
         edge_pen = PlotTheme.marker_edge_pen()
         size = self.config.point_size
-        coloured = self.config.colour_spec() is not None
 
         for spec in self.config.value_specs():
-            if coloured:
+            if self.config.is_coloured(spec.key):
                 # A colour dimension needs one brush per point. PlotDataItem
                 # subsets x/y for clipping and downsampling but passes the brush
                 # list through whole, so the scatter underneath then rejects the
@@ -74,18 +73,19 @@ class TimeScatterRenderer(PlotRenderer):
 
     def _refresh(self, current_time: float):
         edge_pen = PlotTheme.marker_edge_pen()
-        has_colour = self.config.colour_spec() is not None
         transposed = self.time_on_y
 
         for item, spec in zip(self.items, self.config.value_specs()):
             times, values = self.hub.get_xy(spec.key)
             x, y = (values, times) if transposed else (times, values)
 
-            if not has_colour:
+            # Which item was built for this series follows the same test, so a
+            # plain PlotDataItem is never handed a brush list it cannot take.
+            if not self.config.is_coloured(spec.key):
                 item.setData(x=x, y=y)
                 continue
 
-            colours = self._colour_values(times)
+            colours = self._colour_values(times, spec.key)
             if colours is None:
                 # No colour data yet -- fall back to the series' own colour
                 # rather than leaving the previous frame's points on screen.

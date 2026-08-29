@@ -30,6 +30,10 @@ class SpectrumSliceRenderer(PlotRenderer):
 
     measure_formatter = staticmethod(log_x_measure_formatter)
 
+    #: The one thing this plot draws, and so the key its colouring is filed
+    #: under -- the same key ``PlotConfig.drawn_keys`` reports for this kind.
+    KEY = Registry.MAGNITUDE_KEY
+
     def axis_items(self):
         return {'bottom': FrequencyAxisItem(x_ticks=FREQUENCY_TICKS, is_log_x=True,
                                             orientation='bottom'),
@@ -98,15 +102,16 @@ class SpectrumSliceRenderer(PlotRenderer):
         a single instant and a time series has just one value there; that tint
         then changes as playback moves.
         """
-        by_frequency = self.config.colour == Registry.FREQUENCY_KEY
-        if self.colour_bar is not None and not by_frequency:
-            self.colour_bar.getAxis('right').setTicks(None)
+        colour_bar = self.colour_bars.get(self.KEY)
+        by_frequency = self.config.colour_source(self.KEY) == Registry.FREQUENCY_KEY
+        if colour_bar is not None and not by_frequency:
+            colour_bar.getAxis('right').setTicks(None)
 
         if by_frequency:
             self._apply_frequency_gradient(x_values)
             return
 
-        colours = self._colour_values(np.array([current_time], dtype=float))
+        colours = self._colour_values(np.array([current_time], dtype=float), self.KEY)
         if colours is None or len(colours) == 0:
             self._apply_colour(Registry.colour_of(Registry.SERIES[Registry.MAGNITUDE_KEY]))
             return
@@ -131,7 +136,7 @@ class SpectrumSliceRenderer(PlotRenderer):
         fill = QtGui.QLinearGradient(low, 0.0, high, 0.0)
         fill.setCoordinateMode(QtGui.QGradient.CoordinateMode.LogicalMode)
 
-        gradient_map = colour_map(self.config.colour_map)
+        gradient_map = colour_map(self.config.colour_map_of(self.KEY))
         for stop in np.linspace(0.0, 1.0, GRADIENT_STOPS):
             red, green, blue = (int(v) for v in gradient_map.map(float(stop), mode='byte')[:3])
             fill.setColorAt(float(stop), QtGui.QColor(red, green, blue, FILL_ALPHA))
@@ -139,12 +144,13 @@ class SpectrumSliceRenderer(PlotRenderer):
         self.items[0].setPen(None)
         self.items[0].setFillBrush(QtGui.QBrush(fill))
 
-        if self.colour_bar is not None:
+        colour_bar = self.colour_bars.get(self.KEY)
+        if colour_bar is not None:
             # Levels are in the same log space as the gradient, so the legend
             # gets explicit Hz labels at the axis's own tick frequencies rather
             # than a linear scale that would disagree with what is drawn.
-            self.colour_bar.setLevels((low, high))
-            self.colour_bar.getAxis('right').setTicks([self._frequency_ticks(low, high), []])
+            colour_bar.setLevels((low, high))
+            colour_bar.getAxis('right').setTicks([self._frequency_ticks(low, high), []])
 
     @staticmethod
     def _frequency_ticks(low: float, high: float):

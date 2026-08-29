@@ -25,6 +25,7 @@ classDiagram
         +on_time_changed(t)
         +set_point_size(size)
         +trail_alpha(times, t, window)$
+        #_colour_values(times, key)
         +apply_theme(theme)
         +axis_items() dict
         +x_transform(values)
@@ -52,7 +53,14 @@ classDiagram
 ```
 
 Subclasses implement `_build_items` and `_refresh`. The base class handles the
-lifecycle, the revision guard, the colour bar and the colour-map sampling.
+lifecycle, the revision guard, the colour bars and the colour-map sampling.
+
+**Every renderer draws one item per key in `config.drawn_keys()`**, in that
+order — the quantities on a time plot, the pairs on a trail, the spokes on a
+radar, `magnitude` on a slice. That list is also what the per-series colour
+settings are keyed by, so `_colour_values(times, key)` answers for one item and
+no renderer needs a special case for colouring. See
+[the plot README](../README.md#colouring-is-per-drawn-series).
 
 ---
 
@@ -160,11 +168,14 @@ other has to replace the specialised axis and restore a plain one on the side it
 came from, so returning only the side that changed would leave a stale
 `TimeAxisItem` behind.
 
-When a colour series is set (only possible at one series per axis), point
-brushes come from the normalised colour-map mapping. If the colour series has no
-data yet the renderer falls back to the series' own colour and **still calls
-`setData`** — the old code returned early and left the previous frame's points
-on screen.
+Whether a series gets a `ScatterItem` or a `PlotDataItem` follows
+`config.is_coloured(spec.key)`, series by series — so one plot can hold both,
+and a plain `PlotDataItem` is never handed the brush list it cannot take.
+
+When a series has a colour source, its point brushes come from the normalised
+colour-map mapping. If that source has no data yet the renderer falls back to
+the series' own colour and **still calls `setData`** — the old code returned
+early and left the previous frame's points on screen.
 
 ## `TrailRenderer`
 
@@ -178,8 +189,9 @@ alpha = 255 * (1 - clip((t_now - t_point) / trail_time, 0, 1))
 One `ScatterItem` per pair. The point count is bounded by the trail window and
 every point needs its own brush, so a scatter is the right choice here.
 
-The colour dimension is normalised over the **whole** series rather than the
-visible window, so colours do not shimmer as the window slides.
+The colour dimension is normalised over the colour source's **registry range**,
+not over the window or even the recording, so colours neither shimmer as the
+window slides nor shift when a different take is analysed.
 
 All features share the openSMILE frame timebase, so the window mask is taken
 directly on the primary series' timestamps; the second axis is interpolated onto
@@ -280,6 +292,9 @@ recolouring that series changes the whole curve rather than just its edge.
 
 The colour dimension works here too, and behaves differently depending on what
 drives it:
+
+Its one drawn key is `magnitude`, so that is what its colour source and colour
+map are filed under — the menu reads "Magnitude colour source".
 
 | Colour source | Result |
 |---|---|

@@ -35,10 +35,10 @@ class TrailRenderer(PlotRenderer):
         """The series whose colour identifies each drawn pair.
 
         Exactly one axis may hold several series, so the multi-valued axis is
-        the one that names the pairs.
+        the one that names the pairs -- which is what ``drawn_keys`` reports,
+        and what the per-series colour menus are keyed by.
         """
-        x_specs, y_specs = self.config.x_specs(), self.config.y_specs()
-        return x_specs if len(x_specs) > len(y_specs) else y_specs
+        return self.config.drawn_specs()
 
     def _pairs(self):
         """(x_key, y_key) for each item, in item order."""
@@ -64,7 +64,7 @@ class TrailRenderer(PlotRenderer):
                 continue
 
             alpha = self.trail_alpha(times, current_time, trail_time)
-            colours = self._colour_values(times)
+            colours = self._colour_values(times, spec.key)
 
             point_brushes = (brushes(colours, alpha) if colours is not None
                              else solid_brushes(Registry.colour_of(spec), alpha))

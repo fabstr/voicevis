@@ -11,8 +11,8 @@ import abc
 import numpy as np
 import pyqtgraph as pg
 
-from ui.plot.ColourMapping import (make_colour_bar, normalise, rgba,
-                                   set_colour_bar_label, set_colour_bar_map)
+import SeriesRegistry as Registry
+from ui.plot.ColourMapping import make_colour_bar, normalise_to, rgba
 from ui.plot.DirectionalViewBox import plain_measure_formatter
 
 
@@ -41,19 +41,20 @@ class PlotRenderer(abc.ABC):
         self.config = config
         self.hub = hub
         self.items = []
-        self.colour_bar = None
+        #: One bar per drawn series that has a colour dimension, by series key.
+        self.colour_bars = {}
         self._seen_revision = -1
 
     # --- Lifecycle -------------------------------------------------------
 
     def attach(self):
         self._build_items()
-        self._sync_colour_bar()
+        self._sync_colour_bars()
         self.on_data_changed(force=True)
 
     def detach(self):
         self._clear_items()
-        self._remove_colour_bar()
+        self._remove_colour_bars()
 
     def set_config(self, config):
         """Adopt a new config of the same kind, rebuilding items in place."""
@@ -64,7 +65,7 @@ class PlotRenderer(abc.ABC):
         """Recreate the items, e.g. after the series palette changed."""
         self._clear_items()
         self._build_items()
-        self._sync_colour_bar()
+        self._sync_colour_bars()
         self.on_data_changed(force=True)
 
     # --- Updates ---------------------------------------------------------
@@ -84,8 +85,8 @@ class PlotRenderer(abc.ABC):
             self._apply_point_size(item, size)
 
     def apply_theme(self, theme):
-        if self.colour_bar is not None:
-            axis = self.colour_bar.getAxis('right')
+        for bar in self.colour_bars.values():
+            axis = bar.getAxis('right')
             axis.setPen(theme.text)
             axis.setTextPen(theme.text)
 
@@ -146,37 +147,57 @@ class PlotRenderer(abc.ABC):
             self.plot_item.removeItem(item)
         self.items = []
 
-    def _sync_colour_bar(self):
-        spec = self.config.colour_spec()
-        if spec is None:
-            self._remove_colour_bar()
-            return
-        if self.colour_bar is None:
-            self.colour_bar = make_colour_bar(self.plot_item, spec.label,
-                                              self.config.colour_map)
-        else:
-            set_colour_bar_label(self.colour_bar, spec.label)
-            # The bar outlives a change of map, so repaint it rather than
-            # leaving the legend's gradient disagreeing with the points.
-            set_colour_bar_map(self.colour_bar, self.config.colour_map)
+    def _sync_colour_bars(self):
+        """One bar per coloured series, in item order, rebuilt from scratch.
 
-    def _remove_colour_bar(self):
-        if self.colour_bar is None:
-            return
-        self.plot_item.layout.removeItem(self.colour_bar)
-        scene = self.colour_bar.scene()
-        if scene is not None:
-            scene.removeItem(self.colour_bar)
-        self.colour_bar = None
+        Rebuilt rather than reused: every drawn series has a map of its own
+        now, so a bar's gradient, its label, its span and its place in the row
+        can all change at once -- and the items it belongs to are being
+        recreated around it anyway.
 
-    def _colour_values(self, times: np.ndarray):
-        """Colours for ``times``, sampled from the colour series.
-
-        Returns None when this plot has no colour dimension. Normalisation uses
-        the whole colour series so colours do not shift as a window slides, and
-        the result runs through whichever map the config names.
+        Each bar is labelled over its source's registry range and never
+        touched again: nothing about the scale depends on the data, so there
+        is no moment at which it is out of date.
         """
-        spec = self.config.colour_spec()
+        self._remove_colour_bars()
+        if not self.config.colour_scales:
+            return
+
+        for key in self.config.drawn_keys():
+            source = self.config.colour_source_spec(key)
+            if source is None:
+                continue
+            self.colour_bars[key] = make_colour_bar(
+                self.plot_item, self._colour_bar_label(key, source),
+                self.config.colour_map_of(key), position=len(self.colour_bars),
+                span=(source.default_min, source.default_max))
+
+    def _colour_bar_label(self, key: str, source) -> str:
+        """What a bar measures, and which series it colours when that could be
+        in doubt. On a plot drawing one thing there is nothing to disambiguate.
+        """
+        if len(self.config.drawn_keys()) < 2:
+            return source.label
+        drawn = Registry.get(key)
+        return f"{drawn.label}: {source.label}" if drawn else source.label
+
+    def _remove_colour_bars(self):
+        for bar in self.colour_bars.values():
+            self.plot_item.layout.removeItem(bar)
+            scene = bar.scene()
+            if scene is not None:
+                scene.removeItem(bar)
+        self.colour_bars = {}
+
+    def _colour_values(self, times: np.ndarray, key: str):
+        """Colours for ``times``, sampled from whatever colours ``key``.
+
+        Returns None when that series has no colour dimension. Values are
+        scaled across the source's registry range -- not across the data's own
+        span -- so a colour means the same thing in every plot and in every
+        recording, and the bar's ticks stay true whatever has been analysed.
+        """
+        spec = self.config.colour_source_spec(key)
         if spec is None or len(times) == 0:
             return None
 
@@ -185,7 +206,5 @@ class PlotRenderer(abc.ABC):
             return None
 
         sampled = np.interp(times, z_x, z_y)
-        normalised, low, high = normalise(sampled, z_y)
-        if self.colour_bar is not None:
-            self.colour_bar.setLevels((low, high))
-        return rgba(normalised, self.config.colour_map)
+        normalised = normalise_to(sampled, spec.default_min, spec.default_max)
+        return rgba(normalised, self.config.colour_map_of(key))

@@ -5,6 +5,13 @@ drawn "Pitch (Hz)", and clicking one opens the series list. Everything else --
 colour, spectrogram, separate axes, trail length, point size -- lives in a single
 options menu in the corner, so the plot itself keeps the space.
 
+The colour entries are per drawn series -- "Pitch colour source", "Pitch colour
+map", "Size colour source" and so on -- so they depend on what the plot is
+currently showing. They are therefore rebuilt each time the menu opens rather
+than created once, the same way the frequency-marker menu is: building them in
+response to a selection change would mean deleting the very menu whose action
+was still being dispatched.
+
 This is a controller rather than a widget: it owns the controls and the rules
 they obey, and :class:`~ui.plot.PlotCell.PlotCell` decides where each one goes.
 """
@@ -24,8 +31,12 @@ MAX_POINT_SIZE = 5
 
 OPTIONS_GLYPH = "≡"          # a hamburger, for the options button
 
-COLOUR_DISABLED_HINT = "Colouring needs exactly one series on each axis"
-COLOUR_MAP_DISABLED_HINT = "Choose a series under Colour first"
+NOTHING_TO_COLOUR_HINT = "This plot draws no series to colour"
+COLOUR_MAP_DISABLED_HINT = "Choose a colour source for this series first"
+COLOUR_SOURCE_SUFFIX = "colour source"
+COLOUR_MAP_SUFFIX = "colour map"
+COLOUR_SCALES_HINT = "Show a colour bar beside the plot for each coloured series"
+COLOUR_SCALES_DISABLED_HINT = "Nothing on this plot has a colour source yet"
 Y_LOCKED_HINT = ("A spectrum slice only has magnitude to plot. "
                  "Change X away from Frequency to plot something else.")
 SPECTROGRAM_DISABLED_HINT = ("The spectrogram is drawn in Hz, so it only lines up "
@@ -79,39 +90,18 @@ class PlotControls(QtCore.QObject):
         self.options_menu = QtWidgets.QMenu()
         self.options_button.setMenu(self.options_menu)
 
-        # Colour: one exclusive choice, so a submenu of radio items.
-        self.colour_menu = self.options_menu.addMenu("Colour")
-        self.colour_group = QtGui.QActionGroup(self)
-        self.colour_group.setExclusive(True)
-        self._colour_actions = {}
+        # The colour entries name the series they apply to, so they cannot be
+        # built until the selection is known. They are inserted above the
+        # toggle that governs them, every time the menu opens.
+        self._colour_actions = []
+        self._colour_menus = []
+        self.options_menu.aboutToShow.connect(self._populate_colour_menus)
 
-        none_action = self.colour_menu.addAction(NONE_LABEL)
-        none_action.setCheckable(True)
-        none_action.triggered.connect(lambda: self._apply(colour=None))
-        self.colour_group.addAction(none_action)
-        self._colour_actions[None] = none_action
-        self.colour_menu.addSeparator()
-
-        for spec in Registry.signal_series() + [Registry.SERIES[Registry.FREQUENCY_KEY]]:
-            action = self.colour_menu.addAction(spec.label)
-            action.setCheckable(True)
-            action.triggered.connect(lambda _, key=spec.key: self._apply(colour=key))
-            self.colour_group.addAction(action)
-            self._colour_actions[spec.key] = action
-
-        # The map the colour dimension runs through: another exclusive choice,
-        # so the same submenu of radio items, kept next to what it applies to.
-        self.colour_map_menu = self.options_menu.addMenu("Colour map")
-        self.colour_map_group = QtGui.QActionGroup(self)
-        self.colour_map_group.setExclusive(True)
-        self._colour_map_actions = {}
-
-        for key, label in COLOUR_MAPS:
-            action = self.colour_map_menu.addAction(label)
-            action.setCheckable(True)
-            action.triggered.connect(lambda _, name=key: self._apply(colour_map=name))
-            self.colour_map_group.addAction(action)
-            self._colour_map_actions[key] = action
+        self.colour_scales_action = self.options_menu.addAction("Show colour scales")
+        self.colour_scales_action.setCheckable(True)
+        self.colour_scales_action.toggled.connect(
+            lambda checked: self._apply(colour_scales=bool(checked)))
+        self._colour_anchor = self.colour_scales_action
 
         self.options_menu.addSeparator()
 
@@ -265,13 +255,18 @@ class PlotControls(QtCore.QObject):
             self.y_selector.setEnabled(not is_slice)
             self.y_selector.setToolTip(Y_LOCKED_HINT if is_slice else self.y_selector.text())
 
-            self._refresh_colour_menu(config)
-
             spectrogram_ok = config.spectrogram_allowed()
             self.spectrogram_action.setEnabled(spectrogram_ok)
             self.spectrogram_action.setChecked(config.spectrogram)
             self.spectrogram_action.setToolTip(
                 "" if spectrogram_ok else SPECTROGRAM_DISABLED_HINT)
+
+            # The bars are worth their width only once something is coloured.
+            scales_ok = config.any_colour()
+            self.colour_scales_action.setEnabled(scales_ok)
+            self.colour_scales_action.setChecked(config.colour_scales)
+            self.colour_scales_action.setToolTip(
+                COLOUR_SCALES_HINT if scales_ok else COLOUR_SCALES_DISABLED_HINT)
 
             axes_ok = config.separate_axes_allowed()
             self.separate_axes_action.setEnabled(axes_ok)
@@ -283,20 +278,81 @@ class PlotControls(QtCore.QObject):
         finally:
             self._updating = False
 
-    def _refresh_colour_menu(self, config):
-        allowed = config.colour_allowed()
-        self.colour_menu.setEnabled(allowed)
-        self.colour_menu.setToolTip("" if allowed else COLOUR_DISABLED_HINT)
+    def _populate_colour_menus(self):
+        """Rebuild the per-series colour entries for whatever is drawn now."""
+        for action in self._colour_actions:
+            self.options_menu.removeAction(action)
+        for menu in self._colour_menus:
+            menu.setParent(None)
+            menu.deleteLater()
+        self._colour_actions, self._colour_menus = [], []
 
-        candidates = set(colour_candidates(config.kind))
-        for key, action in self._colour_actions.items():
-            action.setChecked(key == config.colour)
-            if key is not None:
-                action.setVisible(key in candidates)
+        specs = self._config.drawn_specs()
+        if not specs:
+            placeholder = QtGui.QAction(NOTHING_TO_COLOUR_HINT, self.options_menu)
+            placeholder.setEnabled(False)
+            self.options_menu.insertAction(self._colour_anchor, placeholder)
+            self._colour_actions.append(placeholder)
+            return
 
-        # The map only shows itself once something is being coloured by value.
-        maps_usable = allowed and config.colour is not None
-        self.colour_map_menu.setEnabled(maps_usable)
-        self.colour_map_menu.setToolTip("" if maps_usable else COLOUR_MAP_DISABLED_HINT)
-        for key, action in self._colour_map_actions.items():
-            action.setChecked(key == config.colour_map)
+        for spec in specs:
+            self._add_source_menu(spec)
+            self._add_map_menu(spec)
+
+    def _add_source_menu(self, spec):
+        """"<Series> colour source": what a series' points are coloured by."""
+        menu = self._insert_menu(f"{spec.label} {COLOUR_SOURCE_SUFFIX}")
+        chosen = self._config.colour_source(spec.key)
+
+        self._radio(menu, NONE_LABEL, chosen is None,
+                    lambda: self._set_colour_source(spec.key, None))
+        menu.addSeparator()
+
+        for candidate in colour_candidates(self._config.kind):
+            source = Registry.SERIES[candidate]
+            self._radio(menu, source.label, candidate == chosen,
+                        lambda key=candidate: self._set_colour_source(spec.key, key))
+
+    def _add_map_menu(self, spec):
+        """"<Series> colour map": which gradient that series' source runs through."""
+        menu = self._insert_menu(f"{spec.label} {COLOUR_MAP_SUFFIX}")
+
+        # Nothing to run through a gradient until a source is chosen, so the
+        # entry stays visible -- and says why -- rather than coming and going.
+        usable = self._config.is_coloured(spec.key)
+        menu.setEnabled(usable)
+        menu.setToolTip("" if usable else COLOUR_MAP_DISABLED_HINT)
+
+        chosen = self._config.colour_map_of(spec.key)
+        for key, label in COLOUR_MAPS:
+            self._radio(menu, label, key == chosen,
+                        lambda name=key: self._set_colour_map(spec.key, name))
+
+    def _insert_menu(self, title: str) -> QtWidgets.QMenu:
+        menu = QtWidgets.QMenu(title, self.options_menu)
+        self._colour_menus.append(menu)
+        self._colour_actions.append(
+            self.options_menu.insertMenu(self._colour_anchor, menu))
+        return menu
+
+    @staticmethod
+    def _radio(menu, label: str, checked: bool, handler):
+        """One choice in an exclusive submenu, checked to show the current one."""
+        group = menu.findChild(QtGui.QActionGroup) or QtGui.QActionGroup(menu)
+        group.setExclusive(True)
+        action = menu.addAction(label)
+        action.setCheckable(True)
+        action.setChecked(checked)
+        action.triggered.connect(lambda _=False: handler())
+        group.addAction(action)
+        return action
+
+    def _set_colour_source(self, key: str, source):
+        sources = dict(self._config.colour_sources)
+        sources[key] = source
+        self._apply(colour_sources=sources)
+
+    def _set_colour_map(self, key: str, name: str):
+        maps = dict(self._config.colour_maps)
+        maps[key] = name
+        self._apply(colour_maps=maps)

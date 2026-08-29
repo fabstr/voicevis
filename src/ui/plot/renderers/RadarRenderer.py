@@ -71,7 +71,7 @@ class RadarRenderer(PlotRenderer):
             x0, y0, x1, y1 = RadarGeometry.value_ticks(radii, angle)
             item.set_segments(x0, y0, x1, y1,
                               self.trail_alpha(times, current_time, trail_time),
-                              self._colour_values(times))
+                              self._colour_values(times, spec.key))
 
     def _window(self, key: str, current_time: float, trail_time: float):
         """One series' samples inside the trail window, NaNs dropped.

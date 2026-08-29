@@ -253,9 +253,9 @@ loudly — it degrades something silently, which is why they are written down.
    imports it and renders with matplotlib.
 2. **Nothing reads `SeriesSpec.colour` directly.** Call
    `SeriesRegistry.colour_of(spec)` — users can recolour any series.
-3. **A series used as a plot's colour dimension maps through one of
-   `ColourMapping.COLOUR_MAPS`** -- the plot's own choice of viridis, plasma or
-   turbo -- never through the palette. The spectrogram background is not a
+3. **A series used as a colour dimension maps through one of
+   `ColourMapping.COLOUR_MAPS`** -- viridis, plasma or turbo, chosen per drawn
+   series -- never through the palette. The spectrogram background is not a
    colour dimension and stays viridis.
 4. **`PlotPreset.name` values are frozen.** Saved layout files store the name;
    renaming one silently degrades those layouts to the default plot.

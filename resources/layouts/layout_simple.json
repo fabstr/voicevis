@@ -1,9 +1,9 @@
 {
     "version": 2,
-    "global_size": 1,
+    "global_size": 2,
     "main_splitter_sizes": [
-        657,
-        656
+        822,
+        904
     ],
     "columns": [
         {
@@ -17,10 +17,13 @@
                     ],
                     "colour": "loudness",
                     "colour_map": "viridis",
+                    "colour_sources": {},
+                    "colour_maps": {},
+                    "colour_scales": true,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 1
+                    "local_size": 2
                 },
                 {
                     "x": [
@@ -31,10 +34,13 @@
                     ],
                     "colour": "loudness",
                     "colour_map": "viridis",
+                    "colour_sources": {},
+                    "colour_maps": {},
+                    "colour_scales": true,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 1
+                    "local_size": 2
                 },
                 {
                     "x": [
@@ -45,16 +51,23 @@
                     ],
                     "colour": "size",
                     "colour_map": "plasma",
+                    "colour_sources": {
+                        "pitch": "loudness"
+                    },
+                    "colour_maps": {
+                        "pitch": "viridis"
+                    },
+                    "colour_scales": true,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 1
+                    "local_size": 2
                 }
             ],
             "sizes": [
-                262,
-                261,
-                262
+                295,
+                295,
+                295
             ]
         },
         {
@@ -68,24 +81,42 @@
                     ],
                     "colour": "loudness",
                     "colour_map": "viridis",
+                    "colour_sources": {},
+                    "colour_maps": {},
+                    "colour_scales": true,
                     "trail_time": 1.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 1
+                    "local_size": 2
                 },
                 {
                     "x": [
-                        "pitch"
+                        "radar"
                     ],
                     "y": [
-                        "size"
+                        "pitch",
+                        "size",
+                        "H1_A3"
                     ],
-                    "colour": "weight",
+                    "colour": null,
                     "colour_map": "turbo",
+                    "colour_sources": {
+                        "pitch": "loudness",
+                        "weight": "loudness",
+                        "size": "loudness",
+                        "H1_A3": "loudness"
+                    },
+                    "colour_maps": {
+                        "pitch": "turbo",
+                        "weight": "viridis",
+                        "size": "turbo",
+                        "H1_A3": "turbo"
+                    },
+                    "colour_scales": false,
                     "trail_time": 1.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 1
+                    "local_size": 2
                 },
                 {
                     "x": [
@@ -96,15 +127,18 @@
                     ],
                     "colour": "H1_A3",
                     "colour_map": "viridis",
+                    "colour_sources": {},
+                    "colour_maps": {},
+                    "colour_scales": true,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 1
+                    "local_size": 2
                 }
             ],
             "sizes": [
-                381,
-                404,
+                0,
+                885,
                 0
             ]
         }

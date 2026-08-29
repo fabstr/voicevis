@@ -121,19 +121,19 @@ and what else has to be updated alongside it, is in
 - **PP-2** The series picker shall allow either a single series or several series to be selected for the axis.
 - **PP-3** Where Time is selected on a plot's Y axis, the system shall transpose that plot so that time runs vertically.
 - **PP-4** Where Frequency is selected on a plot's X axis, the system shall render that plot as a spectrum-slice plot and shall offer Magnitude as a Y-axis choice.
-- **PP-5** The system shall provide, for each plot, an options menu offering *Colour by*, *Colour map*, the *Spectrogram* background toggle, *Separate axis per series*, *Trail (seconds)* and a plot-scoped point size slider.
-- **PP-6** Where a series is chosen under *Colour by*, the system shall colour that plot's points by the value of that series, mapped through that plot's chosen colour map.
-- **PP-7** Where *Colour by* is set to none, the system shall draw that plot's points without value-based colouring.
+- **PP-5** ~~The system shall provide, for each plot, an options menu offering *Colour by*, *Colour map*, the *Spectrogram* background toggle, *Separate axis per series*, *Trail (seconds)* and a plot-scoped point size slider.~~ *(withdrawn — superseded by PP-27, which moves the choice from the plot to each series it draws.)*
+- **PP-6** ~~Where a series is chosen under *Colour by*, the system shall colour that plot's points by the value of that series, mapped through that plot's chosen colour map.~~ *(withdrawn — superseded by PP-29, which moves the choice from the plot to each series it draws.)*
+- **PP-7** ~~Where *Colour by* is set to none, the system shall draw that plot's points without value-based colouring.~~ *(withdrawn — superseded by PP-30, which moves the choice from the plot to each series it draws.)*
 - **PP-8** Where a plot's value axis is expressed in Hz or is empty, the system shall offer the spectrogram background toggle for that plot.
 - **PP-9** If a plot's value axis is neither expressed in Hz nor empty, then the system shall not offer the spectrogram background toggle for that plot.
 - **PP-10** Where *Separate axis per series* is enabled, the system shall give each series on that plot its own Y scale instead of a shared one.
 - **PP-11** Where a plot is an XY (non-time) plot and a trail length in seconds is set, the system shall draw a fading trail of the points from the preceding that many seconds instead of a static scatter.
 - **PP-12** When the user changes a plot's own point size slider, the system shall apply the new size to that plot only.
 - **PP-13** ~~The system shall classify each plot as a time-scatter, XY-trail or spectrum-slice plot according to the series chosen for its axes.~~ *(withdrawn — superseded by PP-24, which adds the radar plot of PP-19 to the list of kinds.)*
-- **PP-14** The system shall offer, for each plot, a *Colour map* choice of Viridis, Plasma or Turbo.
-- **PP-15** Where no colour map has been chosen for a plot, the system shall use Viridis for that plot.
-- **PP-16** When the user changes a plot's colour map, the system shall redraw that plot's coloured points and its colour bar through the newly chosen map.
-- **PP-17** If a plot has no series chosen under *Colour by*, then the system shall not offer the *Colour map* choice for that plot.
+- **PP-14** ~~The system shall offer, for each plot, a *Colour map* choice of Viridis, Plasma or Turbo.~~ *(withdrawn — superseded by PP-31, which moves the choice from the plot to each series it draws.)*
+- **PP-15** ~~Where no colour map has been chosen for a plot, the system shall use Viridis for that plot.~~ *(withdrawn — superseded by PP-32, which moves the choice from the plot to each series it draws.)*
+- **PP-16** ~~When the user changes a plot's colour map, the system shall redraw that plot's coloured points and its colour bar through the newly chosen map.~~ *(withdrawn — superseded by PP-33, which moves the choice from the plot to each series it draws.)*
+- **PP-17** ~~If a plot has no series chosen under *Colour by*, then the system shall not offer the *Colour map* choice for that plot.~~ *(withdrawn — superseded by PP-35, which moves the choice from the plot to each series it draws.)*
 - **PP-18** The system shall draw the spectrogram background through Viridis regardless of the plot's chosen colour map.
 - **PP-19** Where Radar is selected on a plot's X axis, the system shall render that plot as a radar plot, drawing every series selected on its Y axis on a spoke of its own.
 - **PP-20** The system shall space a radar plot's spokes evenly around the circle, with the first pointing upwards.
@@ -143,6 +143,17 @@ and what else has to be updated alongside it, is in
 - **PP-24** The system shall classify each plot as a time-scatter, XY-trail, spectrum-slice or radar plot according to the series chosen for its axes.
 - **PP-25** Where a value is drawn on a radar plot, the system shall draw it as a line across its spoke, three quarters as wide as that spoke's target box.
 - **PP-26** The system shall mark a numbered scale along each of a radar plot's spokes, on both sides of it.
+- **PP-27** The system shall provide, for each plot, an options menu offering a *\<series\> colour source* and a *\<series\> colour map* choice for every series that plot draws, together with the *Spectrogram* background toggle, *Separate axis per series*, *Trail (seconds)* and a plot-scoped point size slider.
+- **PP-28** The system shall offer that same options menu on every plot, whatever kind of plot it is.
+- **PP-29** Where a series is chosen as a drawn series' colour source, the system shall colour that drawn series' points by the value of the chosen series, mapped through that drawn series' own colour map.
+- **PP-30** Where a drawn series' colour source is set to none, the system shall draw that series in its own series colour.
+- **PP-31** The system shall offer, for each drawn series, a colour map choice of Viridis, Plasma or Turbo.
+- **PP-32** Where no colour map has been chosen for a drawn series, the system shall use Viridis for that series.
+- **PP-33** When the user changes a drawn series' colour source or colour map, the system shall redraw that series' points and its colour bar accordingly, and shall leave the plot's other series as they were.
+- **PP-34** Where more than one of a plot's drawn series has a colour source, the system shall show one colour bar per such series, each labelled with the series it colours and the series it measures.
+- **PP-35** If a drawn series has no colour source, then the system shall not offer a colour map choice for that series.
+- **PP-36** The system shall map a colour source's values onto its colour map across that source series' own default range, and shall label the corresponding colour bar over that same range, whether or not a recording has been analysed.
+- **PP-37** The system shall provide, for each plot, a *Show colour scales* option, and where it is turned off shall draw that plot's coloured series without drawing their colour bars.
 
 ## 7. Mouse tools (MT)
 

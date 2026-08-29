@@ -9,7 +9,7 @@ not a class change.
 import logging
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import SeriesRegistry as Registry
 from SeriesRegistry import DEFAULT_POINT_SIZE, SeriesSpec
@@ -36,15 +36,24 @@ class PlotKind(Enum):
 class PlotConfig:
     x: List[str] = field(default_factory=lambda: [Registry.TIME_KEY])
     y: List[str] = field(default_factory=lambda: ["pitch"])
-    #: Third dimension mapped to colour. Only honoured when both axes hold
-    #: exactly one series.
+    #: The plot-wide colour dimension: what colours any drawn series with no
+    #: choice of its own. Layouts written before per-series colouring existed
+    #: carry only this, so it stays the fallback rather than being migrated.
     colour: Optional[str] = None
-    #: Which colour map that third dimension runs through.
+    #: Which colour map that fallback runs through.
     colour_map: str = DEFAULT_COLOUR_MAP
+    #: Colour dimension per drawn series: its key -> the key of the series whose
+    #: value colours it, or None for "no colour dimension, its own colour".
+    colour_sources: Dict[str, Optional[str]] = field(default_factory=dict)
+    #: Colour map per drawn series, keyed the same way.
+    colour_maps: Dict[str, str] = field(default_factory=dict)
     #: Seconds of history shown by a TRAIL plot.
     trail_time: float = 3.0
     #: Draw the spectrogram behind the curves. TIME_SCATTER only.
     spectrogram: bool = False
+    #: Draw a colour bar for every coloured series. Off reclaims the width
+    #: for the plot on a cell too small to spare it.
+    colour_scales: bool = True
     #: Give each series on the multi-valued axis its own scale, instead of
     #: sharing one. Only meaningful when that axis holds more than one series.
     separate_axes: bool = False
@@ -102,7 +111,55 @@ class PlotConfig:
         return self.y_specs() if self.kind is PlotKind.RADAR else []
 
     def colour_spec(self) -> Optional[SeriesSpec]:
+        """The plot-wide colour dimension, where one is still in force."""
         return Registry.get(self.colour) if self.colour else None
+
+    def drawn_keys(self) -> List[str]:
+        """The series that name the items this plot draws, in item order.
+
+        One per drawn thing, whatever the kind: the quantities on a time plot,
+        the pairs on a trail, the spokes on a radar, magnitude on a slice. This
+        is the list every renderer iterates, and the list each entry of the
+        colour menus belongs to.
+        """
+        kind = self.kind
+        if kind is PlotKind.SPECTRUM_SLICE:
+            return [Registry.MAGNITUDE_KEY]
+        if kind is PlotKind.RADAR:
+            return list(self.y)
+        if kind is PlotKind.TIME_SCATTER:
+            return list(self.value_keys())
+        # A trail pairs one axis against the other, so the axis holding several
+        # series is the one that names the pairs.
+        return list(self.x) if len(self.x) > len(self.y) else list(self.y)
+
+    def drawn_specs(self) -> List[SeriesSpec]:
+        return [Registry.SERIES[k] for k in self.drawn_keys() if k in Registry.SERIES]
+
+    def colour_source(self, key: str) -> Optional[str]:
+        """Which series colours ``key``'s points, if any.
+
+        Falling back to the plot-wide :attr:`colour` is what makes a layout
+        written before this feature behave exactly as it used to: it had one
+        colour dimension and one drawn series, so the two readings agree.
+        """
+        if key in self.colour_sources:
+            return self.colour_sources[key]
+        return self.colour
+
+    def colour_source_spec(self, key: str) -> Optional[SeriesSpec]:
+        source = self.colour_source(key)
+        return Registry.get(source) if source else None
+
+    def colour_map_of(self, key: str) -> str:
+        return self.colour_maps.get(key) or self.colour_map
+
+    def is_coloured(self, key: str) -> bool:
+        return self.colour_source_spec(key) is not None
+
+    def any_colour(self) -> bool:
+        """Whether anything on this plot is coloured by a third dimension."""
+        return any(self.is_coloured(k) for k in self.drawn_keys())
 
     def effective_x_range(self) -> Optional[Tuple[float, float]]:
         if self.kind is PlotKind.RADAR:
@@ -167,8 +224,13 @@ class PlotConfig:
             title = (f"{', '.join(s.label for s in y_specs)} vs "
                      f"{', '.join(s.label for s in self.x_specs())}")
 
-        z_spec = self.colour_spec()
-        return f"{title} / colour: {z_spec.label}" if z_spec else title
+        sources = {self.colour_source(k) for k in self.drawn_keys()}
+        if sources == {None} or not sources:
+            return title
+        if len(sources) == 1:
+            spec = Registry.get(sources.pop())
+            return f"{title} / colour: {spec.label}" if spec else title
+        return f"{title} / colour: per series"
 
     def spectrogram_allowed(self) -> bool:
         """Whether a spectrogram background would line up with the value axis.
@@ -200,8 +262,14 @@ class PlotConfig:
         return value_axis if all(s.unit == "Hz" for s in specs) else None
 
     def colour_allowed(self) -> bool:
-        """Colouring by a third dimension needs exactly one series per axis."""
-        return len(self.x) == 1 and len(self.y) == 1
+        """Whether there is anything here to colour.
+
+        There used to be a stricter rule -- one series per axis -- because a
+        single plot-wide colour dimension would have painted every series the
+        same and made them indistinguishable. Each drawn series now carries its
+        own, so several of them is exactly the case worth supporting.
+        """
+        return bool(self.drawn_keys())
 
     def multi_axis(self) -> Optional[str]:
         """The axis holding several series, if either does.
@@ -286,15 +354,23 @@ class PlotConfig:
 
         separate_axes = bool(self.separate_axes) and probe.separate_axes_allowed()
 
-        if colour is not None:
-            spec = Registry.get(colour)
-            usable = spec is not None and (spec.is_signal or colour in _extra_colour_keys(kind))
-            if not usable or len(x) != 1 or len(y) != 1:
-                colour = None
+        if colour is not None and not _usable_source(colour, kind):
+            colour = None
 
         # Kept even while colour is None, so turning the colour dimension off
         # and on again comes back in the map the user chose.
         colour_map = self.colour_map if self.colour_map in COLOUR_MAP_KEYS else DEFAULT_COLOUR_MAP
+
+        # Entries for series this plot no longer draws are kept, so that taking
+        # a series off an axis and putting it back restores its colouring --
+        # the same reason the map above outlives the colour being turned off.
+        # Only entries that could never be drawn or read are dropped.
+        colour_sources = {key: value
+                          for key, value in (self.colour_sources or {}).items()
+                          if key in Registry.SERIES
+                          and (value is None or _usable_source(value, kind))}
+        colour_maps = {key: value for key, value in (self.colour_maps or {}).items()
+                       if key in Registry.SERIES and value in COLOUR_MAP_KEYS}
 
         trail = self.trail_time
         try:
@@ -305,8 +381,10 @@ class PlotConfig:
         return replace(
             self,
             x=x, y=y, colour=colour, colour_map=colour_map,
+            colour_sources=colour_sources, colour_maps=colour_maps,
             trail_time=trail,
             spectrogram=spectrogram,
+            colour_scales=bool(self.colour_scales),
             separate_axes=separate_axes,
             point_size=int(self.point_size or DEFAULT_POINT_SIZE),
             x_range=tuple(self.x_range) if self.x_range else None,
@@ -314,7 +392,9 @@ class PlotConfig:
         )
 
     def copy(self) -> "PlotConfig":
-        return replace(self, x=list(self.x), y=list(self.y))
+        return replace(self, x=list(self.x), y=list(self.y),
+                       colour_sources=dict(self.colour_sources),
+                       colour_maps=dict(self.colour_maps))
 
     # --- Serialisation ---------------------------------------------------
 
@@ -324,6 +404,9 @@ class PlotConfig:
             "y": list(self.y),
             "colour": self.colour,
             "colour_map": self.colour_map,
+            "colour_sources": dict(self.colour_sources),
+            "colour_maps": dict(self.colour_maps),
+            "colour_scales": self.colour_scales,
             "trail_time": self.trail_time,
             "spectrogram": self.spectrogram,
             "separate_axes": self.separate_axes,
@@ -374,6 +457,11 @@ class PlotConfig:
                 y=list(entry.get("y") or []),
                 colour=entry.get("colour"),
                 colour_map=entry.get("colour_map") or DEFAULT_COLOUR_MAP,
+                colour_sources=_as_mapping(entry.get("colour_sources")),
+                colour_maps=_as_mapping(entry.get("colour_maps")),
+                # Absent in every layout written before the toggle existed,
+                # which all showed their bars.
+                colour_scales=bool(entry.get("colour_scales", True)),
                 trail_time=entry.get("trail_time", 3.0),
                 spectrogram=bool(entry.get("spectrogram", False)),
                 separate_axes=bool(entry.get("separate_axes", False)),
@@ -403,6 +491,21 @@ def _extra_colour_keys(kind: PlotKind) -> tuple:
 def colour_candidates(kind: PlotKind) -> List[str]:
     """Every series that may drive the colour dimension for ``kind``."""
     return [s.key for s in Registry.signal_series()] + list(_extra_colour_keys(kind))
+
+
+def _usable_source(key: str, kind: PlotKind) -> bool:
+    """Whether ``key`` can drive a colour dimension on this kind of plot."""
+    spec = Registry.get(key)
+    return spec is not None and (spec.is_signal or key in _extra_colour_keys(kind))
+
+
+def _as_mapping(value) -> dict:
+    """A layout entry's dict, or an empty one. Never raises."""
+    if not isinstance(value, dict):
+        if value is not None:
+            logging.warning("Ignoring unreadable per-series colour entry %r", value)
+        return {}
+    return {str(k): v for k, v in value.items()}
 
 
 def _signals_only(keys: List[str]) -> List[str]:

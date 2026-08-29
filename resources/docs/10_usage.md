@@ -333,8 +333,11 @@ and this is not part of one.
 - **Frequency** as X gives a spectrum-slice plot; **Magnitude** is offered on Y for that
 - **Radar** as X arranges every series chosen on Y around a circle, one spoke each, evenly spaced. A spoke runs from the centre (the bottom of that series' range) to the outer ring (the top of it) and carries a numbered scale on both sides. Its target range is drawn as a box along it, and each value is drawn on top as a line across the spoke, three quarters as wide as that box, fading out with age like a trail — so several features can be watched against their targets at once
 - Per-plot **options menu**:
-  - **Colour by** a chosen series (its value mapped onto a colour gradient) or none
-  - **Colour map** — which gradient *Colour by* uses: **Viridis** (the default), **Plasma** or **Turbo**. Saved with the layout, and offered only once a series is chosen under *Colour by*
+  - **\<series\> colour source** — one entry per series the plot draws (e.g. *Pitch colour source*, *Size colour source*): the series whose value colours that one's points, or none to leave it in its own colour. Each drawn series is set independently, so a plot showing three series can colour each by something different
+  - **\<series\> colour map** — which gradient that series' colour source runs through: **Viridis** (the default), **Plasma** or **Turbo**. Saved with the layout, and offered only once that series has a colour source
+  - The same options menu appears on every plot, whatever kind it is; the colour entries simply name whatever that plot happens to be drawing
+  - A colour bar appears for each coloured series, labelled with the series it colours and the series it measures. Its scale is the colour source's own range — the same range *Reset zoom* restores — so a colour means the same thing in every plot and in every recording, rather than rescaling itself to whatever the current take happens to cover
+  - **Show colour scales** — turn the colour bars off for that plot when its width is better spent on the plot itself. What is coloured, and how, is unaffected
   - **Spectrogram** background image toggle (only when the value axis is in Hz or empty)
   - **Separate axis per series** — give each series its own Y scale instead of sharing one
   - **Trail (seconds)** — for XY and radar plots, show a fading trail of recent points instead of a static scatter

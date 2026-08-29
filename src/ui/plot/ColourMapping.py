@@ -3,8 +3,7 @@
 ``pg.ColorMap.map`` expects values in 0..1. The previous code passed raw feature
 values straight in, so any series whose values exceed 1 -- weight, for instance --
 saturated to the top colour and the plot came out a single flat shade. Everything
-here normalises first, and reports the range it used so a colour bar can be
-labelled to match.
+here normalises first, across the span the colour bar is labelled with.
 
 Which map a plot runs its colour dimension through is part of its configuration,
 so every function taking colour takes the map's name. The spectrogram background
@@ -12,7 +11,7 @@ is not a colour dimension and keeps viridis whatever the plot is set to.
 """
 
 import logging
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 import pyqtgraph as pg
@@ -46,29 +45,26 @@ def viridis() -> pg.ColorMap:
     return colour_map(DEFAULT_COLOUR_MAP)
 
 
-def normalise(values: np.ndarray, reference: Optional[np.ndarray] = None
-              ) -> Tuple[np.ndarray, float, float]:
-    """Scale ``values`` into 0..1 using the span of ``reference``.
+def normalise_to(values: np.ndarray, low: float, high: float) -> np.ndarray:
+    """Scale ``values`` into 0..1 across an explicit span, clamping outside it.
 
-    ``reference`` defaults to ``values``. Passing the whole series while
-    ``values`` is a moving window keeps colours stable as the window slides.
-    Returns the normalised array plus the (low, high) span it was scaled by.
+    The span is the colour source's registry range, not the range its data
+    happens to cover. That is what makes a colour mean the same thing from one
+    recording to the next, and from one plot to another -- the same reason a
+    radar spoke is scaled by the registry range rather than by its data. It
+    also lets a colour bar be labelled before any audio is loaded, since the
+    scale no longer depends on what has been analysed.
     """
     values = np.asarray(values, dtype=float)
     if values.size == 0:
-        return values, 0.0, 1.0
+        return values
 
-    source = np.asarray(reference if reference is not None else values, dtype=float)
-    source = source[np.isfinite(source)]
-    if source.size == 0:
-        return np.zeros_like(values), 0.0, 1.0
+    low, high = float(low), float(high)
+    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+        return np.zeros_like(values)
 
-    lo, hi = float(np.min(source)), float(np.max(source))
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        return np.zeros_like(values), lo, lo + 1.0
-
-    normalised = (np.nan_to_num(values, nan=lo) - lo) / (hi - lo)
-    return np.clip(normalised, 0.0, 1.0), lo, hi
+    normalised = (np.nan_to_num(values, nan=low) - low) / (high - low)
+    return np.clip(normalised, 0.0, 1.0)
 
 
 def rgba(normalised: np.ndarray, name: str = DEFAULT_COLOUR_MAP) -> np.ndarray:
@@ -92,17 +88,33 @@ def solid_brushes(colour, alpha: np.ndarray):
     return [pg.mkBrush(base.red(), base.green(), base.blue(), int(a)) for a in alpha]
 
 
+#: Layout column the first colour bar goes in, with later ones to its right.
+#:
+#: Well clear of ``MultiAxisLayer``, which stacks an extra Y axis per series
+#: from column 3 outwards. The two could not previously collide -- a colour
+#: dimension needed a single series and separate axes needed several -- but a
+#: colour dimension per series means one plot can now want both at once.
+COLOUR_BAR_COLUMN = 30
+
+
 def make_colour_bar(plot_item, label: str = "",
-                    name: str = DEFAULT_COLOUR_MAP) -> pg.ColorBarItem:
+                    name: str = DEFAULT_COLOUR_MAP,
+                    position: int = 0,
+                    span: Tuple[float, float] = (0.0, 1.0)) -> pg.ColorBarItem:
     """Attach a colour bar to the right of ``plot_item``.
+
+    ``position`` is its place in the row of bars, one per coloured series, and
+    ``span`` the range its ticks are labelled over -- the colour source's
+    registry range, fixed, so the bar is right from the moment it appears
+    rather than reading 0..1 until some data turns up.
 
     The label goes on the axis rather than through ``ColorBarItem(label=...)``:
     the constructor draws its own, so setting both leaves the bar labelled
     twice as soon as anything relabels it.
     """
-    bar = pg.ColorBarItem(values=(0.0, 1.0), colorMap=colour_map(name), width=15,
+    bar = pg.ColorBarItem(values=span, colorMap=colour_map(name), width=15,
                           interactive=False)
-    plot_item.layout.addItem(bar, 2, 4)
+    plot_item.layout.addItem(bar, 2, COLOUR_BAR_COLUMN + position)
     set_colour_bar_label(bar, label)
     return bar
 
@@ -112,9 +124,5 @@ def set_colour_bar_label(bar: pg.ColorBarItem, label: str):
 
 
 def set_colour_bar_map(bar: pg.ColorBarItem, name: str):
-    """Repaint an existing bar in another map.
-
-    A bar outlives a change of colour map -- ``_sync_colour_bar`` reuses it --
-    so without this the gradient in the legend would disagree with the points.
-    """
+    """Repaint an existing bar in another map, leaving its place in the row."""
     bar.setColorMap(colour_map(name))
