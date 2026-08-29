@@ -96,6 +96,16 @@ def solid_brushes(colour, alpha: np.ndarray):
 #: colour dimension per series means one plot can now want both at once.
 COLOUR_BAR_COLUMN = 30
 
+#: Width held open in that column for a plot that draws no colour bar at all.
+#:
+#: With nothing to its right the data area runs to the cell's own frame: the
+#: last tick label is cut off by the border and the grid ends flush against it.
+#: Deliberately much narrower than a bar and its axis -- turning the scales off
+#: is how a plot buys that width back, so reserving all of it would make the
+#: option do nothing. This is only enough for the overhanging tick label and
+#: the options button in the corner.
+BAR_CLEARANCE = 30
+
 
 def make_colour_bar(plot_item, label: str = "",
                     name: str = DEFAULT_COLOUR_MAP,
@@ -138,6 +148,17 @@ def _fit_axis_to_its_ticks(bar: pg.ColorBarItem):
     axis = bar.getAxis('right')
     axis.label.document().setDocumentMargin(0)
     axis.setWidth(None)
+
+
+def reserve_bar_clearance(plot_item, reserve: bool):
+    """Hold the first bar's column open at ``BAR_CLEARANCE``, or release it.
+
+    A bar and its axis need more than this, so the reservation makes no
+    difference while one is there. It is released anyway rather than left to be
+    reasoned about the next time either number changes.
+    """
+    plot_item.layout.setColumnMinimumWidth(COLOUR_BAR_COLUMN,
+                                           BAR_CLEARANCE if reserve else 0)
 
 
 def set_colour_bar_label(bar: pg.ColorBarItem, label: str):

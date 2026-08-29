@@ -406,6 +406,13 @@ that is doubly expensive -- the aspect lock means width taken from the plot
 shrinks the circle both ways. **Show colour scales** turns them off per plot and
 is stored with the layout; the colouring itself is unaffected.
 
+A plot showing no bar at all keeps `ColourMapping.BAR_CLEARANCE` of that column
+open anyway. With nothing to its right the data area runs to the cell's own
+frame, so the last tick label is cut off by the border and the grid ends flush
+against it. The clearance is deliberately far narrower than a bar and its axis:
+buying that width back is the whole point of turning the scales off, so
+reserving all of it would make the option do nothing.
+
 Each bar's axis is sized to its own ticks. `ColorBarItem` fixes it at 45px
 whatever they read, and places the label against the right edge of that fixed
 width -- so a bar labelled 0..10 carried 16px of nothing between its numbers and

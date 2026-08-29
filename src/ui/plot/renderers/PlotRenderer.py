@@ -12,7 +12,8 @@ import numpy as np
 import pyqtgraph as pg
 
 import SeriesRegistry as Registry
-from ui.plot.ColourMapping import make_colour_bar, normalise_to, rgba
+from ui.plot.ColourMapping import (make_colour_bar, normalise_to,
+                                   reserve_bar_clearance, rgba)
 from ui.plot.DirectionalViewBox import plain_measure_formatter
 
 
@@ -160,9 +161,14 @@ class PlotRenderer(abc.ABC):
         is no moment at which it is out of date.
         """
         self._remove_colour_bars()
-        if not self.config.colour_scales:
-            return
+        if self.config.colour_scales:
+            self._build_colour_bars()
+        # With no bar to its right the data area runs to the cell's own frame,
+        # so the last tick label is cut off by the border. Hold that column
+        # open at a fraction of a bar's width instead.
+        reserve_bar_clearance(self.plot_item, not self.colour_bars)
 
+    def _build_colour_bars(self):
         for key in self.config.drawn_keys():
             source = self.config.colour_source_spec(key)
             if source is None:
