@@ -46,7 +46,12 @@ FEATURES_OUT_DIR = REPO_ROOT / "resources" / "docs" / "img" / "features"
 EXAMPLE_AUDIO = (REPO_ROOT / "examples" / "accent_gmu_edu" / "swedish"
                  / "F_swedish10.mp3")
 
-WINDOW_SIZE = (900, 600)
+#: Tall enough for the "simple" layout's three stacked plots to sit above the
+#: minimum a cell asks for (``PlotCell.MIN_PLOT_HEIGHT`` and the axis pickers
+#: around it). Qt would otherwise hold the window at its minimum, which the
+#: offscreen platform's 800x800 screen caps below what the grid needs -- and a
+#: squeezed cell overlaps its X-axis picker onto the tick labels.
+WINDOW_SIZE = (900, 820)
 ANALYSIS_TIMEOUT_MS = 60_000
 
 #: One single-pane screenshot per feature shown in

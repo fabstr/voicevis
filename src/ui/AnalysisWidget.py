@@ -41,6 +41,11 @@ from ui.plot.TimeAxisSyncGroup import (MODE_IDLE, MODE_PLAYING, MODE_RECORDING,
 #: How long to wait for a background thread to finish when closing a session.
 WORKER_SHUTDOWN_MS = 2000
 
+#: Most of the screen a session may insist on. The plot grid's minimum grows
+#: with every row and column added, and past this the window would no longer
+#: fit on the display -- which is worse than the clipping the minimum prevents.
+MAX_MINIMUM_SCREEN_FRACTION = 0.9
+
 #: The microphone watched but not recorded. Its own icon, so the Edit menu
 #: never shows two entries that both look like Record.
 MONITOR_ICON = 'fa5s.wave-square'
@@ -689,6 +694,25 @@ class AnalysisWidget(QtWidgets.QWidget):
         if hasattr(self, 'plot_cells'):
             for cell in self.plot_cells:
                 cell.set_tool_mode(self.active_tool_mode)
+
+    def minimumSizeHint(self):
+        """How small the window may get before the plots start to clip.
+
+        Every cell declares a minimum, so the grid of them declares the sum,
+        and Qt stops the window being dragged below it -- which is the point.
+        A tall or wide grid could ask for more than the display has, though,
+        and a window that will not fit on the screen is worse than a plot that
+        clips, so the demand is capped at most of the available screen.
+        """
+        hint = super().minimumSizeHint()
+        screen = self.screen()
+        if screen is None:
+            return hint
+
+        available = screen.availableGeometry()
+        return QtCore.QSize(
+            min(hint.width(), int(available.width() * MAX_MINIMUM_SCREEN_FRACTION)),
+            min(hint.height(), int(available.height() * MAX_MINIMUM_SCREEN_FRACTION)))
 
     def setupPlots(self):
         self.plot_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)

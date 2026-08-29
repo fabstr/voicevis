@@ -38,6 +38,24 @@ ANNOTATION_HIT_RADIUS = 15
 #: Decimal places offered when typing an exact marker frequency.
 MARKER_DECIMALS = 1
 
+#: The smallest a cell is allowed to become. pyqtgraph does not shrink a plot
+#: gracefully: past roughly this size the title, the tick labels and the radar's
+#: spoke labels are simply cut off at the edge, with nothing to say so. A cell
+#: asks for this much, a grid of cells therefore asks for a multiple of it, and
+#: Qt will not let the window be dragged below what the grid asks for.
+MIN_CELL_WIDTH = 400
+
+#: A radar needs far more. Its spoke labels sit outside the circle rather than
+#: in a margin the axes reserve, so the width that fits an ordinary plot's axes
+#: leaves them running off the edge -- and every colour bar shown beside it
+#: takes width the circle would otherwise have had.
+MIN_RADAR_CELL_WIDTH = 400
+MIN_RADAR_CELL_WIDTH_WITH_SCALES = 600
+
+#: Height is not kind-dependent: no plot puts anything below its X axis.
+#: The axis pickers add themselves on top of this.
+MIN_PLOT_HEIGHT = 180
+
 CONTAINER_NAME = "PlotContainer"
 
 
@@ -63,6 +81,7 @@ class PlotCell(QtWidgets.QFrame):
         self.plot_widget = pg.PlotWidget(viewBox=DirectionalViewBox())
         self.plot_widget.setStyleSheet("border: none;")
         self.plot_widget.setDownsampling(mode='peak', auto=True)
+        self.plot_widget.setMinimumHeight(MIN_PLOT_HEIGHT)
 
         # Drop pyqtgraph's own "Plot Options" menu, keeping the view box one.
         # It applies Downsample and Clip to View to everything the plot tracks
@@ -106,7 +125,7 @@ class PlotCell(QtWidgets.QFrame):
     def _build_layout(self):
         """Put the axis pickers where the axis labels would be.
 
-            [Y label v]  |  plot            [menu v]
+            [Y label v]  |  plot   [menu v]
                          |  [X label v]
 
         pyqtgraph's own axis labels stay empty: the pickers say the same thing
@@ -119,11 +138,18 @@ class PlotCell(QtWidgets.QFrame):
         left = QtCore.Qt.AlignmentFlag.AlignLeft
         centre_v = QtCore.Qt.AlignmentFlag.AlignVCenter
         centre_h = QtCore.Qt.AlignmentFlag.AlignHCenter
+        top_right = (QtCore.Qt.AlignmentFlag.AlignTop
+                     | QtCore.Qt.AlignmentFlag.AlignRight)
 
         grid.addWidget(self.controls.y_selector, 0, 0, alignment=left | centre_v)
         grid.addWidget(self.plot_widget, 0, 1)
-        grid.addWidget(self.controls.options_button, 0, 2,
-                       alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+        # The options button shares the plot's cell rather than taking a column
+        # of its own: a column costs its width down the *whole* height of the
+        # cell to hold one button in the corner, and on a plot with colour bars
+        # that strip was the widest thing between the bars' labels and the edge.
+        # It goes last so it is drawn over the plot, and the corner it covers is
+        # empty -- the title is centred and a colour bar starts below it.
+        grid.addWidget(self.controls.options_button, 0, 1, alignment=top_right)
         grid.addWidget(self.controls.x_selector, 1, 1, alignment=centre_h)
 
         grid.setColumnStretch(1, 1)
@@ -183,9 +209,25 @@ class PlotCell(QtWidgets.QFrame):
 
         self.config_changed.emit(self)
 
+    def _minimum_width(self) -> int:
+        """How narrow this cell may get, given what it is currently drawing.
+
+        Changing a cell to a radar, or turning its colour bars on, therefore
+        widens it -- and can push the whole window wider, since the grid's
+        minimum is the sum of its cells'.
+        """
+        if self.config.kind is not PlotKind.RADAR:
+            return MIN_CELL_WIDTH
+        # The bars are only drawn once something on the plot has a colour
+        # source; the setting alone reserves no width.
+        if self.config.colour_scales and self.config.any_colour():
+            return MIN_RADAR_CELL_WIDTH_WITH_SCALES
+        return MIN_RADAR_CELL_WIDTH
+
     def _sync_to_config(self):
         """Bring the playhead, layers and labels in line with the config."""
         config = self.config
+        self.setMinimumWidth(self._minimum_width())
         # The playhead marks a moment in time, so it runs across whichever axis
         # is not the time axis.
         self.playhead.setAngle(0 if config.time_on_y else 90)

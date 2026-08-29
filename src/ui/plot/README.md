@@ -165,9 +165,17 @@ why, instead of being hidden or silently ignored.
 ## The controls around a plot
 
 ```
-   [Y label v] |  plot                     [=]
+   [Y label v] |  plot                [=]
                |  [X label v]
 ```
+
+The options button shares the plot's layout cell rather than sitting in a
+column of its own. A column reserved for one small button costs its width down
+the *whole* height of the cell, and on a plot with colour bars that empty strip
+was the widest thing between the bars' labels and the cell edge. It is added to
+the grid last, so it draws over the plot, and the corner it covers is empty:
+the title is centred, and the title row is always there to hold it — an
+untitled plot reads "Empty plot" rather than losing the row.
 
 **The axis pickers are the axis labels.** They sit where pyqtgraph would have
 drawn "Pitch (Hz)", carry exactly that text, and open the series list when
@@ -200,6 +208,39 @@ the very menu whose action was still being dispatched.
 
 `PlotControls` is a controller, not a widget: it owns the controls and the rules
 they obey, and `PlotCell` decides where each one goes.
+
+### How small a cell may get
+
+pyqtgraph does not shrink a plot gracefully. Past a certain size the title, the
+tick labels and the radar's spoke labels are simply cut off at the edge, and
+nothing says so. So a cell declares a floor:
+
+| | Minimum width |
+|---|---|
+| Any ordinary plot | `MIN_CELL_WIDTH`, 375 |
+| A radar | `MIN_RADAR_CELL_WIDTH`, 750 |
+| A radar drawing colour bars | `MIN_RADAR_CELL_WIDTH_WITH_SCALES`, 900 |
+
+A radar needs the room because its spoke labels sit *outside* the circle rather
+than in a margin the axes reserve, and each colour bar beside it takes width the
+circle would otherwise have had. "Drawing colour bars" is `colour_scales` **and**
+`any_colour()`: the setting alone reserves nothing, since no bar appears until
+something on the plot has a colour source.
+
+The floor is therefore a property of what the cell currently shows, not of the
+cell, and `_sync_to_config` re-applies it on every reconfiguration — turning a
+plot into a radar widens it there and then. Height is not kind-dependent
+(`MIN_PLOT_HEIGHT`, on the plot widget, with the axis pickers on top).
+
+Nothing else has to be written: Qt sums a splitter's children into the
+splitter's own minimum, so a grid of cells asks for the sum of its cells, and a
+window will not be dragged below what its central widget asks for. Adding a row
+or a column therefore raises the floor, and can push the window larger.
+
+That is also why `AnalysisWidget` caps the demand at
+`MAX_MINIMUM_SCREEN_FRACTION` of the available screen. A grid of enough cells
+would otherwise insist on a window that does not fit on the display, which is a
+worse failure than the clipping the minimum exists to prevent.
 
 ### Shared or separate axes
 
@@ -364,6 +405,13 @@ Three bars and their axes cost about a quarter of a cell's width, and on a radar
 that is doubly expensive -- the aspect lock means width taken from the plot
 shrinks the circle both ways. **Show colour scales** turns them off per plot and
 is stored with the layout; the colouring itself is unaffected.
+
+Each bar's axis is sized to its own ticks. `ColorBarItem` fixes it at 45px
+whatever they read, and places the label against the right edge of that fixed
+width -- so a bar labelled 0..10 carried 16px of nothing between its numbers and
+its label while one labelled 0..3500 was left with barely any. `make_colour_bar`
+releases the fixed width, which settles the gap at about 4px in both directions,
+and drops the label's own 4px document margin on top of that.
 
 The spectrogram background is deliberately not part of this: it is an image, not
 a colour dimension, and stays viridis whatever the plot is set to.

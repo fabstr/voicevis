@@ -114,6 +114,8 @@ and what else has to be updated alongside it, is in
 - **PG-5** When the user selects *View > Reset plot spacing*, the system shall redistribute all splitters evenly.
 - **PG-6** When the user changes the toolbar's global point size slider, the system shall apply the new point size to every plot in the session.
 - **PG-7** The system shall allow every plot cell to be configured independently, and shall not fix the plot type of any cell.
+- **PG-8** When the user resizes the window, the system shall stop it shrinking below the size the plot grid needs to draw every plot unclipped.
+- **PG-9** If the size PG-8 asks for exceeds the display, then the system shall limit the window's minimum to the available screen.
 
 ## 6. Per-plot controls (PP)
 

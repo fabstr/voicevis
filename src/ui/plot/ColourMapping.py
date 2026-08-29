@@ -116,7 +116,28 @@ def make_colour_bar(plot_item, label: str = "",
                           interactive=False)
     plot_item.layout.addItem(bar, 2, COLOUR_BAR_COLUMN + position)
     set_colour_bar_label(bar, label)
+    _fit_axis_to_its_ticks(bar)
     return bar
+
+
+def _fit_axis_to_its_ticks(bar: pg.ColorBarItem):
+    """Let the bar's axis be as wide as it needs, rather than always 45px.
+
+    ``ColorBarItem`` fixes the axis width at 45 whatever the ticks read. The
+    label is then placed against the right edge of that fixed width, so a bar
+    labelled 0..10 carries 16px of nothing between its numbers and its label,
+    while one labelled 0..3500 is left with barely any -- the same number is
+    too generous and too mean depending on the colour source. Releasing the
+    fixed width sizes the axis to its own tick text, which closes the gap to
+    about 4px and widens the crowded case instead of squeezing it.
+
+    The label item's 4px document margin is padding on top of that gap, and is
+    dropped for the same reason. It survives a later ``setHtml``, so setting it
+    once here holds for every relabelling.
+    """
+    axis = bar.getAxis('right')
+    axis.label.document().setDocumentMargin(0)
+    axis.setWidth(None)
 
 
 def set_colour_bar_label(bar: pg.ColorBarItem, label: str):
