@@ -62,6 +62,7 @@ class SeriesKind(Enum):
     SIGNAL = "signal"        # a SignalTimeSeries attribute on AudioFeatures
     FREQUENCY = "frequency"  # synthetic: SpectrogramData.y
     MAGNITUDE = "magnitude"  # synthetic: a magnitude_db column at the playhead
+    RADAR = "radar"          # synthetic: several series on spokes around a centre
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,11 @@ for _spec in (
                colour=neutral, kind=SeriesKind.FREQUENCY, log_axis=True),
     SeriesSpec("magnitude", "Magnitude", unit="dB", default_min=-90.0, default_max=0.0,
                colour=magnitude, kind=SeriesKind.MAGNITUDE),
+    # The range is the unit disc the spokes are drawn in; what the plot is
+    # actually scrolled to is RadarGeometry.VIEW_RANGE, which leaves room for
+    # the spoke labels outside it.
+    SeriesSpec("radar", "Radar", default_min=-1.0, default_max=1.0,
+               colour=neutral, kind=SeriesKind.RADAR),
 
     _signal("pitch", "Pitch", 0, 350, pitch, "pitch", "Hz"),
 
@@ -140,6 +146,7 @@ del _spec
 TIME_KEY = "time"
 FREQUENCY_KEY = "frequency"
 MAGNITUDE_KEY = "magnitude"
+RADAR_KEY = "radar"
 
 
 # --- Palette -------------------------------------------------------------
@@ -232,7 +239,7 @@ def apply_colour_overrides(mapping):
 def colourable_series():
     """Series that are actually drawn, and so have a colour worth choosing."""
     return [s for s in SERIES.values()
-            if s.kind not in (SeriesKind.TIME, SeriesKind.FREQUENCY)]
+            if s.kind not in (SeriesKind.TIME, SeriesKind.FREQUENCY, SeriesKind.RADAR)]
 
 
 def get(key: str) -> Optional[SeriesSpec]:

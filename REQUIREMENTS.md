@@ -129,12 +129,20 @@ and what else has to be updated alongside it, is in
 - **PP-10** Where *Separate axis per series* is enabled, the system shall give each series on that plot its own Y scale instead of a shared one.
 - **PP-11** Where a plot is an XY (non-time) plot and a trail length in seconds is set, the system shall draw a fading trail of the points from the preceding that many seconds instead of a static scatter.
 - **PP-12** When the user changes a plot's own point size slider, the system shall apply the new size to that plot only.
-- **PP-13** The system shall classify each plot as a time-scatter, XY-trail or spectrum-slice plot according to the series chosen for its axes.
+- **PP-13** ~~The system shall classify each plot as a time-scatter, XY-trail or spectrum-slice plot according to the series chosen for its axes.~~ *(withdrawn — superseded by PP-24, which adds the radar plot of PP-19 to the list of kinds.)*
 - **PP-14** The system shall offer, for each plot, a *Colour map* choice of Viridis, Plasma or Turbo.
 - **PP-15** Where no colour map has been chosen for a plot, the system shall use Viridis for that plot.
 - **PP-16** When the user changes a plot's colour map, the system shall redraw that plot's coloured points and its colour bar through the newly chosen map.
 - **PP-17** If a plot has no series chosen under *Colour by*, then the system shall not offer the *Colour map* choice for that plot.
 - **PP-18** The system shall draw the spectrogram background through Viridis regardless of the plot's chosen colour map.
+- **PP-19** Where Radar is selected on a plot's X axis, the system shall render that plot as a radar plot, drawing every series selected on its Y axis on a spoke of its own.
+- **PP-20** The system shall space a radar plot's spokes evenly around the circle, with the first pointing upwards.
+- **PP-21** Where a series is drawn on a radar plot, the system shall place its value along its spoke between the centre, at the bottom of that series' range, and the outer ring, at the top of it.
+- **PP-22** Where the active target has a range for a series drawn on a radar plot, the system shall draw that range as a box along that series' spoke, beneath the points.
+- **PP-23** Where a trail length in seconds is set on a radar plot, the system shall draw a fading trail of each spoke's points from the preceding that many seconds.
+- **PP-24** The system shall classify each plot as a time-scatter, XY-trail, spectrum-slice or radar plot according to the series chosen for its axes.
+- **PP-25** Where a value is drawn on a radar plot, the system shall draw it as a line across its spoke, three quarters as wide as that spoke's target box.
+- **PP-26** The system shall mark a numbered scale along each of a radar plot's spokes, on both sides of it.
 
 ## 7. Mouse tools (MT)
 

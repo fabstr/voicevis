@@ -63,7 +63,7 @@ class TrailRenderer(PlotRenderer):
                 item.setData(x=[], y=[])
                 continue
 
-            alpha = self._alpha(times, current_time, trail_time)
+            alpha = self.trail_alpha(times, current_time, trail_time)
             colours = self._colour_values(times)
 
             point_brushes = (brushes(colours, alpha) if colours is not None
@@ -96,13 +96,6 @@ class TrailRenderer(PlotRenderer):
 
         valid = np.isfinite(x_values) & np.isfinite(y_values)
         return times[valid], x_values[valid], y_values[valid]
-
-    @staticmethod
-    def _alpha(times: np.ndarray, current_time: float, trail_time: float):
-        if trail_time <= 0:
-            return np.full(len(times), 255, dtype=int)
-        age = np.clip((current_time - times) / trail_time, 0.0, 1.0)
-        return (255 * (1.0 - age)).astype(int)
 
     def _apply_point_size(self, item, size: int):
         scaled = size * SIZE_MULTIPLIER

@@ -27,6 +27,14 @@ class PlotRenderer(abc.ABC):
     supports_seek = False
     #: Whether a spectrogram background can be drawn behind this plot.
     supports_spectrogram = False
+    #: Whether the X and Y axis items -- and the grid -- are worth showing.
+    shows_axes = True
+    #: Whether one data unit must be the same length on both axes, so that a
+    #: circle stays a circle however the cell is resized.
+    locks_aspect = False
+    #: Whether target ranges are drawn as bands across the axes. A plot whose
+    #: axes are not the quantities themselves draws its own instead.
+    supports_target_bands = True
 
     def __init__(self, plot_item, config, hub):
         self.plot_item = plot_item
@@ -104,6 +112,14 @@ class PlotRenderer(abc.ABC):
         return values
 
     measure_formatter = staticmethod(plain_measure_formatter)
+
+    @staticmethod
+    def trail_alpha(times: np.ndarray, current_time: float, trail_time: float):
+        """Opacity per point, fading linearly to nothing at the trail's age."""
+        if trail_time <= 0:
+            return np.full(len(times), 255, dtype=int)
+        age = np.clip((current_time - times) / trail_time, 0.0, 1.0)
+        return (255 * (1.0 - age)).astype(int)
 
     # --- To implement ----------------------------------------------------
 

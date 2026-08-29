@@ -70,7 +70,7 @@ central `docs/` tree, so that a change and its explanation move together:
 - [`src/ui/AudioEditing.md`](src/ui/AudioEditing.md) — selecting a stretch, silencing it, moving it
 - [`src/ui/plot/README.md`](src/ui/plot/README.md) — how a plot is configured, drawn, kept in sync and persisted
   - [`src/ui/plot/renderers/README.md`](src/ui/plot/renderers/README.md) — the drawing strategies
-  - [`src/ui/plot/layers/README.md`](src/ui/plot/layers/README.md) — spectrogram background, target bands, frequency markers
+  - [`src/ui/plot/layers/README.md`](src/ui/plot/layers/README.md) — spectrogram background, target bands, radar frame, frequency markers
 
 `resources/docs/` is **shipped**: it is what `F1` opens, so it is written for
 users and stays free of implementation detail. The numeric filename prefixes
@@ -172,6 +172,7 @@ file-by-file map for this package, for
 |---|---|
 | [`tests/test_chunked_analysis.py`](tests/test_chunked_analysis.py) | What the chunk cache promises: correct stitching, and no wasted work. The extractor is stubbed |
 | [`tests/test_gain_map.py`](tests/test_gain_map.py) | What a gain promises: it lands on the range asked for, and follows the audio through a cut or a move |
+| [`tests/test_radar.py`](tests/test_radar.py) | What a radar plot promises: where its spokes point, where a value lands on one, and the configuration rules that keep it renderable |
 | [`tools/generate_doc_screenshots.py`](tools/generate_doc_screenshots.py) | Drives a headless VoiceVis through the walkthroughs and grabs the screenshots the usage docs embed |
 
 ---
@@ -371,8 +372,9 @@ Recorded so that they are not mistaken for oversights:
   error handling for unreadable files and malformed JSON, undo depth, the scope
   of annotations and targets, and the quantitative limits behind "near-real
   time".
-- Test coverage is two files: the chunk cache and the gain map. Everything else
-  is untested, and CI does not run pytest at all.
+- Test coverage is the parts that need no screen: the chunk cache, the gain map,
+  the real-time worker, weight, layout serialisation and the radar geometry.
+  Everything else is untested, and CI does not run pytest at all.
 - `Weight` and `Slopes` are target fields with no plottable series, so they take
   no target band (TG-10).
 - `F1_Pitch_rel_amplitude` and its siblings are declared on `AudioFeatures` but

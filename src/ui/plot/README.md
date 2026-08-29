@@ -7,7 +7,7 @@ Related documents:
 
 - [`../../SeriesRegistry.md`](../../SeriesRegistry.md) — what can be plotted
 - [`renderers/README.md`](renderers/README.md) — the drawing strategies
-- [`layers/README.md`](layers/README.md) — the spectrogram, target-band and frequency-marker overlays
+- [`layers/README.md`](layers/README.md) — the spectrogram, target-band, radar-frame and frequency-marker overlays
 
 ---
 
@@ -48,6 +48,7 @@ graph TD
     CELLS --> REND["PlotRenderer<br/><i>swappable</i>"]
     CELLS --> SPEC["SpectrogramBackground"]
     CELLS --> TB["TargetBandLayer"]
+    CELLS --> RL["RadarLayer"]
     CELLS --> FM["FrequencyMarkerLayer"]
     CELLS --> MA["MultiAxisLayer"]
     CELLS --> PH["playhead<br/><i>InfiniteLine</i>"]
@@ -63,7 +64,7 @@ graph TD
     classDef owned fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
     classDef state fill:#3d3050,stroke:#a98ac8,color:#e8eef5
     class HUB,SYNC,MK state
-    class BAR,PW,REND,SPEC,TB,FM,MA,PH owned
+    class BAR,PW,REND,SPEC,TB,RL,FM,MA,PH owned
 ```
 
 `PlotDataHub` and `TimeAxisSyncGroup` are shared by every cell. Everything under
@@ -82,7 +83,9 @@ zoom.
 flowchart TD
     START["PlotConfig.kind"] --> QF{"X is frequency?"}
     QF -- yes --> SS["SPECTRUM_SLICE<br/>SpectrumSliceRenderer"]
-    QF -- no --> QT{"is time on<br/>either axis?"}
+    QF -- no --> QR{"X is radar?"}
+    QR -- yes --> RA["RADAR<br/>RadarRenderer"]
+    QR -- no --> QT{"is time on<br/>either axis?"}
     QT -- "on X" --> TS["TIME_SCATTER"]
     QT -- "on Y" --> TSY["TIME_SCATTER<br/><i>transposed</i>"]
     QT -- neither --> TR["TRAIL<br/>TrailRenderer"]
@@ -90,16 +93,29 @@ flowchart TD
     TS --> TSF["playhead, click-to-seek,<br/>joins the time sync group,<br/>may show a spectrogram"]
     TSY --> TSF
     SS --> SSF["log-frequency axis,<br/>redrawn as the playhead moves"]
+    RA --> RAF["one spoke per Y series,<br/>no axes, aspect locked,<br/>scales on the spokes,<br/>targets as boxes"]
     TR --> TRF["fading trail over the last<br/><i>trail_time</i> seconds"]
 
     classDef kind fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
     classDef note fill:#333,stroke:#777,color:#ddd
-    class TS,TSY,SS,TR kind
-    class TSF,SSF,TRF note
+    class TS,TSY,SS,RA,TR kind
+    class TSF,SSF,RAF,TRF note
 ```
 
-Because the kind is a property of the data, a cell can move between all three by
+Because the kind is a property of the data, a cell can move between all four by
 changing a combo box.
+
+### Series that name an arrangement
+
+`frequency` and `radar` are not quantities to put on an axis: picking either on
+X says *how the plot is laid out*, and the rest of the selection is read in that
+light. A spectrum slice then forces `magnitude` onto Y, and a radar takes every
+series on Y and gives each one a spoke.
+
+That is why they sit in the registry alongside `time` rather than in a separate
+list of plot types. One mechanism — the axis picker — reaches every kind of
+plot, and `exclusive` is all it takes to stop either of them sharing an axis
+with a measurement.
 
 ### Time on either axis
 
@@ -126,12 +142,15 @@ renderable. It is applied on construction, on every edit and on every load.
 
 | Rule | Reason |
 |---|---|
-| An `exclusive` series (`time`, `frequency`, `magnitude`) is alone on its axis | Time cannot share an axis with pitch |
+| An `exclusive` series (`time`, `frequency`, `magnitude`, `radar`) is alone on its axis | Time cannot share an axis with pitch |
 | Time sits on at most one axis | Selecting it on both drops the Y one |
 | At most one axis may hold several series | `y=[F1,F2,F3]` against `x=time` is meaningful; many-against-many is not |
 | `colour` is kept only when both axes hold exactly one series | With several series each already uses its own registry colour |
 | `spectrogram` only on `TIME_SCATTER`, and only when the value axis is empty or entirely in Hz | The image is drawn in true Hz; see [layers](layers/README.md) |
 | `SPECTRUM_SLICE` forces `y = ["magnitude"]` | There is nothing else to put on that axis |
+| `RADAR` keeps only real signals on Y, and falls back to one if that empties it | A spoke needs something measured to run along; a radar with no spokes is not a radar |
+| `RADAR` has no `multi_axis()`, so no separate axes | Each spoke already has a scale of its own — there is nothing sharing one to separate |
+| `RADAR` reports the same square view range on both axes, ignoring any stored one | The drawing is a unit disc; a range left over from the series it used to show would squash it |
 | An empty value axis is legal only with `spectrogram` | Otherwise the plot would be blank |
 | `trail_time` is clamped to 0–60 s | |
 
@@ -168,7 +187,7 @@ the plot itself:
 | Colour map | Which gradient that dimension runs through; disabled until one is chosen |
 | Spectrogram | Background image; disabled unless the value axis is in Hz |
 | Separate axis per series | See below; disabled with one series |
-| Trail (s) | Only shown on a trail plot |
+| Trail (s) | Only shown on a trail or radar plot — the two kinds that draw a window of history |
 | Point size | The per-plot size slider |
 
 `PlotControls` is a controller, not a widget: it owns the controls and the rules
@@ -230,7 +249,7 @@ flowchart LR
 |---|---|---|
 | When | Only when the data actually changed | Every frame |
 | Time scatter | One `setData` per series | Move the playhead line |
-| Trail | Re-cache, then redraw | Re-slice the trail window |
+| Trail, radar | Re-cache, then redraw | Re-slice the trail window |
 | Spectrum slice | Redraw | Pick the nearest column |
 | Spectrogram | Rebuild the image (throttled) | — |
 
@@ -474,8 +493,11 @@ memory, and written back in the current schema.
 | `PlotCell.py` | The widget: bar + plot + renderer + layers; the only construction path |
 | `PlotDataHub.py` | Owns the data and the clock; the only live-append path |
 | `PlotControls.py` | The axis pickers and the options menu |
+| `RadarGeometry.py` | Where a radar plot's spokes point, how far out a value sits, and where its scale is marked. Qt-free, so it can be tested without a screen |
+| `SegmentItem.py` | Many short line segments, each with its own colour and opacity, in one item |
 | `MultiSeriesSelector.py` | A drop-down that can check several series at once |
 | `layers/MultiAxisLayer.py` | One scale per series instead of a shared axis |
+| `layers/RadarLayer.py` | A radar plot's rings, spokes, labels and target boxes |
 | `TimeAxisSyncGroup.py` | The shared X range and the playhead-following behaviour |
 | `DirectionalViewBox.py` | Pan, single-axis zoom, measure |
 | `ScatterItem.py` | A scatter that tolerates `PlotItem`'s curve-wide settings |
@@ -486,5 +508,5 @@ memory, and written back in the current schema.
 | `TimeAxisItem.py` | mm:ss ticks, with precision following the zoom |
 | `FrequencyAxisItem.py` | A curated log-frequency tick list |
 | `LayoutSerializer.py` | Layout schema and migration |
-| `renderers/` | The three drawing strategies — see [README](renderers/README.md) |
-| `layers/` | Spectrogram, target bands and frequency markers — see [README](layers/README.md) |
+| `renderers/` | The four drawing strategies — see [README](renderers/README.md) |
+| `layers/` | Spectrogram, target bands, radar frame and frequency markers — see [README](layers/README.md) |

@@ -16,9 +16,11 @@ from ui.plot.PlotTheme import PlotTheme
 from ui.plot.PlotControls import PlotControls
 from ui.plot.layers.FrequencyMarkerLayer import FrequencyMarkerLayer, format_hz
 from ui.plot.layers.MultiAxisLayer import MultiAxisLayer
+from ui.plot.layers.RadarLayer import RadarLayer
 from ui.plot.layers.SelectionLayer import SelectionLayer
 from ui.plot.layers.SpectrogramBackground import SpectrogramBackground
 from ui.plot.layers.TargetBandLayer import TargetBandLayer
+from ui.plot.renderers.RadarRenderer import RadarRenderer
 from ui.plot.renderers.SpectrumSliceRenderer import SpectrumSliceRenderer
 from ui.plot.renderers.TimeScatterRenderer import TimeScatterRenderer
 from ui.plot.renderers.TrailRenderer import TrailRenderer
@@ -27,6 +29,7 @@ RENDERERS = {
     PlotKind.TIME_SCATTER: TimeScatterRenderer,
     PlotKind.TRAIL: TrailRenderer,
     PlotKind.SPECTRUM_SLICE: SpectrumSliceRenderer,
+    PlotKind.RADAR: RadarRenderer,
 }
 
 #: How close a click must land, in pixels, to count as hitting an annotation.
@@ -74,6 +77,7 @@ class PlotCell(QtWidgets.QFrame):
 
         self.spectrogram = SpectrogramBackground(self.plot_item)
         self.targets = TargetBandLayer(self.plot_item)
+        self.radar = RadarLayer(self.plot_item)
         self.markers = FrequencyMarkerLayer(self.plot_item)
         self.axes = MultiAxisLayer(self.plot_item)
         self.selection = SelectionLayer(self.plot_item, hub.selection, parent=self)
@@ -187,9 +191,17 @@ class PlotCell(QtWidgets.QFrame):
         self.playhead.setAngle(0 if config.time_on_y else 90)
         self.playhead.setVisible(self.renderer.shows_playhead)
         self.spectrogram.set_visible(config.spectrogram and self.renderer.supports_spectrogram)
-        self.targets.set_series(config.y_specs(), config.x_specs())
+        # A radar's axes are not the quantities, so a band across them would
+        # mark nothing; its targets are boxes along the spokes instead.
+        bands = self.renderer.supports_target_bands
+        self.targets.set_series(config.y_specs() if bands else [],
+                                config.x_specs() if bands else [])
+        self.radar.set_series(config.radar_specs())
         if self._target_config is not None:
             self.targets.update(self._target_config)
+            self.radar.update(self._target_config)
+        # Rings stay circular only while one unit is the same length either way.
+        self.view_box.setAspectLocked(self.renderer.locks_aspect)
         self._sync_markers()
         self.selection.set_axis(config.time_axis)
         self._sync_axes()
@@ -266,6 +278,7 @@ class PlotCell(QtWidgets.QFrame):
         if self.renderer is not None:
             self.axes.clear()
             self.renderer.rebuild()
+            self.radar.refresh()
             self._sync_axes()
             self.renderer.set_point_size(self.config.point_size)
             self.renderer.on_time_changed(self.hub.current_time)
@@ -281,12 +294,21 @@ class PlotCell(QtWidgets.QFrame):
     def update_targets(self, target_config):
         self._target_config = target_config
         self.targets.update(target_config)
+        self.radar.update(target_config)
 
     def reset_zoom(self):
         # With separate axes each series owns its own scale, so the layer
         # restores them all rather than one shared range.
         if self.axes.active:
             self.axes.reset_ranges()
+            return
+
+        # An aspect-locked plot has to be given both ranges at once: setting
+        # them one after the other lets the lock shrink whichever was set first.
+        if self.renderer is not None and self.renderer.locks_aspect:
+            self.view_box.setRange(xRange=self.config.effective_x_range(),
+                                   yRange=self.config.effective_y_range(),
+                                   padding=0)
             return
 
         # The sync group owns the time axis and resets every time plot together,
@@ -306,11 +328,17 @@ class PlotCell(QtWidgets.QFrame):
 
     def apply_theme(self):
         theme = PlotTheme.from_palette()
-        theme.apply_to_plot(self.plot_widget, self.config.title())
+        # A radar draws its own frame, so pyqtgraph's axes and grid are hidden
+        # rather than left showing the polar coordinates they are drawn in.
+        show_axes = self.renderer is None or self.renderer.shows_axes
+        theme.apply_to_plot(self.plot_widget, self.config.title(), grid=show_axes)
+        for side in ('bottom', 'left'):
+            self.plot_item.showAxis(side, show_axes)
         self.setStyleSheet(theme.container_stylesheet(CONTAINER_NAME))
         for widget in self.controls.widgets():
             widget.setStyleSheet(theme.input_stylesheet())
         self.axes.apply_theme(theme)
+        self.radar.apply_theme(theme)
         self.playhead.setPen(theme.playhead_pen())
         if self.renderer is not None:
             self.renderer.apply_theme(theme)
@@ -434,6 +462,7 @@ class PlotCell(QtWidgets.QFrame):
         self.selection.clear()
         self.spectrogram.detach()
         self.targets.clear()
+        self.radar.clear()
         if self.renderer is not None:
             self.renderer.detach()
             self.renderer = None

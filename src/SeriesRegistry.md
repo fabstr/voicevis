@@ -39,6 +39,7 @@ classDiagram
         SIGNAL
         FREQUENCY
         MAGNITUDE
+        RADAR
     }
     SeriesSpec --> SeriesKind
 ```
@@ -55,7 +56,7 @@ classDiagram
 
 ### Synthetic series
 
-Three entries are not attributes of `AudioFeatures`. They exist so that the axis
+Four entries are not attributes of `AudioFeatures`. They exist so that the axis
 selectors can express every kind of plot through one mechanism:
 
 | Key | Meaning | Selecting it gives |
@@ -63,10 +64,19 @@ selectors can express every kind of plot through one mechanism:
 | `time` | The shared frame timebase | a time-scatter plot — on X normally, on Y transposed |
 | `frequency` | `SpectrogramData.y` | a spectrum-slice plot (X only) |
 | `magnitude` | A `magnitude_db` column at the playhead | (forced onto Y there) |
+| `radar` | Not data at all: an arrangement | a radar plot, with every series on Y given a spoke (X only) |
 
-All three are `exclusive`; every real signal is not. That single flag is what
+All four are `exclusive`; every real signal is not. That single flag is what
 encodes "time cannot share an axis with pitch" without any special-casing in the
 selector or the config.
+
+`radar` carries the arrangement furthest: it names no data whatsoever, and its
+`default_min`/`default_max` describe the unit disc the spokes are drawn in
+rather than anything measured. What the plot is actually scrolled to is
+`ui.plot.RadarGeometry.VIEW_RANGE`, which leaves room outside the ring for the
+spoke labels. The alternative — a `radar: bool` field on `PlotConfig` — would
+have put the choice of plot kind somewhere other than the axis pickers, which is
+the thing this design exists to avoid.
 
 ### Ranges and targets
 

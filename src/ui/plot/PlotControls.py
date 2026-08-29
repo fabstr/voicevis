@@ -51,8 +51,11 @@ class PlotControls(QtCore.QObject):
     # --- Construction ----------------------------------------------------
 
     def _build_selectors(self):
+        # Radar sits with time and frequency: like them it names how the plot
+        # is arranged rather than a quantity to put on the axis.
         x_items = [Registry.SERIES[Registry.TIME_KEY],
-                   Registry.SERIES[Registry.FREQUENCY_KEY]] + Registry.signal_series()
+                   Registry.SERIES[Registry.FREQUENCY_KEY],
+                   Registry.SERIES[Registry.RADAR_KEY]] + Registry.signal_series()
         # Time is offered on both axes: putting it on Y transposes the plot.
         y_items = ([Registry.SERIES[Registry.TIME_KEY]] + Registry.signal_series()
                    + [Registry.SERIES[Registry.MAGNITUDE_KEY]])
@@ -253,7 +256,9 @@ class PlotControls(QtCore.QObject):
             self.trail_edit.setText(f"{config.trail_time:.2f}")
 
             is_slice = config.kind is PlotKind.SPECTRUM_SLICE
-            is_trail = config.kind is PlotKind.TRAIL
+            # Both kinds draw a fading window of history rather than a curve
+            # against time, so both are steered by the trail length.
+            has_trail = config.kind in (PlotKind.TRAIL, PlotKind.RADAR)
 
             # X is never disabled: changing it is the only way out of a plot
             # kind, so locking it would strand the cell on whatever it shows.
@@ -274,7 +279,7 @@ class PlotControls(QtCore.QObject):
             self.separate_axes_action.setToolTip(
                 SEPARATE_AXES_HINT if axes_ok else SEPARATE_AXES_DISABLED_HINT)
 
-            self.trail_action.setVisible(is_trail)
+            self.trail_action.setVisible(has_trail)
         finally:
             self._updating = False
 

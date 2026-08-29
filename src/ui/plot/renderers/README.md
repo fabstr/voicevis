@@ -14,6 +14,9 @@ classDiagram
         +shows_playhead: bool
         +supports_seek: bool
         +supports_spectrogram: bool
+        +shows_axes: bool
+        +locks_aspect: bool
+        +supports_target_bands: bool
         +measure_formatter
         +attach()
         +detach()
@@ -21,6 +24,7 @@ classDiagram
         +on_data_changed(force)
         +on_time_changed(t)
         +set_point_size(size)
+        +trail_alpha(times, t, window)$
         +apply_theme(theme)
         +axis_items() dict
         +x_transform(values)
@@ -31,6 +35,7 @@ classDiagram
     PlotRenderer <|-- TimeScatterRenderer
     PlotRenderer <|-- TrailRenderer
     PlotRenderer <|-- SpectrumSliceRenderer
+    PlotRenderer <|-- RadarRenderer
 
     class TimeScatterRenderer {
         one PlotDataItem per Y series
@@ -40,6 +45,9 @@ classDiagram
     }
     class SpectrumSliceRenderer {
         one filled PlotDataItem
+    }
+    class RadarRenderer {
+        one SegmentItem per spoke
     }
 ```
 
@@ -52,16 +60,26 @@ lifecycle, the revision guard, the colour bar and the colour-map sampling.
 
 `PlotCell` reads these flags rather than asking what kind of renderer it has.
 
-| | Time scatter | Trail | Spectrum slice |
-|---|---|---|---|
-| X axis | time, or 1–N features | a feature | frequency (log) |
-| Y axis | 1–N features, or time | a feature | magnitude |
-| `follows_time_axis` | yes | no | no |
-| `shows_playhead` | yes | no | no |
-| `supports_seek` | yes | no | no |
-| `supports_spectrogram` | yes | no | no |
-| Specialised axis | `TimeAxisItem`, on whichever side time is | none | `FrequencyAxisItem`, bottom |
-| Redrawn per frame | no | yes | yes |
+| | Time scatter | Trail | Spectrum slice | Radar |
+|---|---|---|---|---|
+| X axis | time, or 1–N features | a feature | frequency (log) | `radar` — the arrangement, not a quantity |
+| Y axis | 1–N features, or time | a feature | magnitude | 1–N features, one spoke each |
+| `follows_time_axis` | yes | no | no | no |
+| `shows_playhead` | yes | no | no | no |
+| `supports_seek` | yes | no | no | no |
+| `supports_spectrogram` | yes | no | no | no |
+| `shows_axes` | yes | yes | yes | **no** |
+| `locks_aspect` | no | no | no | **yes** |
+| `supports_target_bands` | yes | yes | yes | **no** |
+| Specialised axis | `TimeAxisItem`, on whichever side time is | none | `FrequencyAxisItem`, bottom | none — the frame is drawn instead |
+| Redrawn per frame | no | yes | yes | yes |
+
+The last three flags exist because a radar is drawn in coordinates that are not
+the quantities. Its axis ticks would report the polar geometry rather than
+anything measured (`shows_axes`), its rings stop being round the moment the cell
+is not square (`locks_aspect`), and a band across the whole plot would mark
+nothing, so its targets are boxes along the spokes instead
+(`supports_target_bands` — see [layers](../layers/README.md#radarlayer)).
 
 `supports_seek` is why clicking the trail plot no longer jumps the playhead to a
 nonsense time — the old code interpreted the X coordinate as a timestamp on
@@ -171,6 +189,69 @@ that basis only as a defence against a length mismatch.
 implementation it was written back into a shared module-level dictionary, so
 editing the trail on one plot changed it for every plot using the same preset.
 
+## `RadarRenderer`
+
+Several series at once, each on a spoke of its own. A trail plot compares two
+quantities against *each other*; a radar compares any number of them against
+their **targets**, which is the thing a practice session is actually working
+towards.
+
+A value is marked with a **stroke across its spoke**, not a dot, and drawn at
+three quarters of the width of the target box around it — so whether a value is
+on target is a matter of height alone, read the same way a mark on a ruler is.
+Each spoke gets one [`SegmentItem`](../SegmentItem.py), which paints the whole
+trail's worth of strokes in one pass with a pen per segment; a dot cannot be
+oriented and a `PlotCurveItem` takes one pen for the lot.
+
+The same fading window as a trail plot, so the recent history of each quantity
+reads as a ladder running out along its spoke. `trail_alpha` is shared with
+`TrailRenderer` on the base class rather than written twice.
+
+The point-size slider sets the **thickness** of a stroke here rather than the
+diameter of a marker; its length is fixed by the target box, which is the thing
+it has to be compared against. A stroke carries at about half the weight a dot
+needs — it is already as long as the box is wide — and staying thin is what
+keeps a dense trail legible as separate values instead of filling in as a block.
+
+### How many spokes fit
+
+An axis is a column of fixed width: the target box, the scale marks either side
+of it and the numbers beyond those. `TARGET_HALF_WIDTH` sets that width and
+everything else crosswise is derived from it, so it is the single number that
+decides how many series can share a circle.
+
+Two spokes are closest at the innermost number printed on them, so that is where
+the limit bites: the column's half-width has to stay under `r·sin(π/n)` for `n`
+spokes. The current width clears six comfortably, and
+[`tests/test_radar.py`](../../../../tests/test_radar.py) pins it — an axis twice
+this wide overlapped at four.
+
+The arithmetic is in [`../RadarGeometry.py`](../RadarGeometry.py), not here,
+because [`RadarLayer`](../layers/README.md#radarlayer) has to place the target
+boxes on exactly the same spokes. A box drawn a few degrees off its points is
+wrong in a way that nothing raises about.
+
+| | |
+|---|---|
+| Where a spoke points | first straight up, the rest evenly spaced clockwise |
+| How far out a value sits | its position in the series' **registry range**, `INNER_RADIUS`..`OUTER_RADIUS` |
+| A value off that scale | clamped to the ring — one wild frame must not drag the drawing outside its own frame |
+| What the axes are | a unit disc, in no unit at all |
+| What a value looks like | a stroke across the spoke, 75 % of the target box's width |
+
+Scaling by the registry range rather than by the visible data is what makes the
+plot readable: it is the range reset-zoom restores everywhere else, so a spoke
+means the same thing on every radar plot and from one recording to the next. A
+data-driven scale would make the picture change shape whenever the loudest frame
+changed.
+
+The unit disc is also why `locks_aspect` is set. Every other plot in the
+application is read off its axes, so a cell that is twice as wide as it is tall
+is merely stretched; here it would turn the rings into ellipses and the evenly
+spaced spokes into unevenly spaced ones. `PlotCell.reset_zoom` gives an
+aspect-locked plot **both** ranges in one `setRange` call — setting them one
+after the other lets the lock shrink whichever was set first.
+
 ## `SpectrumSliceRenderer`
 
 One filled `PlotDataItem` showing the spectrogram column nearest the playhead:
@@ -229,7 +310,10 @@ set in the same log space and labelled at the same frequencies as the X axis.
 2. Set the capability flags and, if the axis is not linear data space, override
    `axis_items`, `x_transform`/`x_inverse` and `measure_formatter`.
 3. Add a `PlotKind` in [`../PlotConfig.py`](../PlotConfig.py) and teach
-   `PlotConfig.kind` how to derive it from the X selection.
+   `PlotConfig.kind` how to derive it from the X selection. A kind that is an
+   *arrangement* rather than a quantity — a spectrum slice, a radar — is picked
+   out by a synthetic series on X; add that to
+   [`SeriesRegistry`](../../../SeriesRegistry.md#synthetic-series) too.
 4. Register it in `PlotCell.RENDERERS`.
 
 Import it explicitly — never via `importlib`. PyInstaller resolves this project

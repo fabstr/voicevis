@@ -11,14 +11,18 @@ graph TB
         E["playhead + annotation markers"]
         D["frequency markers<br/><i>FrequencyMarkerLayer</i> &nbsp; z = 5"]
         C["curves and points<br/><i>the renderer</i> &nbsp; z = 0"]
-        B["target bands<br/><i>TargetBandLayer</i> &nbsp; z = -20"]
+        B["target bands and boxes<br/><i>TargetBandLayer, RadarLayer</i> &nbsp; z = -20"]
+        A2["radar rings and spokes<br/><i>RadarLayer</i> &nbsp; z = -25"]
         A["spectrogram image<br/><i>SpectrogramBackground</i> &nbsp; z = -30"]
     end
-    E --- D --- C --- B --- A
+    E --- D --- C --- B --- A2 --- A
 
     classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
-    class A,B,C,D,E l
+    class A,A2,B,C,D,E l
 ```
+
+Only one of `TargetBandLayer` and `RadarLayer` ever has anything in it: the cell
+asks the renderer which of the two ways it wants targets drawn.
 
 ---
 
@@ -146,6 +150,73 @@ horizontal stripe.
 
 `set_series()` diffs against the bands already present, so reconfiguring a cell
 creates and removes only what actually changed.
+
+---
+
+## `RadarLayer`
+
+Everything a radar plot has instead of axes: the ring a series reaches at the
+top of its range, the spoke it runs along, the numbered scale up that spoke, its
+name, and the box marking its target range.
+[`RadarRenderer`](../renderers/README.md#radarrenderer) draws only the values;
+the two agree on where things go through
+[`RadarGeometry`](../RadarGeometry.py).
+
+The target box is why this is a layer rather than part of the renderer: it is
+the same job `TargetBandLayer` does, done the only way that means anything when
+the axes are not the quantities. A horizontal band across a radar would mark a
+height in the drawing, not a range in pitch. So a box is drawn along the spoke
+instead, from the target's minimum to its maximum, with the same neutral
+`SeriesRegistry.target_band` fill every other target uses.
+
+```mermaid
+graph LR
+    R["renderer.supports_target_bands"] -- "true" --> TB["TargetBandLayer<br/><i>bands across the axes</i>"]
+    R -- "false" --> RL["RadarLayer<br/><i>boxes along the spokes</i>"]
+
+    classDef l fill:#2d3b4d,stroke:#7aa2c8,color:#e8eef5
+    class TB,RL l
+```
+
+`PlotCell` feeds the empty selection to whichever of the two does not apply, so
+only one ever holds items.
+
+### The scales
+
+Each spoke is marked at values off the 1/2/5 ladder, so the numbers printed are
+ones a reader recognises rather than whatever an even division of the range
+produced. Three details are deliberate:
+
+- **The tick at the bottom of the range is dropped.** Every spoke meets at the
+  centre, so all of them would print their minimum on top of each other.
+- **The marks start where the target box ends** and reach a little further out,
+  so the scale frames the box rather than running through the values inside it.
+- **Both sides are marked and numbered.** The values sit between the two, so a
+  scale down one side only would be the far side for half of the plot.
+
+Each spoke's marks are one `SegmentItem`; the numbers are `TextItem`s in a
+smaller font, in the series' own colour, so a scale is read together with the
+spoke it belongs to.
+
+### Why plain graphics items
+
+The ring and the spokes are `QGraphicsPathItem`s with **cosmetic** pens, not
+`PlotCurveItem`s. Two reasons, both of which bite quietly:
+
+- `PlotItem` files anything implementing `plotData` under `self.curves` and then
+  calls `setClipToView` and `setDownsampling` on the lot. `PlotCurveItem` has
+  neither method — the same trap [`ScatterItem`](../ScatterItem.py) exists to
+  neutralise. Not joining that list avoids it outright.
+- A non-cosmetic pen is measured in data space, so a one-pixel ring would
+  thicken as the plot was zoomed in. Cosmetic keeps the frame one pixel wide at
+  every zoom, which is what a frame should be.
+
+[`SegmentItem`](../SegmentItem.py) sidesteps both the same way, which is why the
+scale marks use it as well as the values do.
+
+The frame is rebuilt outright on a palette or theme change rather than being
+diffed like `TargetBandLayer`'s bands: the spokes take their colour from the
+series, and there are only a handful of items.
 
 ---
 

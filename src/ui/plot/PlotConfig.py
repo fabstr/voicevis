@@ -14,6 +14,7 @@ from typing import List, Optional, Tuple
 import SeriesRegistry as Registry
 from SeriesRegistry import DEFAULT_POINT_SIZE, SeriesSpec
 from ui.plot.ColourMapping import COLOUR_MAP_KEYS, DEFAULT_COLOUR_MAP
+from ui.plot.RadarGeometry import VIEW_RANGE as RADAR_VIEW_RANGE
 
 MIN_TRAIL_TIME = 0.0
 MAX_TRAIL_TIME = 60.0
@@ -27,6 +28,7 @@ class PlotKind(Enum):
 
     TIME_SCATTER = "time_scatter"      # x is time
     SPECTRUM_SLICE = "spectrum_slice"  # x is frequency
+    RADAR = "radar"                    # x is radar: the Y series on spokes
     TRAIL = "trail"                    # neither axis is time
 
 
@@ -58,6 +60,10 @@ class PlotConfig:
         # Frequency on X wins: it means a spectrum slice whatever Y holds.
         if self.x[:1] == [Registry.FREQUENCY_KEY]:
             return PlotKind.SPECTRUM_SLICE
+        # Radar likewise: X names the arrangement rather than a quantity, and
+        # every series on Y gets a spoke of its own.
+        if self.x[:1] == [Registry.RADAR_KEY]:
+            return PlotKind.RADAR
         if self.x[:1] == [Registry.TIME_KEY] or self.y[:1] == [Registry.TIME_KEY]:
             return PlotKind.TIME_SCATTER
         return PlotKind.TRAIL
@@ -91,10 +97,16 @@ class PlotConfig:
     def y_specs(self) -> List[SeriesSpec]:
         return [Registry.SERIES[k] for k in self.y if k in Registry.SERIES]
 
+    def radar_specs(self) -> List[SeriesSpec]:
+        """The series that get a spoke, empty on any other kind of plot."""
+        return self.y_specs() if self.kind is PlotKind.RADAR else []
+
     def colour_spec(self) -> Optional[SeriesSpec]:
         return Registry.get(self.colour) if self.colour else None
 
     def effective_x_range(self) -> Optional[Tuple[float, float]]:
+        if self.kind is PlotKind.RADAR:
+            return RADAR_VIEW_RANGE
         if self.x_range is not None:
             return tuple(self.x_range)
         if not self.x:
@@ -102,6 +114,8 @@ class PlotConfig:
         return Registry.union_range(self.x)
 
     def effective_y_range(self) -> Optional[Tuple[float, float]]:
+        if self.kind is PlotKind.RADAR:
+            return RADAR_VIEW_RANGE
         if self.y_range is not None:
             return tuple(self.y_range)
         if not self.y:
@@ -141,6 +155,11 @@ class PlotConfig:
             title = f"Time vs {names}" if self.time_on_y else names
             if self.spectrogram:
                 title += " + spectrogram"
+        elif self.kind is PlotKind.RADAR:
+            specs = self.y_specs()
+            if not specs:
+                return "Empty plot"
+            title = f"Radar: {', '.join(s.label for s in specs)}"
         else:
             y_specs = self.y_specs()
             if not y_specs:
@@ -188,8 +207,11 @@ class PlotConfig:
         """The axis holding several series, if either does.
 
         Only one axis can, so this also says which axis could be split into one
-        scale per series.
+        scale per series. A radar plot has none: its series do not share a
+        scale in the first place, each one having a spoke to itself.
         """
+        if self.kind is PlotKind.RADAR:
+            return None
         if len(self.x) > 1:
             return 'x'
         if len(self.y) > 1:
@@ -231,6 +253,14 @@ class PlotConfig:
         if kind is PlotKind.SPECTRUM_SLICE:
             y = [Registry.MAGNITUDE_KEY]
             spectrogram = False
+        elif kind is PlotKind.RADAR:
+            # Every spoke is a measurement, so the synthetic series that only
+            # name axes are dropped -- and a radar with nothing on it is not a
+            # radar, so an empty selection falls back to the default series.
+            spectrogram = False
+            y = _signals_only(y)
+            if not y:
+                y = [default_value]
         elif kind is PlotKind.TIME_SCATTER:
             # Magnitude only exists inside a spectrum slice, so it is dropped
             # on the way out of one -- otherwise changing X away from Frequency

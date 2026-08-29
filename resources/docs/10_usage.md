@@ -331,14 +331,15 @@ and this is not part of one.
 - **X-axis picker** and **Y-axis picker** (click the axis label) — choose any series, including multiple series on one axis
 - Putting **Time on the Y axis** transposes that plot (time runs vertically)
 - **Frequency** as X gives a spectrum-slice plot; **Magnitude** is offered on Y for that
+- **Radar** as X arranges every series chosen on Y around a circle, one spoke each, evenly spaced. A spoke runs from the centre (the bottom of that series' range) to the outer ring (the top of it) and carries a numbered scale on both sides. Its target range is drawn as a box along it, and each value is drawn on top as a line across the spoke, three quarters as wide as that box, fading out with age like a trail — so several features can be watched against their targets at once
 - Per-plot **options menu**:
   - **Colour by** a chosen series (its value mapped onto a colour gradient) or none
   - **Colour map** — which gradient *Colour by* uses: **Viridis** (the default), **Plasma** or **Turbo**. Saved with the layout, and offered only once a series is chosen under *Colour by*
   - **Spectrogram** background image toggle (only when the value axis is in Hz or empty)
   - **Separate axis per series** — give each series its own Y scale instead of sharing one
-  - **Trail (seconds)** — for XY (non-time) plots, show a fading trail of recent points instead of a static scatter
+  - **Trail (seconds)** — for XY and radar plots, show a fading trail of recent points instead of a static scatter
   - **Point size** slider scoped to that one plot
-- Plots automatically fall into one of three kinds depending on axis choice: time-scatter, XY trail, or spectrum-slice
+- Plots automatically fall into one of four kinds depending on axis choice: time-scatter, XY trail, spectrum-slice, or radar
 
 ### Mouse tools (toolbar)
 - **Reset zoom** — restore default ranges on every plot
@@ -348,7 +349,7 @@ and this is not part of one.
 - Pan by default drag; all drag tools are mutually exclusive
 
 ### Overlays
-- **Target bands**: shaded regions on any plotted series that has a target range defined
+- **Target bands**: shaded regions on any plotted series that has a target range defined — drawn as a box along the spoke on a radar plot
 - **Frequency markers**: draggable reference lines at user-chosen frequencies, shared across every plot and every open window
   - Add a marker (right-click a frequency plot > "Add marker at N Hz" or type an exact value)
   - Drag a marker to move it, or right-click it to type an exact new value

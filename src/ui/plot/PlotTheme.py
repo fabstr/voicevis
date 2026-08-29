@@ -48,7 +48,7 @@ class PlotTheme:
 
     # --- Application -----------------------------------------------------
 
-    def apply_to_plot(self, plot_widget, title: str = None):
+    def apply_to_plot(self, plot_widget, title: str = None, grid: bool = True):
         plot_widget.setBackground(self.background)
 
         plot_item = plot_widget.getPlotItem()
@@ -59,7 +59,9 @@ class PlotTheme:
             axis.setPen(self.text)
             axis.setTextPen(self.text)
 
-        plot_widget.showGrid(x=True, y=True, alpha=GRID_ALPHA)
+        # A plot whose axes are not quantities -- a radar -- asks for no grid:
+        # the lines would cut across a drawing that is read radially.
+        plot_widget.showGrid(x=grid, y=grid, alpha=GRID_ALPHA)
         # showGrid only ticks a checkbox, and the grid is applied from the
         # signal that fires when it *changes*. Re-applying it to an already
         # gridded plot is therefore a no-op -- which leaves axis items installed
