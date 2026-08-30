@@ -27,6 +27,7 @@ from ui.ResponsiveToolBar import ResponsiveToolBar, ToolbarGroup
 from ui.SeriesColourDialog import SeriesColourDialog
 from ui.TargetConfigDialog import TargetConfigDialog
 from workers.AnalysisWorker import AnalysisWorker
+from workers.AudioPumpWorker import AudioPumpWorker
 from workers.PlaybackWorker import PlaybackWorker
 from workers.RealTimeAnalysisWorker import RealTimeAnalysisWorker
 from ui.plot import LayoutSerializer
@@ -95,7 +96,8 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.audio_data = None
         self.audio_buffer = None
         self.audio_queue = None
-        self.poll_timer = None
+        #: Drains the microphone off the GUI thread while recording or monitoring.
+        self.audio_pump = None
         self.layout = None
         self.timer = None
         self.menu_bar = None
@@ -247,7 +249,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             self.stop_playback()
 
         self.timer.stop()
-        self.poll_timer.stop()
+        self._stop_audio_pump()
 
         # Nobody will see the result, and cancelling lets the wait below return
         # at the next chunk instead of after the whole recording.
@@ -311,9 +313,27 @@ class AnalysisWidget(QtWidgets.QWidget):
 
         self.audio_queue = queue.Queue()
 
-        self.poll_timer = QtCore.QTimer()
-        self.poll_timer.setInterval(33)
-        self.poll_timer.timeout.connect(self.read_audio_chunk)
+    def _start_audio_pump(self, read):
+        """Drain the microphone on its own thread, calling ``read`` as it goes.
+
+        Started after the audio source, so the device it reads already exists.
+        """
+        self._stop_audio_pump()
+        self.audio_pump = AudioPumpWorker(read)
+        self.audio_pump.start()
+
+    def _stop_audio_pump(self):
+        """Stop the pump and wait for it, before the source it reads goes away.
+
+        Waited for without a timeout, unlike the analysis workers: one read is
+        a buffer copy and a queue put, so it always returns, and carrying on
+        while one is still in flight would leave it reading a stopped device.
+        """
+        if self.audio_pump is None:
+            return
+        pump, self.audio_pump = self.audio_pump, None
+        pump.stop()
+        pump.wait()
 
     def setup_GUI(self):
         self.setAcceptDrops(True)
@@ -1189,7 +1209,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.last_read_pos = target_byte_pos
 
         self.audio_source.start(self.audio_buffer)
-        self.poll_timer.start()
+        self._start_audio_pump(self.read_audio_chunk)
         # Drives the playhead and the sliding window while recording.
         self.timer.start()
 
@@ -1211,7 +1231,9 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.action_record.setIcon(self.record_icon)
         self.action_record.setText("&Record\tR")
 
-        self.poll_timer.stop()
+        self._stop_audio_pump()
+        # The pump has gone, so this last read of whatever arrived after it is
+        # the only one in flight.
         self.read_audio_chunk()
 
         self.audio_source.stop()
@@ -1228,6 +1250,11 @@ class AnalysisWidget(QtWidgets.QWidget):
         # update_playhead reads the position straight back off the (now closed)
         # audio buffer.
         self.is_recording = False
+
+        # The time plots draw only the scrolling window while recording, so the
+        # take is put back on screen whole here rather than when the batch
+        # analysis lands a good few seconds later.
+        self.update_plots()
 
     #################### Live analysis without recording ####################
 
@@ -1291,7 +1318,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         # buffer of ours, so the samples are analysed and dropped.
         self.monitor_device = self.audio_source.start()
 
-        self.poll_timer.start()
+        self._start_audio_pump(self._read_monitor_chunk)
         self.timer.start()
 
     def monitor_stop(self):
@@ -1316,7 +1343,7 @@ class AnalysisWidget(QtWidgets.QWidget):
         self.action_monitor.setIcon(self.monitor_icon)
         self.action_monitor.setText("&Live Analysis\tL")
 
-        self.poll_timer.stop()
+        self._stop_audio_pump()
         self.audio_source.stop()
         self.monitor_device = None
         self.timer.stop()
@@ -1331,8 +1358,8 @@ class AnalysisWidget(QtWidgets.QWidget):
     def _read_monitor_chunk(self):
         """Pass the microphone's newest samples to the analysis and drop them.
 
-        No gain is applied: a gain describes a stretch of the recording, and
-        monitoring is not part of one.
+        Runs on the pump's thread. No gain is applied: a gain describes a
+        stretch of the recording, and monitoring is not part of one.
         """
         if self.monitor_device is None:
             return
@@ -1347,10 +1374,10 @@ class AnalysisWidget(QtWidgets.QWidget):
     #################### Live analysis while recording ####################
 
     def read_audio_chunk(self):
-        if self.is_monitoring:
-            self._read_monitor_chunk()
-            return
+        """Pass the samples written since the last read to the live analysis.
 
+        Runs on the pump's thread while recording; monitoring has its own read.
+        """
         current_pos = self.audio_buffer.pos()
         if current_pos > self.last_read_pos:
             chunk_start = self.last_read_pos

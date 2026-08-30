@@ -11,13 +11,17 @@ import pyqtgraph as pg
 
 import SeriesRegistry as Registry
 
-from ui.plot.ColourMapping import brushes, solid_brushes
+from ui.plot.ColourMapping import brushes, fade_pens, solid_brushes
 from ui.plot.PlotTheme import PlotTheme
 from ui.plot.ScatterItem import ScatterItem
 from ui.plot.renderers.PlotRenderer import PlotRenderer
 
 #: Markers here are sparser than on a time plot, so they can afford to be bigger.
 SIZE_MULTIPLIER = 1
+
+#: The outline every point gets, at half the point's own opacity.
+EDGE_COLOUR = (128, 128, 128)
+EDGE_WIDTH = 0.5
 
 
 class TrailRenderer(PlotRenderer):
@@ -68,7 +72,7 @@ class TrailRenderer(PlotRenderer):
 
             point_brushes = (brushes(colours, alpha) if colours is not None
                              else solid_brushes(Registry.colour_of(spec), alpha))
-            pens = [pg.mkPen(color=(128, 128, 128, int(a * 0.5)), width=0.5) for a in alpha]
+            pens = fade_pens(EDGE_COLOUR, alpha * 0.5, EDGE_WIDTH)
 
             item.setData(x=x_values, y=y_values, brush=point_brushes, pen=pens)
 

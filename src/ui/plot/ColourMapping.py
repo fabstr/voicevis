@@ -22,7 +22,23 @@ COLOUR_MAPS = (("viridis", "Viridis"), ("plasma", "Plasma"), ("turbo", "Turbo"))
 COLOUR_MAP_KEYS = tuple(key for key, _ in COLOUR_MAPS)
 DEFAULT_COLOUR_MAP = "viridis"
 
+#: Colour steps a colour dimension is quantised to before it becomes brushes.
+#: A brush is cached per distinct colour and pyqtgraph caches a rendered marker
+#: per distinct brush, so both caches only pay off if the colours repeat --
+#: straight off a continuous map, a few thousand points are a few thousand
+#: one-use colours. The maps ship 256 stops of their own, so rounding to as
+#: many cannot be seen.
+COLOUR_LEVELS = 256
+
+#: Steps a trail's fade is quantised to, for the same reason. The fade is a
+#: ramp over a couple of seconds and nobody can see 32 steps in it.
+ALPHA_LEVELS = 32
+
 _COLOURMAPS = {}
+
+#: Brushes and pens by (r, g, b, a), so a colour is only built once.
+_BRUSHES = {}
+_PENS = {}
 
 
 def colour_map(name: str = DEFAULT_COLOUR_MAP) -> pg.ColorMap:
@@ -68,24 +84,73 @@ def normalise_to(values: np.ndarray, low: float, high: float) -> np.ndarray:
 
 
 def rgba(normalised: np.ndarray, name: str = DEFAULT_COLOUR_MAP) -> np.ndarray:
-    """An (N, 4) uint8 colour array for values already scaled to 0..1."""
+    """An (N, 4) uint8 colour array for values already scaled to 0..1.
+
+    Quantised to :data:`COLOUR_LEVELS` first, so that however many points are
+    coloured, they come out in a small set of repeated colours.
+    """
     if np.size(normalised) == 0:
         return np.zeros((0, 4), dtype=np.uint8)
-    return colour_map(name).map(normalised, mode='byte')
+    return colour_map(name).map(_quantise(normalised, COLOUR_LEVELS), mode='byte')
 
 
 def brushes(colours: np.ndarray, alpha=None):
-    """Per-point brushes, optionally overriding the alpha channel."""
+    """Per-point brushes, optionally overriding the alpha channel.
+
+    Points of the same colour share one brush rather than each getting a fresh
+    one. A live recording rebuilds these lists many times a second, and
+    building a QBrush per point was the most expensive thing the GUI thread
+    did: at a hundred frames of audio a second, a minute of recording came to
+    six thousand of them per redraw. Nothing here mutates a brush, so sharing
+    is safe, and pyqtgraph's own marker cache is keyed by brush -- so the
+    repeats pay off a second time when the points are drawn.
+    """
     if alpha is None:
-        return [pg.mkBrush(int(r), int(g), int(b), int(a)) for r, g, b, a in colours]
-    return [pg.mkBrush(int(r), int(g), int(b), int(a))
-            for (r, g, b, _), a in zip(colours, alpha)]
+        return [_brush(r, g, b, a) for r, g, b, a in colours]
+    return [_brush(r, g, b, a)
+            for (r, g, b, _), a in zip(colours, _quantise_alpha(alpha))]
 
 
 def solid_brushes(colour, alpha: np.ndarray):
     """Per-point brushes of one colour with varying alpha (trail fading)."""
     base = pg.mkColor(colour)
-    return [pg.mkBrush(base.red(), base.green(), base.blue(), int(a)) for a in alpha]
+    return [_brush(base.red(), base.green(), base.blue(), a)
+            for a in _quantise_alpha(alpha)]
+
+
+def fade_pens(colour, alpha: np.ndarray, width: float = 0.5):
+    """Per-point pens of one colour with varying alpha, cached like brushes."""
+    base = pg.mkColor(colour)
+    return [_pen(base.red(), base.green(), base.blue(), a, width)
+            for a in _quantise_alpha(alpha)]
+
+
+def _quantise(values: np.ndarray, levels: int) -> np.ndarray:
+    """``values`` in 0..1 rounded to ``levels`` evenly spaced steps."""
+    steps = float(levels - 1)
+    return np.round(np.asarray(values, dtype=float) * steps) / steps
+
+
+def _quantise_alpha(alpha) -> np.ndarray:
+    """Opacities in 0..255 rounded to :data:`ALPHA_LEVELS` steps."""
+    step = 255.0 / (ALPHA_LEVELS - 1)
+    return np.round(np.asarray(alpha, dtype=float) / step) * step
+
+
+def _brush(r, g, b, a):
+    key = (int(r), int(g), int(b), int(a))
+    brush = _BRUSHES.get(key)
+    if brush is None:
+        brush = _BRUSHES[key] = pg.mkBrush(*key)
+    return brush
+
+
+def _pen(r, g, b, a, width: float):
+    key = (int(r), int(g), int(b), int(a), float(width))
+    pen = _PENS.get(key)
+    if pen is None:
+        pen = _PENS[key] = pg.mkPen(color=key[:4], width=width)
+    return pen
 
 
 #: Layout column the first colour bar goes in, with later ones to its right.

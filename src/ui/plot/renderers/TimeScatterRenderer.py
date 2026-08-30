@@ -6,6 +6,11 @@ routinely hold tens of thousands of frames.
 
 Time may sit on either axis. When it is on Y the plot is transposed: the value
 series run horizontally and time runs up the vertical axis.
+
+While recording, only the stretch of time on screen is pushed into the items.
+Clipping and downsampling would otherwise be the only thing keeping a redraw
+affordable, and a series with a colour dimension has neither -- it is drawn
+point by point, with a brush each.
 """
 
 import numpy as np
@@ -13,11 +18,17 @@ import pyqtgraph as pg
 
 import SeriesRegistry as Registry
 
+from ui.plot.ColourMapping import brushes
 from ui.plot.DirectionalViewBox import time_measure_formatter, transposed_time_measure_formatter
 from ui.plot.PlotTheme import PlotTheme
 from ui.plot.ScatterItem import ScatterItem
 from ui.plot.TimeAxisItem import TimeAxisItem
+from ui.plot.TimeAxisSyncGroup import RECORD_LOOKAHEAD, RECORD_WINDOW
 from ui.plot.renderers.PlotRenderer import PlotRenderer
+
+#: Kept either side of the window shown while recording, so that a point never
+#: goes missing from the edge of the view between one redraw and the next.
+WINDOW_MARGIN = 1.0
 
 
 class TimeScatterRenderer(PlotRenderer):
@@ -74,9 +85,10 @@ class TimeScatterRenderer(PlotRenderer):
     def _refresh(self, current_time: float):
         edge_pen = PlotTheme.marker_edge_pen()
         transposed = self.time_on_y
+        window = self._live_window(current_time)
 
         for item, spec in zip(self.items, self.config.value_specs()):
-            times, values = self.hub.get_xy(spec.key)
+            times, values = _inside(window, *self.hub.get_xy(spec.key))
             x, y = (values, times) if transposed else (times, values)
 
             # Which item was built for this series follows the same test, so a
@@ -91,9 +103,22 @@ class TimeScatterRenderer(PlotRenderer):
                 # rather than leaving the previous frame's points on screen.
                 item.setData(x=x, y=y, brush=pg.mkBrush(Registry.colour_of(spec)), pen=edge_pen)
             else:
-                item.setData(x=x, y=y,
-                             brush=[pg.mkBrush(*c) for c in colours],
-                             pen=edge_pen)
+                item.setData(x=x, y=y, brush=brushes(colours), pen=edge_pen)
+
+    def _live_window(self, current_time: float):
+        """The stretch of time worth drawing, or None for all of it.
+
+        While recording the sync group scrolls a fixed window along with the
+        playhead and puts it back every frame, so nothing outside it can be
+        looked at. Drawing it anyway costs the whole recording on every redraw
+        -- and a coloured series is drawn point by point, with no clipping or
+        downsampling to fall back on -- so a long take spent the frame it had
+        on data nobody could see.
+        """
+        if not self.hub.is_recording:
+            return None
+        return (current_time - RECORD_WINDOW - WINDOW_MARGIN,
+                current_time + RECORD_LOOKAHEAD + WINDOW_MARGIN)
 
     def _apply_point_size(self, item, size: int):
         if isinstance(item, pg.ScatterPlotItem):
@@ -111,3 +136,15 @@ class TimeScatterRenderer(PlotRenderer):
                 lows.append(float(np.min(values)))
                 highs.append(float(np.max(values)))
         return (min(lows), max(highs)) if lows else None
+
+
+def _inside(window, times, values):
+    """``times`` and ``values`` cropped to ``window``, or whole when it is None.
+
+    Frame times run in order, so the ends of the window are found by search
+    rather than by testing every point.
+    """
+    if window is None or len(times) == 0:
+        return times, values
+    low, high = np.searchsorted(times, window)
+    return times[low:high], values[low:high]
