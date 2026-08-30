@@ -102,11 +102,12 @@ and what else has to be updated alongside it, is in
 - **AN-2** When a recording finishes, when an edit is applied to the audio, or when an edit is undone or redone, the system shall re-analyse the recording.
 - **AN-3** When re-analysing, the system shall analyse only those portions of the audio that have changed and shall reuse cached results for the unchanged portions.
 - **AN-4** While recording, the system shall analyse the incoming audio in near-real time.
-- **AN-5** The system shall compute, for the recording, the quantities Pitch, Loudness, Weight, Size, F1, F2, F3, F1/Pitch, F2/Pitch, F3/Pitch, H1-H2, H1-H3, H1-H4, H1-A3, Jitter and Shimmer.
+- **AN-5** The system shall compute, for the recording, the quantities Pitch, Loudness, Weight, Size, F1, F2, F3, F1/Pitch, F2/Pitch, F3/Pitch, H1-H2, H1-H3, H1-H4, H1-A3, Jitter, Shimmer and CPPS.
 - **AN-6** The system shall compute raw spectrogram magnitude and frequency data for the recording.
 - **AN-7** The system shall make every quantity in AN-5 and AN-6 available for selection on a plot axis.
 - **AN-8** When the gain in force over any part of the recording changes, the system shall re-analyse the affected audio.
 - **AN-9** The system shall compute Weight, a single quantity combining the recording's H1-A3 and Loudness, which rises as H1-A3 falls.
+- **AN-10** The system shall compute CPPS, the prominence in decibels of each frame's cepstral peak above that frame's cepstral baseline, which rises as the voice's harmonic structure becomes clearer relative to its noise floor.
 
 ## 5. Plot grid (PG)
 

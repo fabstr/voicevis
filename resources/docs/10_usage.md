@@ -319,7 +319,7 @@ and this is not part of one.
 - Automatic re-analysis after recording, playback edits, undo/redo, or loading a file
 - Chunked/cached analysis (only re-analyzes the portions of audio that changed)
 - Live, near-real-time analysis while recording, and while running Live Analysis without recording
-- Computed/plottable quantities: **Pitch, Loudness, Weight, Size, Formants (F1, F2, F3), Formant/Pitch ratios (F1/Pitch, F2/Pitch, F3/Pitch), Harmonic differences (H1-H2, H1-H3, H1-H4, H1-A3), Jitter, Shimmer**, plus raw spectrogram magnitude/frequency data
+- Computed/plottable quantities: **Pitch, Loudness, Weight, Size, Formants (F1, F2, F3), Formant/Pitch ratios (F1/Pitch, F2/Pitch, F3/Pitch), Harmonic differences (H1-H2, H1-H3, H1-H4, H1-A3), Jitter, Shimmer, CPPS**, plus raw spectrogram magnitude/frequency data
 
 ### Plot grid
 - Default 2×2 grid of plots; **add/remove rows** and **add/remove columns** independently
@@ -361,7 +361,7 @@ and this is not part of one.
 - Playhead line shown on every time-based plot
 
 ### Targets
-- **Targets > Set Targets...** dialog: enable/disable and set min/max for Loudness, Pitch, F1, F2, F3, F1/F2/F3-Pitch ratios, Size, Weight, H1-H2, H1-H3, H1-H4, H1-A3, plus a custom name for the target profile
+- **Targets > Set Targets...** dialog: enable/disable and set min/max for Loudness, Pitch, F1, F2, F3, F1/F2/F3-Pitch ratios, Size, Weight, H1-H2, H1-H3, H1-H4, H1-A3, CPPS, plus a custom name for the target profile
 - One-click preset targets: **Female** / **Male** (from `resources/targets/`)
 - **Import targets...** / **Export targets...** as JSON
 - Current target name shown in the toolbar

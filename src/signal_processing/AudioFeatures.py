@@ -70,6 +70,7 @@ class AudioFeatures:
     weight: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     jitter: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     shimmer: SignalTimeSeries = field(default_factory=SignalTimeSeries)
+    cpps: SignalTimeSeries = field(default_factory=SignalTimeSeries)
 
     H1_H2: SignalTimeSeries = field(default_factory=SignalTimeSeries)
     H1_H3: SignalTimeSeries = field(default_factory=SignalTimeSeries)
@@ -120,4 +121,5 @@ class FeatureSnapshot:
     F3_Pitch: Optional[float] = None
 
     size: Optional[float] = None
+    cpps: Optional[float] = None
     spectrogram: Optional[SpectrogramData] = None

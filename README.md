@@ -16,6 +16,7 @@ Extracted per audio frame (via openSMILE eGeMAPS LLD config, plus custom signal 
 | **F1, F2, F3** (Hz) | First three formant frequencies (`F1/F2/F3frequency_sma3nz`) | Opensmile |
 | **Jitter** | `jitterLocal_sma3nz` — cycle-to-cycle pitch-period variation | Opensmile |
 | **Shimmer** (dB) | `shimmerLocaldB_sma3nz` — cycle-to-cycle amplitude variation | Opensmile |
+| **CPPS** (dB) | Smoothed cepstral peak prominence — how far the cepstral peak at the pitch period stands above the cepstrum's own regression line; how clearly voiced, rather than breathy or noisy, the voice is | Calculated |
 | **H1-H2, H1-H3, H1-H4** (dB) | Amplitude of the 1st harmonic relative to the 2nd/3rd/4th harmonic (`logRelF0-H1-Hx_sma3nz`), cleaned of local outliers (rolling-median/MAD filter) | Opensmile |
 | **H1-A3** (dB) | Amplitude of the 1st harmonic relative to the 3rd formant's amplitude (`logRelF0-H1-A3_sma3nz`), same outlier cleaning | Opensmile |
 | **F1/Pitch, F2/Pitch, F3/Pitch** | Each formant frequency divided by pitch | Calculated |

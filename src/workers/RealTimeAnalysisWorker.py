@@ -40,7 +40,7 @@ _REQUIRED_FIELDS = ("pitch", "loudness", "weight", "jitter", "shimmer",
                     "F1", "F2", "F3", "H1_H2", "H1_H3", "H1_H4", "H1_A3")
 
 #: Snapshot fields that may be missing from a pass, left as None when they are.
-_OPTIONAL_FIELDS = ("F1_Pitch", "F2_Pitch", "F3_Pitch", "size")
+_OPTIONAL_FIELDS = ("F1_Pitch", "F2_Pitch", "F3_Pitch", "size", "cpps")
 
 
 class RealTimeAnalysisWorker(QtCore.QThread):

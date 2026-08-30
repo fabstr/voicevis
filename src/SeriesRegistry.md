@@ -199,7 +199,9 @@ otherwise surface as a plot that silently draws nothing.
    computed live.
 2. Add a `_signal(...)` line to `SERIES`, in the position you want it to appear
    in the selectors.
-3. If it has a target range, add the name to `TargetConfig` and set `target_key`.
+3. If it has a target range, add the name to `TargetConfig`, set `target_key`,
+   and add it to `TargetConfigDialog.fields_definition` — that dict is hand
+   maintained, and without an entry the target exists but cannot be edited.
 4. Run `python src/SeriesRegistry.py`.
 
 No plot definitions to update, and no change anywhere in `ui/plot` — the new

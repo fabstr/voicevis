@@ -131,6 +131,7 @@ package knows about widgets.
 | [`AudioEdit.py`](src/signal_processing/AudioEdit.py) | `silence`, `cut` and `move` over the raw PCM buffer |
 | [`GainMap.py`](src/signal_processing/GainMap.py) | The gains in force over the recording, applied to a copy on its way to the analysis, to playback and to an export |
 | [`TargetConfig.py`](src/signal_processing/TargetConfig.py) | A target profile: named bounds, enable flags, JSON round-trip |
+| [`Cepstrum.py`](src/signal_processing/Cepstrum.py) | CPPS: how far the cepstral peak at the pitch period stands above the cepstral baseline, per frame |
 | [`Weight.py`](src/signal_processing/Weight.py) | Weight: the length of the vector (50 &minus; H1-A3, Loudness), per frame |
 | [`genderer.py`](src/signal_processing/genderer.py) | Probability of a frame belonging to a target distribution |
 
@@ -352,7 +353,7 @@ bundle rather than from the source tree?
 | SF — sessions and files | `MainWindow.py`, `AnalysisWidget.py` | [MainWindow.md](src/ui/MainWindow.md) |
 | RP — recording and playback | `PlaybackWorker.py`, `RealTimeAnalysisWorker.py`, `AnalysisWidget.py` | [plot README, time sync](src/ui/plot/README.md#time-axis-synchronisation) |
 | AE — audio editing | `AudioEdit.py`, `GainMap.py`, `AudioHistory.py`, `TimeSelection.py`, `layers/SelectionLayer.py` | [AudioEditing.md](src/ui/AudioEditing.md) |
-| AN — analysis | `AudioFeatureExtractor.py`, `ChunkedAnalysis.py`, `AnalysisWorker.py` | [15_analyzed_features.md](resources/docs/15_analyzed_features.md), [20_methology.md](resources/docs/20_methology.md) |
+| AN — analysis | `AudioFeatureExtractor.py`, `Cepstrum.py`, `ChunkedAnalysis.py`, `AnalysisWorker.py` | [15_analyzed_features.md](resources/docs/15_analyzed_features.md), [20_methology.md](resources/docs/20_methology.md) |
 | PG, PP, MT — grid, per-plot controls, tools | `ui/plot/` | [plot README](src/ui/plot/README.md) |
 | OV — overlays | `FrequencyMarkers.py`, `layers/`, `AnnotationMarker.py` | [layers README](src/ui/plot/layers/README.md) |
 | TG — targets | `TargetConfig.py`, `TargetConfigDialog.py`, `resources/targets/` | [10_usage.md](resources/docs/10_usage.md) |

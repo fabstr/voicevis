@@ -128,7 +128,8 @@ class ChunkedAudioAnalysis:
 
     def analyse(self, audio_bytes, sample_rate: int,
                 analyse_chunk: Callable[[np.ndarray, int], AudioFeatures],
-                is_cancelled: Optional[Callable[[], bool]] = None) -> AudioFeatures:
+                is_cancelled: Optional[Callable[[], bool]] = None,
+                on_progress: Optional[Callable[[int, int], None]] = None) -> AudioFeatures:
         """Bring the cache up to date with ``audio_bytes`` and assemble a record.
 
         :param audio_bytes: The whole buffer, mono signed 16-bit PCM.
@@ -139,6 +140,11 @@ class ChunkedAudioAnalysis:
             assembled record.
         :param is_cancelled: Polled between chunks; raises
             :class:`AnalysisCancelled` when it returns True.
+        :param on_progress: Called as ``(samples_done, total_samples)`` after
+            each chunk, so a caller can say how far along the timeline it is.
+            Cached chunks count as done the moment they are recognised, which
+            is what makes a re-analysis after a small edit race through the
+            untouched audio.
         """
         if sample_rate != self._sample_rate:
             self.reset()
@@ -163,6 +169,8 @@ class ChunkedAudioAnalysis:
             cached = self._chunks[index] if index < len(self._chunks) else None
             if cached is not None and cached.digest == digest:
                 reused += 1
+                if on_progress is not None:
+                    on_progress(start + length, total_samples)
                 continue
 
             if is_cancelled is not None and is_cancelled():
@@ -178,6 +186,8 @@ class ChunkedAudioAnalysis:
             else:
                 self._chunks[index] = chunk
             analysed += 1
+            if on_progress is not None:
+                on_progress(start + length, total_samples)
 
         self.last_analysed, self.last_reused = analysed, reused
         logging.info("Chunked analysis: %d chunk(s) analysed, %d reused", analysed, reused)

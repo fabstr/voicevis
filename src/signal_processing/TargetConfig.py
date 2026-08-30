@@ -22,6 +22,7 @@ class TargetConfig:
         {"name": "H1_H3", "min": -10, "max": 20, "enabled": True},
         {"name": "H1_H4", "min": -10, "max": 20, "enabled": True},
         {"name": "H1_A3", "min": 0, "max": 30, "enabled": True},
+        {"name": "cpps", "min": 8.0, "max": 20.0, "enabled": True},
     ])
 
     def get_bounds(self, name: str) -> Optional[tuple]:

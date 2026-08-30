@@ -6,6 +6,7 @@
 - [F1, F2, F3](#f1-f2-f3)
 - [Jitter](#jitter)
 - [Shimmer](#shimmer)
+- [CPPS](#cpps)
 - [H1-H2, H1-H3, H1-H4](#h1-h2-h1-h3-h1-h4)
 - [H1-A3](#h1-a3)
 - [F1/Pitch, F2/Pitch, F3/Pitch](#f1pitch-f2pitch-f3pitch)
@@ -81,6 +82,45 @@ Jitter, it's a measure of vocal-fold instability, just on the loudness axis
 instead of the pitch axis.
 
 ![A Shimmer-only plot: a scatter mostly under 2 dB, with occasional spikes up to 6 dB](img/features/shimmer.png)
+
+### CPPS
+
+Smoothed Cepstral Peak Prominence, in dB -- a calculated series, computed
+straight from the audio rather than from an openSMILE descriptor.
+
+The *cepstrum* of a frame is the inverse Fourier transform of its log power
+spectrum: a spectrum of the spectrum, whose axis is *quefrency*, measured in
+seconds. A voice whose harmonics are evenly spaced and clearly defined puts a
+sharp peak there at the pitch period, and a breathy or noisy one smears that
+peak into the background. CPPS is how far the peak stands above the
+least-squares line fitted through the cepstrum around it, averaged over seven
+frames and five quefrency bins before the peak is picked -- the smoothing is
+what the final S stands for, and without it the series is far too jumpy to
+read.
+
+Where Jitter and Shimmer measure instability by marking individual pitch
+periods, CPPS needs neither a pitch estimate nor period marking, so it keeps
+working on exactly the creaky and breathy stretches where those two become
+unreliable [[5]](70_references.md), [[7]](70_references.md). It is the closest
+thing here to a single measure of how *clearly voiced* the voice is.
+
+**It is not a gendered measure**, and its target range is deliberately the same
+in the female and male profiles. Pitch, the formants and Size are things to
+move; CPPS is the guard rail -- the thing that should not fall while the others
+are being pushed. Reading the radar as "get every spoke into its box" misreads
+this one.
+
+Two things about the numbers. The spectrum is cut off at 5 kHz before the
+cepstrum is taken, without which the measure would not be comparable between
+recordings at different sample rates -- the same synthetic signal otherwise
+reads 17 dB at 22.05 kHz and 23 dB at 48 kHz. And the absolute value is
+implementation-dependent: window length, band limit and smoothing widths each
+shift it by a decibel or more, so these numbers are comparable with each other
+and **not** with another tool's [[10]](70_references.md). Across the six
+Swedish clips in `accent_gmu_edu/`, the values run from about 3 dB at the 1st
+percentile to about 17 dB at the 99th, with a median near 9 dB.
+
+![A CPPS-only plot: a dB scatter mostly between 5 and 15, rising on clearly voiced vowels and falling on breathy and creaky stretches](img/features/cpps.png)
 
 ### H1-H2, H1-H3, H1-H4
 

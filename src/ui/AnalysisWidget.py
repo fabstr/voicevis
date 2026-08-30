@@ -1074,6 +1074,7 @@ class AnalysisWidget(QtWidgets.QWidget):
             sample_rate=self.sampling_rate,
             cache=self.analysis_cache
         )
+        self.worker.progress.connect(self._on_analysis_progress)
         self.worker.result_ready.connect(self.on_analysis_finished)
         self.worker.error_occurred.connect(self.on_analysis_error)
         self.worker.finished.connect(self._on_analysis_thread_finished)
@@ -1082,12 +1083,33 @@ class AnalysisWidget(QtWidgets.QWidget):
     def _show_analysis_dialog(self):
         """Show the wait dialog, unless one is already up from a cancelled run."""
         if self.loading_dialog is not None and self.loading_dialog.isVisible():
+            # The run that was up has been replaced; its progress no longer
+            # describes anything, so go back to the indeterminate bar until the
+            # new one reports.
+            self.loading_dialog.setLabelText("Analyzing audio...")
+            self.loading_dialog.setRange(0, 0)
             return
         self.loading_dialog = QtWidgets.QProgressDialog("Analyzing audio...", None, 0, 0, self)
         self.loading_dialog.setWindowTitle("Please Wait")
         self.loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
         self.loading_dialog.setMinimumDuration(0)
+        # The last chunk is not the end of the work: the record still has to be
+        # assembled and plotted. Left to itself the dialog would hide on the
+        # closing setValue(), so it is closed by hand when the thread is done.
+        self.loading_dialog.setAutoReset(False)
+        self.loading_dialog.setAutoClose(False)
         self.loading_dialog.show()
+
+    def _on_analysis_progress(self, samples_done, total_samples):
+        """Move the wait dialog on to how much of the timeline is analysed."""
+        if self.loading_dialog is None or total_samples <= 0:
+            return
+        rate = float(self.sampling_rate)
+        self.loading_dialog.setLabelText(
+            "Analyzing audio... {:.0f} s of {:.0f} s".format(
+                samples_done / rate, total_samples / rate))
+        self.loading_dialog.setRange(0, total_samples)
+        self.loading_dialog.setValue(samples_done)
 
     def _on_analysis_thread_finished(self):
         """Retire the finished worker and run whatever was waiting for it."""

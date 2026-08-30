@@ -16,6 +16,10 @@ class AnalysisWorker(QtCore.QThread):
     # Signals to communicate back to the main GUI thread safely
     result_ready = QtCore.pyqtSignal(AudioFeatures)
     error_occurred = QtCore.pyqtSignal(str)
+    #: ``(samples_done, total_samples)`` as the chunked analysis walks the
+    #: timeline. Not emitted on the whole-buffer path, which has no steps to
+    #: report.
+    progress = QtCore.pyqtSignal(int, int)
 
     def __init__(self, extractor, audio_bytes, sample_rate, cache: ChunkedAudioAnalysis = None):
         """
@@ -66,7 +70,8 @@ class AnalysisWorker(QtCore.QThread):
         if self.cache is not None:
             results = self.cache.analyse(self.audio_bytes, self.sample_rate,
                                          self.extractor.analyzeChunk,
-                                         is_cancelled=lambda: self._cancelled)
+                                         is_cancelled=lambda: self._cancelled,
+                                         on_progress=self.progress.emit)
             return apply_derived_features(results)
 
         audio_array = np.frombuffer(self.audio_bytes, dtype=np.int16)

@@ -11,6 +11,7 @@ from scipy.signal import spectrogram
 
 from ResourceManager import ResourceManager
 from signal_processing.AudioFeatures import AudioFeatures, SignalTimeSeries, SpectrogramData
+from signal_processing.Cepstrum import calculate_cpps
 from signal_processing.TargetConfig import TargetConfig
 from signal_processing.Weight import calculate_weight
 
@@ -171,6 +172,16 @@ class AudioFeatureExtractor:
         h1_h4_clean = remove_local_outliers_robust(np.where(valid_mask, df['logRelF0-H1-H4_sma3nz'].to_numpy(), np.nan))
         h1_a3_clean = remove_local_outliers_robust(np.where(valid_mask, df['logRelF0-H1-A3_sma3nz'].to_numpy(), np.nan))
 
+        # CPPS comes off the raw samples rather than off an openSMILE descriptor,
+        # on the frame grid `timepoints` defines. It is not put through
+        # remove_local_outliers_robust: it is already averaged over seven frames
+        # and five quefrency bins, so it does not throw the single-frame
+        # excursions the harmonic ratios do, and a second 50-frame filter on top
+        # would be smoothing nobody asked for.
+        cpps_clean = np.where(valid_mask,
+                              calculate_cpps(timepoints, pcm_data, sampling_rate).y,
+                              np.nan)
+
         # It is assumed that this data don't need cleaning again
         f1_pitch_clean = f1_clean / pitch_clean
         f2_pitch_clean = f2_clean / pitch_clean
@@ -186,6 +197,7 @@ class AudioFeatureExtractor:
             weight=calculate_weight(timepoints, h1_a3_clean, loudness_clean),
             jitter=SignalTimeSeries(x=timepoints, y=jitter_clean),
             shimmer=SignalTimeSeries(x=timepoints, y=shimmer_clean),
+            cpps=SignalTimeSeries(x=timepoints, y=cpps_clean),
             size=calculate_size(timepoints, f1_pitch_clean, f2_pitch_clean, f3_pitch_clean, self.target_config),
             spectrogram=(calculate_spectrogram(pcm_data, sampling_rate)
                          if with_spectrogram else SpectrogramData()),

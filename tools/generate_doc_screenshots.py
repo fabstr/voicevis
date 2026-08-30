@@ -68,6 +68,7 @@ FEATURE_ROWS = [
     ("formants", ["F1", "F2", "F3"], False),
     ("jitter", ["jitter"], False),
     ("shimmer", ["shimmer"], False),
+    ("cpps", ["cpps"], False),
     ("h1_h2", ["H1_H2"], False),
     ("h1_h3", ["H1_H3"], False),
     ("h1_h4", ["H1_H4"], False),

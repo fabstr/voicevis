@@ -38,7 +38,7 @@ class FakeExtractor:
                                  length_seconds=len(pcm_data) / float(sampling_rate))
         for name in ("pitch", "loudness", "weight", "jitter", "shimmer",
                      "F1", "F2", "F3", "H1_H2", "H1_H3", "H1_H4", "H1_A3",
-                     "F1_Pitch", "F2_Pitch", "F3_Pitch", "size"):
+                     "F1_Pitch", "F2_Pitch", "F3_Pitch", "size", "cpps"):
             setattr(features, name, SignalTimeSeries(x=times, y=np.arange(count, dtype=float)))
         return features
 

@@ -58,6 +58,7 @@ class TargetConfigDialog(QtWidgets.QDialog):
             "H1_H3": ("H1_H3", -10.0, 20),
             "H1_H4": ("H1_H4", -10.0, 20),
             "H1_A3": ("H1_A3", 0.0, 30),
+            "cpps": ("CPPS", 8.0, 20.0),
         }
 
         row = 1

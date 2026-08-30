@@ -41,6 +41,7 @@ h1_a3 = "#C175F0"
 
 jitter = "#85E0BF"
 shimmer = "#85BCE0"
+cpps = "#B8E085"
 
 magnitude = "#9370DB"
 neutral = "#88888888"
@@ -139,6 +140,7 @@ for _spec in (
 
     _signal("jitter", "Jitter", 0, 0.2, jitter),
     _signal("shimmer", "Shimmer", 0, 7, shimmer, unit="dB"),
+    _signal("cpps", "CPPS", 0, 20, cpps, "cpps", "dB"),
 ):
     SERIES[_spec.key] = _spec
 del _spec
@@ -310,6 +312,7 @@ PRESETS = (
 
     PlotPreset("Jitter", ("time",), ("jitter",)),
     PlotPreset("Shimmer", ("time",), ("shimmer",)),
+    PlotPreset("CPPS", ("time",), ("cpps",)),
 )
 
 PRESETS_BY_NAME = OrderedDict((p.name, p) for p in PRESETS)
