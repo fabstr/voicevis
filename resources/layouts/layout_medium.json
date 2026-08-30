@@ -1,10 +1,9 @@
 {
     "version": 2,
-    "global_size": 2,
+    "global_size": 5,
     "main_splitter_sizes": [
-        529,
-        528,
-        529
+        1909,
+        1908
     ],
     "columns": [
         {
@@ -18,10 +17,15 @@
                     ],
                     "colour": "loudness",
                     "colour_map": "viridis",
+                    "colour_sources": {},
+                    "colour_maps": {
+                        "size": "turbo"
+                    },
+                    "colour_scales": false,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 2
+                    "local_size": 5
                 },
                 {
                     "x": [
@@ -32,10 +36,15 @@
                     ],
                     "colour": "loudness",
                     "colour_map": "viridis",
+                    "colour_sources": {},
+                    "colour_maps": {
+                        "weight": "turbo"
+                    },
+                    "colour_scales": true,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 2
+                    "local_size": 5
                 },
                 {
                     "x": [
@@ -46,33 +55,47 @@
                     ],
                     "colour": "size",
                     "colour_map": "plasma",
+                    "colour_sources": {
+                        "pitch": "loudness"
+                    },
+                    "colour_maps": {
+                        "pitch": "turbo"
+                    },
+                    "colour_scales": true,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 2
+                    "local_size": 5
                 }
             ],
             "sizes": [
-                319,
-                319,
-                319
+                674,
+                674,
+                674
             ]
         },
         {
             "plots": [
                 {
                     "x": [
-                        "weight"
+                        "time"
                     ],
                     "y": [
-                        "size"
+                        "loudness"
                     ],
                     "colour": "loudness",
                     "colour_map": "viridis",
+                    "colour_sources": {
+                        "loudness": null
+                    },
+                    "colour_maps": {
+                        "loudness": "turbo"
+                    },
+                    "colour_scales": true,
                     "trail_time": 1.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 2
+                    "local_size": 5
                 },
                 {
                     "x": [
@@ -80,88 +103,53 @@
                     ],
                     "y": [
                         "pitch",
-                        "loudness",
                         "weight",
-                        "size",
-                        "jitter",
-                        "shimmer"
+                        "size"
                     ],
                     "colour": null,
                     "colour_map": "turbo",
+                    "colour_sources": {
+                        "pitch": "loudness",
+                        "weight": "loudness",
+                        "size": "loudness"
+                    },
+                    "colour_maps": {
+                        "pitch": "turbo",
+                        "weight": "turbo"
+                    },
+                    "colour_scales": true,
                     "trail_time": 1.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 2
+                    "local_size": 5
                 },
                 {
                     "x": [
                         "time"
                     ],
                     "y": [
-                        "pitch"
+                        "cpps"
                     ],
                     "colour": "H1_A3",
                     "colour_map": "viridis",
+                    "colour_sources": {
+                        "magnitude": "weight",
+                        "cpps": null
+                    },
+                    "colour_maps": {
+                        "magnitude": "turbo",
+                        "cpps": "turbo"
+                    },
+                    "colour_scales": true,
                     "trail_time": 3.0,
                     "spectrogram": false,
                     "separate_axes": false,
-                    "local_size": 2
+                    "local_size": 3
                 }
             ],
             "sizes": [
-                0,
-                957,
-                0
-            ]
-        },
-        {
-            "plots": [
-                {
-                    "x": [
-                        "size"
-                    ],
-                    "y": [
-                        "weight"
-                    ],
-                    "colour": "loudness",
-                    "colour_map": "viridis",
-                    "trail_time": 3.0,
-                    "spectrogram": false,
-                    "separate_axes": false,
-                    "local_size": 2
-                },
-                {
-                    "x": [
-                        "size"
-                    ],
-                    "y": [
-                        "pitch"
-                    ],
-                    "colour": "weight",
-                    "colour_map": "turbo",
-                    "trail_time": 3.0,
-                    "spectrogram": false,
-                    "separate_axes": false,
-                    "local_size": 2
-                },
-                {
-                    "x": [
-                        "time"
-                    ],
-                    "y": [
-                        "pitch"
-                    ],
-                    "colour": null,
-                    "colour_map": "viridis",
-                    "trail_time": 3.0,
-                    "spectrogram": false,
-                    "separate_axes": false,
-                    "local_size": 2
-                }
-            ],
-            "sizes": [
-                471,
-                486,
+                316,
+                1706,
                 0
             ]
         }
